@@ -4,7 +4,9 @@ import type { SonosDiscovery } from './discovery.js';
 import type { PresetLoader } from './preset-loader.js';
 import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
-import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse } from './types/sonos.js';
+import { AppleMusicService } from './services/apple-music-service.js';
+import { AccountService } from './services/account-service.js';
+import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams) => Promise<ApiResponse>;
@@ -15,6 +17,8 @@ export class ApiRouter {
   private presetLoader?: PresetLoader | undefined;
   private defaultRoomManager: DefaultRoomManager;
   private ttsService: TTSService;
+  private appleMusicService: AppleMusicService;
+  private accountService: AccountService;
   private routes = new Map<string, RouteHandler>();
 
   constructor(discovery: SonosDiscovery, config: Config, presetLoader?: PresetLoader | undefined, defaultRoomManager?: DefaultRoomManager, ttsService?: TTSService) {
@@ -23,6 +27,8 @@ export class ApiRouter {
     this.presetLoader = presetLoader;
     this.defaultRoomManager = defaultRoomManager!;
     this.ttsService = ttsService!;
+    this.appleMusicService = new AppleMusicService();
+    this.accountService = new AccountService();
     
     this.registerRoutes();
   }
@@ -103,6 +109,7 @@ export class ApiRouter {
     // Default room management
     this.routes.set('GET /default', this.getDefaults.bind(this));
     this.routes.set('GET /default/room/{room}', this.setDefaultRoom.bind(this));
+    this.routes.set('GET /default/service/{service}', this.setDefaultService.bind(this));
     
     // Room-less endpoints (use default room)
     this.routes.set('GET /play', this.playDefault.bind(this));
@@ -115,6 +122,14 @@ export class ApiRouter {
     this.routes.set('GET /{room}/say/{text}', this.sayText.bind(this));
     this.routes.set('GET /{room}/sayall/{text}', this.sayTextAll.bind(this));
     this.routes.set('GET /sayall/{text}', this.sayTextAllRooms.bind(this));
+    
+    // Music search with defaults (room-less endpoints)
+    this.routes.set('GET /song/{query}', this.musicSearchSongDefault.bind(this));
+    this.routes.set('GET /album/{name}', this.musicSearchAlbumDefault.bind(this));
+    this.routes.set('GET /station/{name}', this.musicSearchStationDefault.bind(this));
+    
+    // Debug endpoint for account testing
+    this.routes.set('GET /{room}/debug/accounts', this.debugAccounts.bind(this));
   }
 
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -793,6 +808,25 @@ export class ApiRouter {
     };
   }
   
+  private async setDefaultService({ service }: RouteParams): Promise<ApiResponse> {
+    if (!service) throw { status: 400, message: 'Service parameter is required' };
+    
+    // Validate service (could expand this list as more services are implemented)
+    const validServices = ['library', 'apple', 'spotify', 'amazon', 'pandora', 'tunein', 'siriusxm'];
+    if (!validServices.includes(service.toLowerCase())) {
+      throw { status: 400, message: `Invalid service. Valid services: ${validServices.join(', ')}` };
+    }
+    
+    this.defaultRoomManager.setDefaults(undefined, service);
+    return {
+      status: 200,
+      body: {
+        status: 'success',
+        defaultMusicService: service
+      }
+    };
+  }
+  
   // Room-less endpoints that use default room
   private async playDefault(): Promise<ApiResponse<SuccessResponse>> {
     const device = this.getDevice(undefined); // Will use default room
@@ -846,14 +880,47 @@ export class ApiRouter {
     return this.playPreset({ room, preset });
   }
   
+  // Default music search endpoints (use default room and service)
+  private async musicSearchSongDefault({ query }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!query) throw { status: 400, message: 'Query is required' };
+    
+    const room = this.defaultRoomManager.getRoom();
+    if (!room) throw { status: 400, message: 'No default room set' };
+    
+    const service = this.defaultRoomManager.getMusicService();
+    
+    return this.performMusicSearch(room, service, 'song', query);
+  }
+  
+  private async musicSearchAlbumDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!name) throw { status: 400, message: 'Album name is required' };
+    
+    const room = this.defaultRoomManager.getRoom();
+    if (!room) throw { status: 400, message: 'No default room set' };
+    
+    const service = this.defaultRoomManager.getMusicService();
+    
+    return this.performMusicSearch(room, service, 'album', name);
+  }
+  
+  private async musicSearchStationDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!name) throw { status: 400, message: 'Station name is required' };
+    
+    const room = this.defaultRoomManager.getRoom();
+    if (!room) throw { status: 400, message: 'No default room set' };
+    
+    const service = this.defaultRoomManager.getMusicService();
+    
+    return this.performMusicSearch(room, service, 'station', name);
+  }
+  
   // Music search endpoints
   private async musicSearchAlbum({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!service) throw { status: 400, message: 'Service parameter is required' };
     if (!name) throw { status: 400, message: 'Album name is required' };
     
-    // For now, return not implemented - this would require integration with music service APIs
-    throw { status: 501, message: `Music search for ${service} not yet implemented` };
+    return this.performMusicSearch(room, service, 'album', name);
   }
   
   private async musicSearchSong({ room, service, query }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -861,8 +928,7 @@ export class ApiRouter {
     if (!service) throw { status: 400, message: 'Service parameter is required' };
     if (!query) throw { status: 400, message: 'Query is required' };
     
-    // For now, return not implemented
-    throw { status: 501, message: `Music search for ${service} not yet implemented` };
+    return this.performMusicSearch(room, service, 'song', query);
   }
   
   private async musicSearchStation({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -870,8 +936,7 @@ export class ApiRouter {
     if (!service) throw { status: 400, message: 'Service parameter is required' };
     if (!name) throw { status: 400, message: 'Station name is required' };
     
-    // For now, return not implemented
-    throw { status: 501, message: `Music search for ${service} not yet implemented` };
+    return this.performMusicSearch(room, service, 'station', name);
   }
   
   // Service-specific endpoints
@@ -1092,5 +1157,172 @@ export class ApiRouter {
     
     await Promise.all(promises);
     return { status: 200, body: { status: 'success' } };
+  }
+
+  /**
+   * Perform music search and play results
+   */
+  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station', term: string): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+    const device = this.getDevice(roomName);
+    if (!device) {
+      throw { status: 404, message: `Room '${roomName}' not found` };
+    }
+
+    // Get coordinator for playback
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    if (!coordinator) {
+      throw { status: 404, message: `No coordinator found for room '${roomName}'` };
+    }
+
+    // Currently only Apple Music is implemented
+    if (service.toLowerCase() !== 'apple') {
+      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple' is supported.` };
+    }
+
+    try {
+      // Get service account from Sonos
+      const account = await this.accountService.getServiceAccount(coordinator, service);
+      if (!account) {
+        throw { status: 503, message: `${service} service not configured in Sonos. Please add ${service} account in Sonos app.` };
+      }
+
+      // Set account in service
+      this.appleMusicService.setAccount(account);
+
+      // Perform search
+      logger.info(`Searching ${service} for ${type}: ${term}`);
+      const results = await this.appleMusicService.search(type, term);
+      
+      if (results.length === 0) {
+        throw { status: 404, message: `No ${type}s found for: ${term}` };
+      }
+
+      // Use first result
+      const result = results[0];
+      if (!result) {
+        throw { status: 404, message: `No valid ${type} found for: ${term}` };
+      }
+      logger.info(`Found ${type}: ${result.title} by ${result.artist || 'Unknown'}`);
+
+      // Generate URI and metadata
+      const uri = this.appleMusicService.generateURI(type, result);
+      const metadata = this.appleMusicService.generateMetadata(type, result);
+
+      logger.debug(`Generated URI: ${uri}`);
+
+      // Play the content
+      if (type === 'station') {
+        // Stations play directly
+        await coordinator.setAVTransportURI(uri, metadata);
+        await coordinator.play();
+      } else if (type === 'album') {
+        // Albums go to queue and play
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.clearQueue();
+        await coordinator.setAVTransportURI(queueURI, '');
+        await coordinator.addURIToQueue(uri, metadata, true, 1);
+        await coordinator.play();
+      } else { // song
+        // Songs can be added to current queue or replace it
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        
+        // Check if queue is empty
+        const currentState = coordinator.state;
+        const isEmpty = !currentState.currentTrack?.uri || currentState.currentTrack.uri === '';
+        
+        if (isEmpty) {
+          // Empty queue - set up and play
+          await coordinator.setAVTransportURI(queueURI, '');
+          await coordinator.addURIToQueue(uri, metadata, true, 1);
+        } else {
+          // Add after current track
+          const nextTrackNo = 1; // Add as next track
+          await coordinator.addURIToQueue(uri, metadata, true, nextTrackNo);
+          await coordinator.setAVTransportURI(queueURI, '');
+          await coordinator.next();
+        }
+        
+        await coordinator.play();
+      }
+
+      // Update default room
+      this.defaultRoomManager.setDefaults(roomName);
+
+      return { 
+        status: 200, 
+        body: { 
+          status: 'success',
+          title: result.title,
+          artist: result.artist,
+          album: result.album,
+          service: service
+        } 
+      };
+    } catch (error) {
+      logger.error(`Music search failed for ${service} ${type} "${term}":`, error);
+      
+      if (error && typeof error === 'object' && 'status' in error) {
+        throw error; // Re-throw API errors
+      }
+      
+      throw { 
+        status: 500, 
+        message: `Music search failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+      };
+    }
+  }
+  
+  // Debug endpoint for account testing
+  async debugAccounts({ room }: RouteParams): Promise<ApiResponse<any>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      // Try multiple endpoints to find account data
+      const endpoints = [
+        '/status/accounts',
+        '/status',
+        '/status/zp',
+        '/xml/device_description.xml'
+      ];
+      
+      const results: any = {};
+      
+      for (const endpoint of endpoints) {
+        try {
+          const url = `${coordinator.baseUrl}${endpoint}`;
+          const response = await fetch(url);
+          const text = await response.text();
+          results[endpoint] = {
+            status: response.status,
+            length: text.length,
+            content: text.substring(0, 500) + (text.length > 500 ? '...' : '')
+          };
+        } catch (error) {
+          results[endpoint] = { error: (error as Error).message };
+        }
+      }
+      
+      // Also try to call the account service directly
+      const account = await this.accountService.getServiceAccount(coordinator, 'apple');
+      
+      return {
+        status: 200,
+        body: {
+          device: {
+            id: coordinator.id,
+            baseUrl: coordinator.baseUrl,
+            roomName: coordinator.roomName
+          },
+          endpoints: results,
+          appleAccount: account,
+          cachedAccounts: this.accountService.getCachedAccounts()
+        }
+      };
+    } catch (error) {
+      throw { status: 500, message: `Debug failed: ${(error as Error).message}` };
+    }
   }
 }

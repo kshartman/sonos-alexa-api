@@ -77,6 +77,7 @@ export interface Config {
   presets: PresetCollection;
   webhooks: WebhookConfig[];
   defaultRoom?: string;
+  defaultMusicService?: string;
   dataDir?: string;
   // From settings.json
   host?: string;
@@ -118,6 +119,14 @@ export interface ErrorResponse {
 
 export interface SuccessResponse {
   status: 'success';
+}
+
+export interface MusicSearchSuccessResponse {
+  status: 'success';
+  title: string;
+  artist?: string;
+  album?: string;
+  service: string;
 }
 
 export interface StateChangeEvent {

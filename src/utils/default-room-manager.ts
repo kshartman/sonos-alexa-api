@@ -12,11 +12,13 @@ export class DefaultRoomManager {
   private settings: DefaultSettings = {};
   private configPath: string;
   private defaultRoom: string;
+  private defaultMusicService: string;
   private saveTimeout?: NodeJS.Timeout;
 
-  constructor(configDir: string, defaultRoom: string = '') {
+  constructor(configDir: string, defaultRoom: string = '', defaultMusicService: string = 'library') {
     this.configPath = path.join(configDir, 'default-settings.json');
     this.defaultRoom = defaultRoom;
+    this.defaultMusicService = defaultMusicService;
   }
 
   async load(): Promise<void> {
@@ -28,7 +30,7 @@ export class DefaultRoomManager {
       // File doesn't exist or is invalid, use defaults
       this.settings = {
         room: this.defaultRoom,
-        musicService: 'library',
+        musicService: this.defaultMusicService,
         lastUpdated: new Date()
       };
       logger.info('Using default settings:', this.settings);
@@ -80,8 +82,8 @@ export class DefaultRoomManager {
       return requestedService;
     }
 
-    // Otherwise use the saved default
-    return this.settings.musicService || 'library';
+    // Otherwise use the saved default or config default
+    return this.settings.musicService || this.defaultMusicService || 'library';
   }
 
   setDefaults(room?: string, musicService?: string): void {

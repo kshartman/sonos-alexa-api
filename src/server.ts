@@ -57,7 +57,7 @@ config.defaultRoom = process.env.DEFAULT_ROOM || config.defaultRoom;
 // Initialize components
 const discovery = new SonosDiscovery();
 const presetLoader = new PresetLoader(config.presetDir, discovery);
-const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', config.defaultRoom || '');
+const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', config.defaultRoom || '', config.defaultMusicService || 'library');
 const ttsService = new TTSService(config);
 const router = new ApiRouter(discovery, config, presetLoader, defaultRoomManager, ttsService);
 

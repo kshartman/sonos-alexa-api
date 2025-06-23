@@ -177,11 +177,6 @@ When you specify a room in any command, it becomes the new default room for futu
 - `GET /{room}/playlists` - List playlists (add ?detailed=true for full info)
 - `GET /{room}/playlist/{name}` - Play playlist by name
 
-### Apple Music
-- `GET /{room}/applemusic/now/{id}` - Play immediately (id format: type:id, e.g., song:123456)
-- `GET /{room}/applemusic/next/{id}` - Add as next track
-- `GET /{room}/applemusic/queue/{id}` - Add to end of queue
-
 ### Playback Control
 - `GET /{room}/clearqueue` - Clear the queue
 - `GET /{room}/repeat/{toggle}` - Turn repeat on/off
@@ -201,7 +196,7 @@ The TTS system supports multiple providers:
 
 The system will automatically pause current playback, announce the text at the configured volume, and resume playback.
 
-### Music Services (For Alexa Compatibility)
+### Music Services
 - `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album
 - `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
 - `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station
@@ -209,6 +204,9 @@ The system will automatically pause current playback, announce the text at the c
 - `GET /{room}/pandora/play/{name}` - Play Pandora station
 - `GET /{room}/pandora/thumbsup` - Thumbs up current track
 - `GET /{room}/pandora/thumbsdown` - Thumbs down current track
+- `GET /{room}/applemusic/now/{id}` - Play immediately (id format: type:id, e.g., song:123456)
+- `GET /{room}/applemusic/next/{id}` - Add as next track
+- `GET /{room}/applemusic/queue/{id}` - Add to end of queue
 
 Note: Music service endpoints are implemented for Alexa compatibility but require proper service authentication to function.
 
@@ -310,6 +308,14 @@ The API supports optional HTTP Basic Authentication. Configure in `settings.json
 - If `rejectUnauthorized` is `false`, authentication headers are not checked even if credentials are configured
 - Use this behind a reverse proxy (nginx) for HTTPS support
 - Designed for local network use; add proper security for external access
+
+## Credits
+
+This project is based on the excellent work by [jishi](https://github.com/jishi):
+- [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api) - The original Sonos HTTP API that inspired this implementation
+- [node-sonos-discovery](https://github.com/jishi/node-sonos-discovery) - The UPNP discovery and control logic that this project builds upon
+
+This implementation modernizes the original codebase with TypeScript, ES modules, and minimal dependencies while maintaining compatibility with existing Alexa skills and automation systems.
 
 ## License
 

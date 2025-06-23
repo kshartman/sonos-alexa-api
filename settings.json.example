@@ -1,0 +1,33 @@
+{
+  "port": 5005,
+  "host": "your-hostname-or-ip",
+  "defaultRoom": "LivingRoom",
+  "announceVolume": 40,
+  
+  "auth": {
+    "username": "your-username",
+    "password": "your-password",
+    "rejectUnauthorized": true
+  },
+  
+  "voicerss": "your-voicerss-api-key",
+  
+  "macSay": {
+    "voice": "Alex",
+    "rate": 175
+  },
+  
+  "pandora": {
+    "username": "your-pandora-username",
+    "password": "your-pandora-password"
+  },
+  
+  "spotify": {
+    "clientId": "your-spotify-client-id",
+    "clientSecret": "your-spotify-client-secret"
+  },
+  
+  "library": {
+    "randomQueueLimit": 50
+  }
+}

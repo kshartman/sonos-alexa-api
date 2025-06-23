@@ -1,0 +1,27 @@
+{
+  "port": 5005,
+  "logLevel": "info",
+  "presets": {
+    "morning_jazz": {
+      "uri": "x-sonosapi-radio:ST:genre:jazz?sid=254&flags=8300&sn=0",
+      "volume": 20,
+      "metadata": ""
+    },
+    "relax": {
+      "uri": "x-sonosapi-radio:ST:0/0/3/13/60035?sid=254&flags=8300&sn=0", 
+      "volume": 15
+    },
+    "favorite_playlist": {
+      "uri": "x-rincon-playlist:RINCON_000000000000001#A:PLAYLISTS",
+      "metadata": "<DIDL-Lite>...</DIDL-Lite>"
+    }
+  },
+  "webhooks": [
+    {
+      "url": "http://your-webhook-endpoint/sonos-events",
+      "headers": {
+        "X-API-Key": "your-api-key"
+      }
+    }
+  ]
+}

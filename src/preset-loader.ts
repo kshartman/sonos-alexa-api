@@ -1,0 +1,220 @@
+import { readdir, readFile, stat } from 'fs/promises';
+import { watch as watchFs } from 'fs';
+import { join } from 'path';
+import logger from './utils/logger.js';
+import { debugManager } from './utils/debug-manager.js';
+import { tryConvertPreset } from './utils/preset-converter.js';
+import type { PresetCollection, Preset } from './types/sonos.js';
+import type { SonosDiscovery } from './discovery.js';
+
+export class PresetLoader {
+  private presetDir: string;
+  private presets: PresetCollection = {};
+  private watchTimeout?: NodeJS.Timeout;
+  private watcher?: ReturnType<typeof watchFs>;
+  private discovery?: SonosDiscovery;
+
+  constructor(presetDir = './presets', discovery?: SonosDiscovery) {
+    this.presetDir = presetDir;
+    this.discovery = discovery;
+  }
+
+  async init(): Promise<void> {
+    await this.loadPresets();
+    await this.startWatching();
+  }
+
+  private async loadPresets(): Promise<void> {
+    const newPresets: PresetCollection = {};
+    const stats = {
+      totalFiles: 0,
+      validPresets: 0,
+      failedResolution: 0,
+      invalidFormat: 0,
+      parseErrors: 0
+    };
+    const validPresetNames: string[] = [];
+    const failedResolutionNames: string[] = [];
+    const invalidFormatNames: string[] = [];
+    const parseErrorNames: string[] = [];
+    
+    try {
+      const files = await readdir(this.presetDir);
+      
+      for (const file of files) {
+        if (file.startsWith('.') || !file.endsWith('.json')) {
+          continue;
+        }
+        
+        stats.totalFiles++;
+        const fullPath = join(this.presetDir, file);
+        const stats_file = await stat(fullPath);
+        
+        if (!stats_file.isFile()) {
+          continue;
+        }
+        
+        try {
+          const content = await readFile(fullPath, 'utf-8');
+          const rawPreset = JSON.parse(content);
+          const presetName = file.replace(/\.json$/i, '');
+          
+          try {
+            // Try to convert the preset (handles both new and legacy formats)
+            const convertedPreset = tryConvertPreset(rawPreset, presetName);
+            
+            // Resolve favorites to actual URIs if discovery is available
+            const resolvedPreset = await this.resolveFavorites(convertedPreset, presetName);
+            
+            // Check if resolution was successful
+            if (resolvedPreset.uri.startsWith('favorite:')) {
+              // Favorite was not resolved
+              stats.failedResolution++;
+              failedResolutionNames.push(presetName);
+              debugManager.debug('presets', `Preset ${presetName}: Failed to resolve favorite ${resolvedPreset.uri}`);
+            } else if (resolvedPreset.uri.startsWith('placeholder:')) {
+              // Invalid preset (no content)
+              stats.invalidFormat++;
+              invalidFormatNames.push(presetName);
+              debugManager.debug('presets', `Preset ${presetName}: No playable content`);
+            } else {
+              // Valid preset
+              stats.validPresets++;
+              validPresetNames.push(presetName);
+              debugManager.debug('presets', `Loaded preset: ${presetName} -> ${resolvedPreset.uri.substring(0, 50)}...`);
+            }
+            
+            newPresets[presetName] = resolvedPreset;
+            
+          } catch (conversionError) {
+            stats.invalidFormat++;
+            invalidFormatNames.push(presetName);
+            debugManager.debug('presets', `Invalid preset format ${file}:`, (conversionError as Error).message);
+          }
+        } catch (parseError) {
+          const presetName = file.replace(/\.json$/i, '');
+          stats.parseErrors++;
+          parseErrorNames.push(presetName);
+          debugManager.debug('presets', `Failed to parse preset file ${file}:`, (parseError as Error).message);
+        }
+      }
+      
+      this.presets = newPresets;
+      
+      // Always log comprehensive summary with colors
+      logger.info('Preset loading summary:');
+      logger.info(`  Total files processed: ${stats.totalFiles}`);
+      logger.info(`  Valid presets: ${stats.validPresets}`);
+      logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
+      logger.info(`  Invalid format: ${stats.invalidFormat}`);
+      logger.info(`  Parse errors: ${stats.parseErrors}`);
+      
+      if (validPresetNames.length > 0) {
+        const greenPresets = validPresetNames.sort().map(name => `\x1b[32m${name}\x1b[0m`).join(', ');
+        logger.info(`Working presets: ${greenPresets}`);
+      }
+      
+      if (failedResolutionNames.length > 0) {
+        const yellowPresets = failedResolutionNames.sort().map(name => `\x1b[33m${name}\x1b[0m`).join(', ');
+        logger.info(`Failed resolution: ${yellowPresets}`);
+      }
+      
+      if (invalidFormatNames.length > 0) {
+        const redPresets = invalidFormatNames.sort().map(name => `\x1b[31m${name}\x1b[0m`).join(', ');
+        logger.info(`Invalid format: ${redPresets}`);
+      }
+      
+      if (parseErrorNames.length > 0) {
+        const redParseErrors = parseErrorNames.sort().map(name => `\x1b[31m${name}\x1b[0m`).join(', ');
+        logger.info(`Parse errors: ${redParseErrors}`);
+      }
+      
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.info(`Preset directory ${this.presetDir} not found, using config presets only`);
+      } else {
+        logger.error('Error loading presets:', error);
+      }
+    }
+  }
+
+  private async startWatching(): Promise<void> {
+    try {
+      const stats = await stat(this.presetDir);
+      if (!stats.isDirectory()) {
+        return;
+      }
+
+      this.watcher = watchFs(this.presetDir, { persistent: false }, () => {
+        if (this.watchTimeout) {
+          clearTimeout(this.watchTimeout);
+        }
+        this.watchTimeout = setTimeout(() => this.loadPresets(), 200);
+      });
+      
+      logger.info(`Watching preset directory for changes: ${this.presetDir}`);
+    } catch (error) {
+      debugManager.debug('presets', `Not watching preset directory: ${(error as Error).message}`);
+    }
+  }
+
+  stopWatching(): void {
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = undefined;
+    }
+    
+    if (this.watchTimeout) {
+      clearTimeout(this.watchTimeout);
+      this.watchTimeout = undefined;
+    }
+  }
+
+  getPreset(name: string): Preset | undefined {
+    return this.presets[name];
+  }
+
+  getAllPresets(): PresetCollection {
+    return { ...this.presets };
+  }
+
+  private async resolveFavorites(preset: Preset, presetName: string): Promise<Preset> {
+    // Only resolve if we have discovery and this is a favorite URI
+    if (!this.discovery || !preset.uri.startsWith('favorite:')) {
+      return preset;
+    }
+
+    const favoriteName = preset.uri.substring(9); // Remove 'favorite:' prefix
+    debugManager.debug('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
+
+    try {
+      // Get any device to query favorites (they should be system-wide)
+      const devices = this.discovery.getAllDevices();
+      if (devices.length === 0) {
+        debugManager.debug('favorites', `No devices available to resolve favorite: ${favoriteName}`);
+        return preset;
+      }
+
+      const device = devices[0]; // Use first available device
+      const { FavoritesManager } = await import('./actions/favorites.js');
+      const favoritesManager = new FavoritesManager();
+      const favorite = await favoritesManager.findFavoriteByName(device!, favoriteName);
+
+      if (favorite) {
+        debugManager.debug('favorites', `Resolved favorite "${favoriteName}" to URI: ${favorite.uri}`);
+        return {
+          ...preset,
+          uri: favorite.uri,
+          metadata: favorite.metadata || preset.metadata,
+          _originalFavorite: favoriteName // Keep track of original for debugging
+        } as Preset & { _originalFavorite?: string };
+      } else {
+        debugManager.debug('favorites', `Could not resolve favorite "${favoriteName}" for preset ${presetName}`);
+        return preset; // Return unchanged if we can't resolve
+      }
+    } catch (error) {
+      debugManager.debug('favorites', `Error resolving favorite "${favoriteName}" for preset ${presetName}:`, error);
+      return preset; // Return unchanged if there's an error
+    }
+  }
+}

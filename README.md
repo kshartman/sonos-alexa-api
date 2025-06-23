@@ -1,0 +1,316 @@
+# Sonos Alexa API
+
+A lightweight, modern implementation of a Sonos HTTP API designed for Alexa integration with minimal dependencies.
+
+## Features
+
+- Zero external HTTP framework dependencies (uses Node.js built-in `http`)
+- Modern ES modules and async/await
+- TypeScript with strict type checking
+- Minimal dependencies (only `winston` for logging and `fast-xml-parser` for SOAP)
+- Docker support with multi-stage builds
+- Health checks and graceful shutdown
+- Webhook and Server-Sent Events support
+- UPnP topology tracking for multi-room coordination
+- Automatic device discovery via SSDP
+- Preset support with legacy format compatibility
+- Favorites resolution from Sonos system
+- Comprehensive debug system with categorized logging
+- Default room tracking with persistence
+- Text-to-Speech (TTS) with multiple providers
+- Optional basic authentication
+- Full Alexa compatibility
+
+## Quick Start
+
+### Docker (Recommended)
+
+```bash
+docker-compose up -d
+```
+
+### Local Development
+
+```bash
+npm install
+npm start
+```
+
+## Configuration
+
+### settings.json
+The API loads configuration from `settings.json` file for compatibility with legacy systems:
+
+```json
+{
+  "host": "192.168.1.100",
+  "port": 5005,
+  "defaultRoom": "Living Room",
+  "announceVolume": 40,
+  "auth": {
+    "username": "user",
+    "password": "pass",
+    "rejectUnauthorized": true
+  },
+  "voicerss": "YOUR_API_KEY",
+  "macSay": {
+    "voice": "Alex",
+    "rate": 175
+  },
+  "pandora": {
+    "username": "",
+    "password": ""
+  }
+}
+```
+
+### config.json
+Additionally, `config.json` can be used for presets and webhooks:
+
+```json
+{
+  "port": 5005,
+  "logLevel": "info",
+  "presetDir": "./presets",
+  "defaultRoom": "Living Room",
+  "dataDir": "./data",
+  "presets": {
+    "preset-name": {
+      "uri": "x-sonosapi-radio:...",
+      "volume": 20,
+      "metadata": "optional DIDL-Lite metadata"
+    }
+  },
+  "webhooks": [
+    {
+      "url": "http://your-endpoint",
+      "headers": { "X-API-Key": "your-key" }
+    }
+  ]
+}
+```
+
+### Preset Files
+Place JSON preset files in the `presetDir` directory (default: `./presets`). Supports both new and legacy preset formats.
+
+New format:
+```json
+{
+  "uri": "x-sonosapi-radio:...",
+  "volume": 20,
+  "metadata": "<DIDL-Lite>...</DIDL-Lite>"
+}
+```
+
+Legacy format (automatically converted):
+```json
+{
+  "players": [
+    { "roomName": "Kitchen", "volume": 20 }
+  ],
+  "favorite": "My Favorite Station",
+  "uri": "x-sonosapi-radio:..."
+}
+```
+
+## Default Room Feature
+
+The API supports a default room that is automatically used when room parameter is omitted. This is essential for Alexa integration where users often don't specify a room. The system remembers the last room used and applies it to subsequent commands.
+
+### Default Room Management
+- `GET /default` - Get current default settings
+- `GET /default/room/{room}` - Set default room
+
+### Room-less Endpoints (use default room)
+- `GET /play` - Play in default room
+- `GET /pause` - Pause in default room
+- `GET /volume/{level}` - Set volume in default room
+- `GET /preset/{preset}` - Play preset in default room
+
+When you specify a room in any command, it becomes the new default room for future commands.
+
+## API Endpoints
+
+### System Endpoints
+- `GET /health` - Health check
+- `GET /zones` - List all zones with group information
+- `GET /state` - Get state of all devices
+- `GET /presets` - List all available presets (config and folder)
+- `GET /events` - Server-Sent Events stream for real-time updates
+
+### Room Control
+- `GET /{room}/state` - Get room state
+- `GET /{room}/play` - Start playback
+- `GET /{room}/pause` - Pause playback
+- `GET /{room}/playpause` - Toggle play/pause
+- `GET /{room}/stop` - Stop playback
+- `GET /{room}/next` - Next track
+- `GET /{room}/previous` - Previous track
+
+### Volume Control
+- `GET /{room}/volume/{level}` - Set volume (0-100)
+- `GET /{room}/volume/+{delta}` - Increase volume
+- `GET /{room}/volume/-{delta}` - Decrease volume
+- `GET /{room}/mute` - Mute
+- `GET /{room}/unmute` - Unmute
+
+### Presets
+- `GET /presets` - List all available presets
+- `GET /{room}/preset/{name}` - Play preset in room
+- `GET /preset/{name}` - Play preset in default room
+- `GET /preset/{name}/room/{room}` - Play preset in room (Alexa-compatible format)
+
+### Group Management
+- `GET /{room}/join/{targetRoom}` - Join another room's group
+- `GET /{room}/leave` - Leave current group and become standalone
+- `GET /{room}/ungroup` - Same as leave
+- `GET /{room}/isolate` - Same as leave
+- `GET /{room}/add/{otherRoom}` - Add another room to this room's group
+
+### Favorites
+- `GET /{room}/favorites` - List favorites (add ?detailed=true for full info)
+- `GET /{room}/favourites` - British spelling alias
+- `GET /{room}/favorite/{name}` - Play favorite by name
+- `GET /{room}/favourite/{name}` - British spelling alias
+
+### Playlists
+- `GET /{room}/playlists` - List playlists (add ?detailed=true for full info)
+- `GET /{room}/playlist/{name}` - Play playlist by name
+
+### Apple Music
+- `GET /{room}/applemusic/now/{id}` - Play immediately (id format: type:id, e.g., song:123456)
+- `GET /{room}/applemusic/next/{id}` - Add as next track
+- `GET /{room}/applemusic/queue/{id}` - Add to end of queue
+
+### Playback Control
+- `GET /{room}/clearqueue` - Clear the queue
+- `GET /{room}/repeat/{toggle}` - Turn repeat on/off
+- `GET /{room}/shuffle/{toggle}` - Turn shuffle on/off
+- `GET /{room}/crossfade/{toggle}` - Turn crossfade on/off
+- `GET /{room}/groupVolume/{level}` - Set volume for entire group
+
+### Text-to-Speech (TTS)
+- `GET /{room}/say/{text}` - Say text in specified room
+- `GET /{room}/sayall/{text}` - Say text in all grouped rooms
+- `GET /sayall/{text}` - Say text in all rooms
+
+The TTS system supports multiple providers:
+1. **VoiceRSS** - If API key is configured in settings.json (note: key is host-specific)
+2. **macOS Say** - Available on macOS, configurable voice and rate
+3. **Google TTS** - Free fallback option (no API key required)
+
+The system will automatically pause current playback, announce the text at the configured volume, and resume playback.
+
+### Music Services (For Alexa Compatibility)
+- `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album
+- `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
+- `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station
+- `GET /{room}/siriusxm/{name}` - Play SiriusXM station
+- `GET /{room}/pandora/play/{name}` - Play Pandora station
+- `GET /{room}/pandora/thumbsup` - Thumbs up current track
+- `GET /{room}/pandora/thumbsdown` - Thumbs down current track
+
+Note: Music service endpoints are implemented for Alexa compatibility but require proper service authentication to function.
+
+### Line-In
+- `GET /{room}/linein/{source}` - Play line-in from source device
+
+### Global Commands
+- `GET /pauseall` - Pause all rooms
+- `GET /resumeAll` - Resume playback in all rooms
+- `GET /loglevel/{level}` - Set log level (error|warn|info|debug)
+
+### Debug Endpoints
+- `GET /debug` - Show current debug configuration
+- `GET /debug/level/{level}` - Set log level (error|warn|info|debug)
+- `GET /debug/category/{category}/{enabled}` - Enable/disable debug category
+- `GET /debug/enable-all` - Enable all debug categories
+- `GET /debug/disable-all` - Disable all debug categories (except API)
+
+## Alexa Integration
+
+This API is designed to work with Alexa skills. Common commands:
+
+- "Alexa, tell Sonos to play in the kitchen"
+- "Alexa, tell Sonos to pause all"
+- "Alexa, tell Sonos to set volume to 50 in living room"
+- "Alexa, tell Sonos to play preset morning jazz"
+
+## Environment Variables
+
+### Basic Configuration
+- `PORT` - HTTP port (default: 5005)
+- `NODE_ENV` - Environment (development/production)
+- `DEFAULT_ROOM` - Default room name for commands without room parameter
+
+### Debug Configuration
+- `LOG_LEVEL` or `DEBUG_LEVEL` - Logging level: error, warn, info, debug (default: info)
+- `DEBUG_CATEGORIES` - Comma-separated list of debug categories to enable:
+  - `soap` - SOAP request/response details
+  - `topology` - UPnP topology events and processing
+  - `discovery` - Device discovery details
+  - `favorites` - Favorite resolution details
+  - `presets` - Preset loading and resolution
+  - `upnp` - Raw UPnP event details
+  - `api` - API request logging (enabled by default)
+  - `*` or `all` - Enable all categories
+
+### Debug Examples
+```bash
+# Enable debug logging with topology and discovery categories
+DEBUG_LEVEL=debug DEBUG_CATEGORIES=topology,discovery npm start
+
+# Enable all debug categories
+DEBUG_LEVEL=debug DEBUG_CATEGORIES=all npm start
+
+# Docker example
+docker run -e DEBUG_LEVEL=debug -e DEBUG_CATEGORIES=soap,upnp -p 5005:5005 sonos-alexa-api
+```
+
+### Runtime Debug Control
+You can also control debugging at runtime via API:
+- `GET /debug` - Show current debug status
+- `GET /debug/level/{level}` - Set log level
+- `GET /debug/category/{category}/{enabled}` - Enable/disable category
+- `GET /debug/enable-all` - Enable all categories
+- `GET /debug/disable-all` - Disable all categories (except API)
+
+## API Documentation
+
+A complete OpenAPI 3.0 specification is available in `openapi.yaml`. This includes:
+- Detailed endpoint descriptions
+- Request/response schemas
+- Error responses
+- Example values
+
+You can use tools like Swagger UI or ReDoc to view the interactive API documentation:
+
+```bash
+# Using Docker
+docker run -p 8080:8080 -e SWAGGER_JSON=/openapi.yaml -v $(pwd)/openapi.yaml:/openapi.yaml swaggerapi/swagger-ui
+
+# Or with ReDoc
+docker run -p 8080:80 -e SPEC_URL=/spec/openapi.yaml -v $(pwd)/openapi.yaml:/usr/share/nginx/html/spec/openapi.yaml redocly/redoc
+```
+
+## Authentication
+
+The API supports optional HTTP Basic Authentication. Configure in `settings.json`:
+
+```json
+{
+  "auth": {
+    "username": "your-username",
+    "password": "your-password",
+    "rejectUnauthorized": true
+  }
+}
+```
+
+- If `rejectUnauthorized` is `false`, authentication headers are not checked even if credentials are configured
+- Use this behind a reverse proxy (nginx) for HTTPS support
+- Designed for local network use; add proper security for external access
+
+## License
+
+MIT

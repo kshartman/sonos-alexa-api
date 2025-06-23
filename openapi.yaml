@@ -1,0 +1,1622 @@
+openapi: 3.0.3
+info:
+  title: Sonos Alexa API
+  description: |
+    A lightweight, modern implementation of a Sonos HTTP API designed for Alexa integration.
+    
+    ## Features
+    - TypeScript implementation with minimal dependencies
+    - Real-time device discovery and topology tracking
+    - Preset support with legacy format compatibility
+    - Comprehensive debug system with categorized logging
+    - Server-Sent Events for real-time updates
+    - Default room tracking with persistence
+    - Text-to-Speech (TTS) with multiple providers
+    - Optional basic authentication
+    - Full Alexa skill compatibility
+    
+    ## Authentication
+    Optional HTTP Basic Authentication can be configured in settings.json.
+    Set rejectUnauthorized to false to disable auth checks even with credentials configured.
+    For external access, use a reverse proxy (nginx) with HTTPS.
+  version: 1.0.0
+  license:
+    name: MIT
+    
+servers:
+  - url: http://localhost:5005
+    description: Default local server
+    
+tags:
+  - name: System
+    description: System-wide endpoints
+  - name: Room
+    description: Room-specific control endpoints
+  - name: Global
+    description: Global control endpoints
+  - name: Debug
+    description: Debug and monitoring endpoints
+    
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check
+      description: Returns the health status of the API
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  devices:
+                    type: integer
+                    description: Number of discovered devices
+                    example: 5
+                  uptime:
+                    type: number
+                    description: Server uptime in seconds
+                    example: 3600.5
+                    
+  /zones:
+    get:
+      tags:
+        - System
+      summary: List all zones
+      description: Returns all zone groups with their members and coordinators
+      responses:
+        '200':
+          description: List of zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Zone'
+                  
+  /state:
+    get:
+      tags:
+        - System
+      summary: Get state of all devices
+      description: Returns the current state of all discovered Sonos devices
+      responses:
+        '200':
+          description: Device states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    room:
+                      type: string
+                      example: Kitchen
+                    state:
+                      $ref: '#/components/schemas/DeviceState'
+                      
+  /presets:
+    get:
+      tags:
+        - System
+      summary: List all presets
+      description: Returns all available presets from config and preset directory
+      responses:
+        '200':
+          description: Available presets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    type: object
+                    description: Presets from config.json
+                    additionalProperties:
+                      $ref: '#/components/schemas/Preset'
+                  folder:
+                    type: object
+                    description: Presets from preset directory
+                    additionalProperties:
+                      $ref: '#/components/schemas/Preset'
+                  all:
+                    type: object
+                    description: All presets combined
+                    additionalProperties:
+                      $ref: '#/components/schemas/Preset'
+                      
+  /events:
+    get:
+      tags:
+        - System
+      summary: Server-Sent Events stream
+      description: Real-time event stream for device state changes
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: 'data: {"type":"device-state-change","data":{"room":"Kitchen","state":{...}}}\n\n'
+                
+  /{room}/state:
+    get:
+      tags:
+        - Room
+      summary: Get room state
+      description: Returns the current state of a specific room
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          description: Room state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceState'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/play:
+    get:
+      tags:
+        - Room
+      summary: Start playback
+      description: Start or resume playback in the specified room
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/pause:
+    get:
+      tags:
+        - Room
+      summary: Pause playback
+      description: Pause playback in the specified room
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/playpause:
+    get:
+      tags:
+        - Room
+      summary: Toggle play/pause
+      description: Toggle between play and pause states
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/stop:
+    get:
+      tags:
+        - Room
+      summary: Stop playback
+      description: Stop playback and clear the queue
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/next:
+    get:
+      tags:
+        - Room
+      summary: Next track
+      description: Skip to the next track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/previous:
+    get:
+      tags:
+        - Room
+      summary: Previous track
+      description: Go back to the previous track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/volume/{level}:
+    get:
+      tags:
+        - Room
+      summary: Set volume
+      description: Set the volume to a specific level
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: level
+          in: path
+          required: true
+          description: Volume level (0-100)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            example: 50
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid volume level
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/volume/+{delta}:
+    get:
+      tags:
+        - Room
+      summary: Increase volume
+      description: Increase the volume by the specified amount
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: delta
+          in: path
+          required: true
+          description: Amount to increase volume
+          schema:
+            type: integer
+            minimum: 1
+            example: 10
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid delta value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/volume/-{delta}:
+    get:
+      tags:
+        - Room
+      summary: Decrease volume
+      description: Decrease the volume by the specified amount
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: delta
+          in: path
+          required: true
+          description: Amount to decrease volume
+          schema:
+            type: integer
+            minimum: 1
+            example: 10
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid delta value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/mute:
+    get:
+      tags:
+        - Room
+      summary: Mute
+      description: Mute the specified room
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/unmute:
+    get:
+      tags:
+        - Room
+      summary: Unmute
+      description: Unmute the specified room
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/preset/{preset}:
+    get:
+      tags:
+        - Room
+      summary: Play preset in room
+      description: Play a preset in the specified room. If the room is part of a group, the request is routed to the coordinator.
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: preset
+          in: path
+          required: true
+          description: Preset name
+          schema:
+            type: string
+            example: morning-jazz
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or preset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /{room}/join/{targetRoom}:
+    get:
+      tags:
+        - Room
+      summary: Join group
+      description: Make this room join the target room's group
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: targetRoom
+          in: path
+          required: true
+          description: Target room to join
+          schema:
+            type: string
+            example: Living Room
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/leave:
+    get:
+      tags:
+        - Room
+      summary: Leave group
+      description: Make this room leave its current group and become standalone
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/ungroup:
+    get:
+      tags:
+        - Room
+      summary: Ungroup (alias for leave)
+      description: Make this room leave its current group and become standalone
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/isolate:
+    get:
+      tags:
+        - Room
+      summary: Isolate (alias for leave)
+      description: Make this room leave its current group and become standalone
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/add/{otherRoom}:
+    get:
+      tags:
+        - Room
+      summary: Add room to group
+      description: Add another room to this room's group
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: otherRoom
+          in: path
+          required: true
+          description: Room to add to this group
+          schema:
+            type: string
+            example: Kitchen
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/favorites:
+    get:
+      tags:
+        - Room
+      summary: Get favorites
+      description: Get list of Sonos favorites
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: detailed
+          in: query
+          required: false
+          description: Return detailed favorite information
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of favorites
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                    example: ["My Favorite Radio", "Jazz Playlist"]
+                  - type: array
+                    items:
+                      type: object
+                      properties:
+                        title:
+                          type: string
+                        uri:
+                          type: string
+                        metadata:
+                          type: string
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/favourites:
+    get:
+      tags:
+        - Room
+      summary: Get favourites (British spelling)
+      description: Get list of Sonos favourites (alias for favorites)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: detailed
+          in: query
+          required: false
+          description: Return detailed favourite information
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of favourites
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                  - type: array
+                    items:
+                      type: object
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/favorite/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play favorite
+      description: Play a favorite by name
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: Favorite name
+          schema:
+            type: string
+            example: My Favorite Radio
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or favorite not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /{room}/favourite/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play favourite (British spelling)
+      description: Play a favourite by name (alias for favorite)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: Favourite name
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or favourite not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /{room}/playlists:
+    get:
+      tags:
+        - Room
+      summary: Get playlists
+      description: Get list of Sonos playlists
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: detailed
+          in: query
+          required: false
+          description: Return detailed playlist information
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of playlists
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      type: string
+                    example: ["My Playlist", "Party Mix"]
+                  - type: array
+                    items:
+                      type: object
+                      properties:
+                        title:
+                          type: string
+                        id:
+                          type: string
+                        uri:
+                          type: string
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/playlist/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play playlist
+      description: Play a playlist by name
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: Playlist name
+          schema:
+            type: string
+            example: My Playlist
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or playlist not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /{room}/applemusic/{action}/{id}:
+    get:
+      tags:
+        - Room
+      summary: Apple Music control
+      description: Control Apple Music playback
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: action
+          in: path
+          required: true
+          description: Action to perform
+          schema:
+            type: string
+            enum: [now, next, queue]
+            example: now
+        - name: id
+          in: path
+          required: true
+          description: Apple Music ID in format type:id (e.g., song:123456)
+          schema:
+            type: string
+            example: song:123456
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid action or ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+                
+  /pauseall:
+    get:
+      tags:
+        - Global
+      summary: Pause all rooms
+      description: Pause playback in all rooms
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+          
+  /preset/{preset}:
+    get:
+      tags:
+        - System
+      summary: Play preset in default room
+      description: Play a preset in the default room (last used room)
+      parameters:
+        - name: preset
+          in: path
+          required: true
+          description: Preset name
+          schema:
+            type: string
+            example: morning-jazz
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Preset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /debug:
+    get:
+      tags:
+        - Debug
+      summary: Get debug status
+      description: Returns current debug configuration including log level and enabled categories
+      responses:
+        '200':
+          description: Debug configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logLevel:
+                    type: string
+                    enum: [error, warn, info, debug]
+                    example: info
+                  categories:
+                    $ref: '#/components/schemas/DebugCategories'
+                  usage:
+                    type: object
+                    description: Usage instructions for debug endpoints
+                    
+  /debug/level/{level}:
+    get:
+      tags:
+        - Debug
+      summary: Set log level
+      description: Set the logging level
+      parameters:
+        - name: level
+          in: path
+          required: true
+          description: Log level
+          schema:
+            type: string
+            enum: [error, warn, info, debug]
+            example: debug
+      responses:
+        '200':
+          description: Log level updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  logLevel:
+                    type: string
+                    example: debug
+        '400':
+          description: Invalid log level
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /debug/category/{category}/{enabled}:
+    get:
+      tags:
+        - Debug
+      summary: Enable/disable debug category
+      description: Enable or disable a specific debug category
+      parameters:
+        - name: category
+          in: path
+          required: true
+          description: Debug category
+          schema:
+            type: string
+            enum: [soap, topology, discovery, favorites, presets, upnp, api]
+            example: topology
+        - name: enabled
+          in: path
+          required: true
+          description: Enable or disable
+          schema:
+            type: string
+            enum: ['true', 'false']
+            example: 'true'
+      responses:
+        '200':
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  category:
+                    type: string
+                    example: topology
+                  enabled:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid category or enabled value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /debug/enable-all:
+    get:
+      tags:
+        - Debug
+      summary: Enable all debug categories
+      description: Enable all debug categories
+      responses:
+        '200':
+          description: All categories enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: All debug categories enabled
+                  categories:
+                    $ref: '#/components/schemas/DebugCategories'
+                    
+  /debug/disable-all:
+    get:
+      tags:
+        - Debug
+      summary: Disable all debug categories
+      description: Disable all debug categories (except API which remains enabled)
+      responses:
+        '200':
+          description: All categories disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: All debug categories disabled (except API)
+                  categories:
+                    $ref: '#/components/schemas/DebugCategories'
+                    
+  /{room}/clearqueue:
+    get:
+      tags:
+        - Room
+      summary: Clear queue
+      description: Clear the playback queue for a room's group
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/repeat/{toggle}:
+    get:
+      tags:
+        - Room
+      summary: Set repeat mode
+      description: Turn repeat on or off
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: toggle
+          in: path
+          required: true
+          description: Turn repeat on or off
+          schema:
+            type: string
+            enum: [on, off]
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid toggle value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/shuffle/{toggle}:
+    get:
+      tags:
+        - Room
+      summary: Set shuffle mode
+      description: Turn shuffle on or off
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: toggle
+          in: path
+          required: true
+          description: Turn shuffle on or off
+          schema:
+            type: string
+            enum: [on, off]
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid toggle value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/crossfade/{toggle}:
+    get:
+      tags:
+        - Room
+      summary: Set crossfade mode
+      description: Turn crossfade on or off
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: toggle
+          in: path
+          required: true
+          description: Turn crossfade on or off
+          schema:
+            type: string
+            enum: [on, off]
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid toggle value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/groupVolume/{level}:
+    get:
+      tags:
+        - Room
+      summary: Set group volume
+      description: Set volume for the entire group
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: level
+          in: path
+          required: true
+          description: Volume level (0-100)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid volume level
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/linein/{source}:
+    get:
+      tags:
+        - Room
+      summary: Play line-in
+      description: Play line-in from a source device
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: source
+          in: path
+          required: true
+          description: Source device room name
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /resumeAll:
+    get:
+      tags:
+        - Global
+      summary: Resume all rooms
+      description: Resume playback in all rooms
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+          
+  /loglevel/{level}:
+    get:
+      tags:
+        - Global
+      summary: Set log level
+      description: Set the global log level
+      parameters:
+        - name: level
+          in: path
+          required: true
+          description: Log level
+          schema:
+            type: string
+            enum: [error, warn, info, debug]
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid log level
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /default:
+    get:
+      tags:
+        - Global
+      summary: Get default settings
+      description: Get current default room and music service settings
+      responses:
+        '200':
+          description: Default settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room:
+                    type: string
+                    description: Default room name
+                    example: Living Room
+                  musicService:
+                    type: string
+                    description: Default music service
+                    example: library
+                  lastUpdated:
+                    type: string
+                    format: date-time
+                    
+  /default/room/{room}:
+    get:
+      tags:
+        - Global
+      summary: Set default room
+      description: Set the default room for commands
+      parameters:
+        - name: room
+          in: path
+          required: true
+          description: Room name to set as default
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /play:
+    get:
+      tags:
+        - Global
+      summary: Play in default room
+      description: Resume playback in the default room
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: No default room configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /pause:
+    get:
+      tags:
+        - Global
+      summary: Pause in default room
+      description: Pause playback in the default room
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: No default room configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /volume/{level}:
+    get:
+      tags:
+        - Global
+      summary: Set volume in default room
+      description: Set volume in the default room
+      parameters:
+        - name: level
+          in: path
+          required: true
+          description: Volume level (0-100)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid volume level or no default room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /preset/{preset}/room/{room}:
+    get:
+      tags:
+        - Global
+      summary: Play preset in room (Alexa format)
+      description: Play preset in specified room using Alexa-compatible route format
+      parameters:
+        - name: preset
+          in: path
+          required: true
+          description: Preset name
+          schema:
+            type: string
+        - name: room
+          in: path
+          required: true
+          description: Room name
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or preset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /{room}/musicsearch/{service}/album/{name}:
+    get:
+      tags:
+        - Room
+      summary: Search and play album
+      description: Search for an album by name and play it (Alexa compatibility endpoint)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: service
+          in: path
+          required: true
+          description: Music service to search
+          schema:
+            type: string
+            example: spotify
+        - name: name
+          in: path
+          required: true
+          description: Album name to search for
+          schema:
+            type: string
+            example: Abbey Road
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/musicsearch/{service}/song/{query}:
+    get:
+      tags:
+        - Room
+      summary: Search and play songs
+      description: Search for songs by query and play them (Alexa compatibility endpoint)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: service
+          in: path
+          required: true
+          description: Music service to search
+          schema:
+            type: string
+            example: spotify
+        - name: query
+          in: path
+          required: true
+          description: Song search query
+          schema:
+            type: string
+            example: Yesterday Beatles
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/musicsearch/{service}/station/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play radio station
+      description: Search for and play a radio station (Alexa compatibility endpoint)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: service
+          in: path
+          required: true
+          description: Music service to search
+          schema:
+            type: string
+            example: tunein
+        - name: name
+          in: path
+          required: true
+          description: Station name
+          schema:
+            type: string
+            example: BBC Radio 1
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/siriusxm/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play SiriusXM station
+      description: Play a SiriusXM station by name (requires SiriusXM subscription)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: SiriusXM station name
+          schema:
+            type: string
+            example: The Beatles Channel
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/pandora/play/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play Pandora station
+      description: Play a Pandora station by name (requires Pandora account in settings.json)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: Pandora station name
+          schema:
+            type: string
+            example: Classic Rock Radio
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/pandora/thumbsup:
+    get:
+      tags:
+        - Room
+      summary: Pandora thumbs up
+      description: Give thumbs up to current Pandora track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/pandora/thumbsdown:
+    get:
+      tags:
+        - Room
+      summary: Pandora thumbs down
+      description: Give thumbs down to current Pandora track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/say/{text}:
+    get:
+      tags:
+        - Room
+      summary: Text-to-Speech announcement
+      description: Say text in specified room. Pauses current playback, announces at configured volume, then resumes.
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: text
+          in: path
+          required: true
+          description: Text to announce
+          schema:
+            type: string
+            example: Dinner is ready
+        - name: volume
+          in: query
+          required: false
+          description: Override announce volume (default from settings.json)
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            example: 40
+        - name: language
+          in: query
+          required: false
+          description: Language code for TTS
+          schema:
+            type: string
+            default: en
+            example: en
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /{room}/sayall/{text}:
+    get:
+      tags:
+        - Room
+      summary: TTS to all grouped rooms
+      description: Say text in all rooms grouped with specified room
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: text
+          in: path
+          required: true
+          description: Text to announce
+          schema:
+            type: string
+            example: Dinner is ready
+        - name: volume
+          in: query
+          required: false
+          description: Override announce volume
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - name: language
+          in: query
+          required: false
+          description: Language code for TTS
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
+  /sayall/{text}:
+    get:
+      tags:
+        - Global
+      summary: TTS to all rooms
+      description: Say text in all rooms system-wide
+      parameters:
+        - name: text
+          in: path
+          required: true
+          description: Text to announce
+          schema:
+            type: string
+            example: Dinner is ready
+        - name: volume
+          in: query
+          required: false
+          description: Override announce volume
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - name: language
+          in: query
+          required: false
+          description: Language code for TTS
+          schema:
+            type: string
+            default: en
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+
+components:
+  parameters:
+    room:
+      name: room
+      in: path
+      required: true
+      description: Room name (case-insensitive)
+      schema:
+        type: string
+        example: Kitchen
+        
+  responses:
+    Success:
+      description: Operation successful
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+                
+    RoomNotFound:
+      description: Room not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+            
+  schemas:
+    Error:
+      type: object
+      properties:
+        status:
+          type: string
+          example: error
+        error:
+          type: string
+          example: Room 'Bedroom' not found
+        stack:
+          type: string
+          description: Stack trace (only in development mode)
+          
+    Zone:
+      type: object
+      properties:
+        id:
+          type: string
+          example: RINCON_000E58D53F8E01400:1234567890
+        coordinator:
+          type: string
+          description: Room name of the zone coordinator
+          example: Kitchen
+        members:
+          type: array
+          description: List of room names in this zone
+          items:
+            type: string
+            example: Kitchen
+            
+    DeviceState:
+      type: object
+      properties:
+        playbackState:
+          type: string
+          enum: [PLAYING, PAUSED_PLAYBACK, STOPPED, TRANSITIONING]
+          example: PLAYING
+        volume:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 25
+        mute:
+          type: boolean
+          example: false
+        currentTrack:
+          type: object
+          properties:
+            title:
+              type: string
+              example: Song Title
+            artist:
+              type: string
+              example: Artist Name
+            album:
+              type: string
+              example: Album Name
+            albumArtUri:
+              type: string
+              example: http://example.com/art.jpg
+            duration:
+              type: integer
+              description: Duration in seconds
+              example: 240
+            position:
+              type: integer
+              description: Current position in seconds
+              example: 60
+            uri:
+              type: string
+              example: x-sonos-spotify:spotify:track:123
+        coordinator:
+          type: object
+          description: Coordinator information if this device is grouped
+          properties:
+            id:
+              type: string
+              example: uuid:RINCON_000E58D53F8E01400
+            roomName:
+              type: string
+              example: Kitchen
+            modelName:
+              type: string
+              example: Sonos One
+              
+    Preset:
+      type: object
+      properties:
+        uri:
+          type: string
+          description: Sonos URI to play
+          example: x-sonosapi-radio:sonos%3A%2F%2Fspotify%3Astation%3Aplaylist%3A123
+        volume:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Optional volume level
+          example: 20
+        metadata:
+          type: string
+          description: Optional DIDL-Lite metadata XML
+          example: '<DIDL-Lite>...</DIDL-Lite>'
+          
+    DebugCategories:
+      type: object
+      properties:
+        soap:
+          type: boolean
+          description: SOAP request/response details
+          example: false
+        topology:
+          type: boolean
+          description: UPnP topology events and processing
+          example: false
+        discovery:
+          type: boolean
+          description: Device discovery details
+          example: false
+        favorites:
+          type: boolean
+          description: Favorite resolution details
+          example: false
+        presets:
+          type: boolean
+          description: Preset loading and resolution
+          example: false
+        upnp:
+          type: boolean
+          description: Raw UPnP event details
+          example: false
+        api:
+          type: boolean
+          description: API request logging (always enabled)
+          example: true
+          
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Optional HTTP Basic Authentication (configure in settings.json)
+      
+security:
+  - {}
+  - basicAuth: []

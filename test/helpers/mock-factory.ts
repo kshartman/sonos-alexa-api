@@ -246,6 +246,18 @@ export class MockDevice {
     this.recordCall('setLineIn', [sourceDevice.roomName]);
   }
 
+  async playLineIn(sourceDevice: MockDevice): Promise<void> {
+    this.recordCall('playLineIn', [sourceDevice.roomName]);
+    // Simulate the actual implementation
+    const lineInUri = `x-rincon-stream:${sourceDevice.id}`;
+    await this.setAVTransportURI(lineInUri);
+    await this.play();
+  }
+
+  async setAVTransportURI(uri: string, metadata?: string): Promise<void> {
+    this.recordCall('setAVTransportURI', [uri, metadata]);
+  }
+
   wasMethodCalled(method: string): boolean {
     return this.calls.some(call => call.method === method);
   }

@@ -746,12 +746,11 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  async playLineIn(sourceRoomName: string): Promise<void> {
-    logger.debug(`${this.roomName}: playing line-in from ${sourceRoomName}`);
+  async playLineIn(sourceDevice: SonosDevice): Promise<void> {
+    logger.debug(`${this.roomName}: playing line-in from ${sourceDevice.roomName}`);
     
-    // Need to find the UUID of the source room
-    // For now, just use the room name in the URI
-    const lineInUri = `x-rincon-stream:${sourceRoomName}`;
+    // Use the source device's UUID in the URI
+    const lineInUri = `x-rincon-stream:${sourceDevice.id}`;
     
     await this.setAVTransportURI(lineInUri);
     await this.play();

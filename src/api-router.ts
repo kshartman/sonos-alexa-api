@@ -100,6 +100,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/shuffle/{toggle}', this.setShuffle.bind(this));
     this.routes.set('GET /{room}/crossfade/{toggle}', this.setCrossfade.bind(this));
     this.routes.set('GET /{room}/sleep/{seconds}', this.setSleepTimer.bind(this));
+    this.routes.set('GET /{room}/linein', this.playLineIn.bind(this));
     this.routes.set('GET /{room}/linein/{source}', this.playLineIn.bind(this));
     this.routes.set('GET /{room}/groupVolume/{level}', this.setGroupVolume.bind(this));
     
@@ -1382,11 +1383,20 @@ export class ApiRouter {
   
   private async playLineIn({ room, source }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!source) throw { status: 400, message: 'Source parameter is required' };
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
-    await coordinator.playLineIn(source);
+    
+    // If no source is specified, use the same room as the source
+    const sourceRoom = source || room;
+    
+    // Find the source device to get its UUID
+    const sourceDevice = this.discovery.getDevice(sourceRoom);
+    if (!sourceDevice) {
+      throw { status: 404, message: `Could not find player ${sourceRoom}` };
+    }
+    
+    await coordinator.playLineIn(sourceDevice);
     
     return { status: 200, body: { status: 'success' } };
   }

@@ -42,6 +42,9 @@ export interface PandoraStation {
   stationToken?: string;
   artUrl?: string;
   type?: 'artist' | 'song' | 'genre';
+  isUserCreated?: boolean;
+  isQuickMix?: boolean;
+  isThumbprint?: boolean;
 }
 
 export interface PandoraSearchResult {
@@ -194,10 +197,12 @@ export class PandoraAPI {
       const data: PandoraResponse = await response.json();
       
       if (data.stat === 'fail') {
+        logger.debug('Pandora API error response:', data);
         throw new Error(`${data.message} [${data.code}]`);
       } else if (data.stat === 'ok') {
         return data.result;
       } else {
+        logger.debug('Unexpected Pandora response:', data);
         throw new Error('Unknown error');
       }
     } catch (error) {
@@ -297,7 +302,25 @@ export class PandoraAPI {
 
   // Convenience methods for common operations
   async getStationList(includeStationArtUrl = true): Promise<{ stations: PandoraStation[] }> {
-    return await this.request('user.getStationList', { includeStationArtUrl });
+    const response = await this.request('user.getStationList', { includeStationArtUrl });
+    
+    // Enhance station data with additional metadata
+    if (response.stations) {
+      response.stations = response.stations.map((station: any) => {
+        const enhanced: PandoraStation = {
+          ...station,
+          isQuickMix: station.stationName === 'QuickMix' || station.isQuickMix === true,
+          isThumbprint: station.stationName === 'Thumbprint Radio' || station.isThumbprint === true,
+          // Stations without a specific type are typically user-created
+          isUserCreated: !station.isQuickMix && !station.isThumbprint && 
+                        station.stationName !== 'QuickMix' && 
+                        station.stationName !== 'Thumbprint Radio'
+        };
+        return enhanced;
+      });
+    }
+    
+    return response;
   }
 
   async searchMusic(searchText: string): Promise<PandoraSearchResult> {

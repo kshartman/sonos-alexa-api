@@ -1,0 +1,24 @@
+get:
+  tags:
+    - Room
+  summary: Get room state
+  description: |
+    Returns the detailed state of a specific room including:
+    - Current and next track information
+    - Playback state and position
+    - Volume and mute status
+    - Play modes (repeat, shuffle, crossfade)
+    - Queue size
+    - Equalizer settings
+  operationId: getRoomState
+  parameters:
+    - $ref: '../../components/parameters.yaml#/parameters/room'
+  responses:
+    '200':
+      description: Room state
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/DeviceState'
+    '404':
+      $ref: '../../components/responses.yaml#/responses/RoomNotFound'

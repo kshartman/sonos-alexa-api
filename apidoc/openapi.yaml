@@ -1,0 +1,226 @@
+openapi: 3.0.3
+info:
+  $ref: './components/info.yaml'
+    
+servers:
+  $ref: './components/servers.yaml'
+    
+tags:
+  $ref: './components/tags.yaml'
+    
+paths:
+  # System endpoints
+  /health:
+    $ref: './paths/system/health.yaml'
+  /zones:
+    $ref: './paths/system/zones.yaml'
+  /state:
+    $ref: './paths/system/state.yaml'
+  /presets:
+    $ref: './paths/system/presets.yaml'
+  /events:
+    $ref: './paths/system/events.yaml'
+  /settings:
+    $ref: './paths/system/settings.yaml'
+    
+  # Room control endpoints
+  /{room}/state:
+    $ref: './paths/room/state.yaml'
+  /{room}/play:
+    $ref: './paths/room/play.yaml'
+  /{room}/pause:
+    $ref: './paths/room/pause.yaml'
+  /{room}/playpause:
+    $ref: './paths/room/playpause.yaml'
+  /{room}/stop:
+    $ref: './paths/room/stop.yaml'
+  /{room}/next:
+    $ref: './paths/room/next.yaml'
+  /{room}/previous:
+    $ref: './paths/room/previous.yaml'
+    
+  # Volume endpoints
+  /{room}/volume/{level}:
+    $ref: './paths/room/volume-set.yaml'
+  /{room}/volume/+{delta}:
+    $ref: './paths/room/volume-up.yaml'
+  /{room}/volume/-{delta}:
+    $ref: './paths/room/volume-down.yaml'
+  /{room}/mute:
+    $ref: './paths/room/mute.yaml'
+  /{room}/unmute:
+    $ref: './paths/room/unmute.yaml'
+  /{room}/togglemute:
+    $ref: './paths/room/togglemute.yaml'
+  /{room}/groupVolume/{level}:
+    $ref: './paths/room/group-volume.yaml'
+    
+  # Preset endpoints
+  /{room}/preset/{preset}:
+    $ref: './paths/room/preset.yaml'
+  /preset/{preset}:
+    $ref: './paths/global/preset.yaml'
+  /preset/{preset}/room/{room}:
+    $ref: './paths/global/preset-room.yaml'
+    
+  # Group management endpoints
+  /{room}/join/{targetRoom}:
+    $ref: './paths/room/join.yaml'
+  /{room}/leave:
+    $ref: './paths/room/leave.yaml'
+  /{room}/ungroup:
+    $ref: './paths/room/ungroup.yaml'
+  /{room}/isolate:
+    $ref: './paths/room/isolate.yaml'
+  /{room}/add/{otherRoom}:
+    $ref: './paths/room/add.yaml'
+    
+  # Favorites and playlists
+  /{room}/favorites:
+    $ref: './paths/room/favorites.yaml'
+  /{room}/favourites:
+    $ref: './paths/room/favourites.yaml'
+  /{room}/favorite/{name}:
+    $ref: './paths/room/favorite-play.yaml'
+  /{room}/favourite/{name}:
+    $ref: './paths/room/favourite-play.yaml'
+  /{room}/playlists:
+    $ref: './paths/room/playlists.yaml'
+  /{room}/playlist/{name}:
+    $ref: './paths/room/playlist-play.yaml'
+    
+  # Queue management
+  /{room}/queue:
+    $ref: './paths/room/queue.yaml'
+  /{room}/queue/{limit}:
+    $ref: './paths/room/queue-limit.yaml'
+  /{room}/queue/{limit}/{offset}:
+    $ref: './paths/room/queue-offset.yaml'
+  /{room}/queue/detailed:
+    $ref: './paths/room/queue-detailed.yaml'
+  /{room}/clearqueue:
+    $ref: './paths/room/clearqueue.yaml'
+    
+  # Playback modes
+  /{room}/repeat/{toggle}:
+    $ref: './paths/room/repeat.yaml'
+  /{room}/shuffle/{toggle}:
+    $ref: './paths/room/shuffle.yaml'
+  /{room}/crossfade/{toggle}:
+    $ref: './paths/room/crossfade.yaml'
+  /{room}/sleep/{seconds}:
+    $ref: './paths/room/sleep.yaml'
+    
+  # TTS endpoints
+  /{room}/say/{text}:
+    $ref: './paths/room/say.yaml'
+  /{room}/say/{text}/{volume}:
+    $ref: './paths/room/say-volume.yaml'
+  /{room}/sayall/{text}:
+    $ref: './paths/room/sayall.yaml'
+  /{room}/sayall/{text}/{volume}:
+    $ref: './paths/room/sayall-volume.yaml'
+  /sayall/{text}:
+    $ref: './paths/global/sayall.yaml'
+  /sayall/{text}/{volume}:
+    $ref: './paths/global/sayall-volume.yaml'
+    
+  # Music search endpoints
+  /{room}/musicsearch/{service}/album/{name}:
+    $ref: './paths/room/musicsearch-album.yaml'
+  /{room}/musicsearch/{service}/song/{query}:
+    $ref: './paths/room/musicsearch-song.yaml'
+  /{room}/musicsearch/{service}/station/{name}:
+    $ref: './paths/room/musicsearch-station.yaml'
+  /{room}/musicsearch/library/song/{query}:
+    $ref: './paths/room/library-song.yaml'
+  /{room}/musicsearch/library/artist/{query}:
+    $ref: './paths/room/library-artist.yaml'
+  /{room}/musicsearch/library/album/{query}:
+    $ref: './paths/room/library-album.yaml'
+  /library/index:
+    $ref: './paths/system/library-index.yaml'
+  /library/refresh:
+    $ref: './paths/system/library-refresh.yaml'
+  /song/{query}:
+    $ref: './paths/global/song.yaml'
+  /album/{name}:
+    $ref: './paths/global/album.yaml'
+  /station/{name}:
+    $ref: './paths/global/station.yaml'
+    
+  # Service-specific endpoints
+  /{room}/applemusic/{action}/{id}:
+    $ref: './paths/room/applemusic.yaml'
+  /{room}/pandora/play/{name}:
+    $ref: './paths/room/pandora-play.yaml'
+  /{room}/pandora/stations:
+    $ref: './paths/room/pandora-stations.yaml'
+  /{room}/pandora/thumbsup:
+    $ref: './paths/room/pandora-thumbsup.yaml'
+  /{room}/pandora/thumbsdown:
+    $ref: './paths/room/pandora-thumbsdown.yaml'
+  /{room}/siriusxm/{name}:
+    $ref: './paths/room/siriusxm.yaml'
+    
+  # Line-in
+  /{room}/linein:
+    $ref: './paths/room/linein.yaml'
+  /{room}/linein/{source}:
+    $ref: './paths/room/linein-source.yaml'
+    
+  # Global control
+  /pauseall:
+    $ref: './paths/global/pauseall.yaml'
+  /resumeAll:
+    $ref: './paths/global/resumeall.yaml'
+    
+  # Default settings
+  /default:
+    $ref: './paths/global/default.yaml'
+  /default/room/{room}:
+    $ref: './paths/global/default-room.yaml'
+  /default/service/{service}:
+    $ref: './paths/global/default-service.yaml'
+    
+  # Room-less endpoints (use default room)
+  /play:
+    $ref: './paths/global/play.yaml'
+  /pause:
+    $ref: './paths/global/pause.yaml'
+  /volume/{level}:
+    $ref: './paths/global/volume.yaml'
+    
+  # Debug endpoints
+  /debug:
+    $ref: './paths/debug/status.yaml'
+  /debug/level/{level}:
+    $ref: './paths/debug/level.yaml'
+  /debug/category/{category}/{enabled}:
+    $ref: './paths/debug/category.yaml'
+  /debug/enable-all:
+    $ref: './paths/debug/enable-all.yaml'
+  /debug/disable-all:
+    $ref: './paths/debug/disable-all.yaml'
+  /debug/subscriptions:
+    $ref: './paths/debug/subscriptions.yaml'
+  /{room}/debug/accounts:
+    $ref: './paths/debug/accounts.yaml'
+  /loglevel/{level}:
+    $ref: './paths/global/loglevel.yaml'
+
+components:
+  parameters:
+    $ref: './components/parameters.yaml#/parameters'
+    
+  responses:
+    $ref: './components/responses.yaml#/responses'
+    
+  schemas:
+    $ref: './components/schemas.yaml#/schemas'
+    
+  securitySchemes:
+    $ref: './components/security.yaml#/securitySchemes'
+    
+security:
+  $ref: './components/security.yaml#/security'

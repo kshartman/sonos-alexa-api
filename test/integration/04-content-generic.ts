@@ -8,14 +8,14 @@ import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Content Selection Integration Tests', { skip: skipIntegration, timeout: 60000 }, () => {
+describe('Generic Content Integration Tests', { skip: skipIntegration, timeout: 60000 }, () => {
   let topology: SystemTopology;
   let testRoom: string;
   let deviceId: string;
   let eventManager: EventManager;
 
   before(async () => {
-    console.log('\n🎵 Starting Content Selection Integration Tests...\n');
+    console.log('\n🎵 Starting Generic Content Integration Tests...\n');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events
@@ -24,18 +24,20 @@ describe('Content Selection Integration Tests', { skip: skipIntegration, timeout
     topology = await discoverSystem();
     testRoom = await getSafeTestRoom(topology);
     
-    // Get device ID for event tracking
+    // Get device ID for event tracking - use coordinator ID for groups/stereo pairs
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
     const zones = await zonesResponse.json();
-    const device = zones.flatMap(z => z.members).find(m => m.roomName === testRoom);
-    deviceId = device.id;
+    const zone = zones.find(z => z.members.some(m => m.roomName === testRoom));
+    // Use the coordinator's ID for event tracking
+    const coordinatorMember = zone.members.find(m => m.isCoordinator);
+    deviceId = coordinatorMember.id;
     
     console.log(`📊 Test room: ${testRoom}`);
     console.log(`📊 Device ID: ${deviceId}`);
   });
 
   after(async () => {
-    console.log('\n🧹 Cleaning up Content Selection tests...\n');
+    console.log('\n🧹 Cleaning up Generic Content tests...\n');
     
     // Stop playback
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
@@ -114,92 +116,79 @@ describe('Content Selection Integration Tests', { skip: skipIntegration, timeout
     });
   });
 
-  describe('Music Search', () => {
-    it('should search and play songs', async () => {
-      const songQuery = 'track:Yesterday artist:The Beatles';
-      
-      // Listen for track change when song starts
-      const trackChangePromise = eventManager.waitForTrackChange(deviceId, 20000);
-      
-      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/apple/song/${encodeURIComponent(songQuery)}`);
+  describe('Content Discovery', () => {
+    it('should list favorites', async () => {
+      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorites`);
       assert.strictEqual(response.status, 200);
       
-      const result = await response.json();
-      assert(result.status === 'success', 'Music search should succeed');
+      const favorites = await response.json();
+      assert(Array.isArray(favorites), 'Favorites should be an array');
       
-      // Wait for track change, then wait for stable playing state
-      const trackChanged = await trackChangePromise;
-      assert(trackChanged, 'Should receive track change event');
+      console.log(`✅ Found ${favorites.length} favorites`);
       
-      // Wait for stable state (handles TRANSITIONING properly)
-      const finalState = await eventManager.waitForStableState(deviceId, 20000);
-      assert(finalState === 'PLAYING', `Expected PLAYING state, got ${finalState}`);
-      
-      // Wait a bit for state to stabilize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Verify track info
-      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
-      const state = await stateResponse.json();
-      console.log(`   Debug: currentTrack = ${JSON.stringify(state.currentTrack, null, 2)}`);
-      assert.strictEqual(state.playbackState, 'PLAYING');
-      assert(state.currentTrack, 'Should have current track info');
-      assert(state.currentTrack.title, 'Track should have title');
-      
-      console.log(`✅ Song search played: ${state.currentTrack.title} by ${state.currentTrack.artist || 'Unknown'}`);
-    });
-
-    it('should search and play albums', async () => {
-      // Stop current playback
-      await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-      await eventManager.waitForState(deviceId, 'STOPPED', 5000);
-      
-      const albumQuery = 'Abbey Road';
-      
-      // Listen for track change event
-      const trackChangePromise = eventManager.waitForTrackChange(deviceId, 20000);
-      
-      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/apple/album/${encodeURIComponent(albumQuery)}`);
-      assert.strictEqual(response.status, 200);
-      
-      const result = await response.json();
-      assert(result.status === 'success', 'Album search should succeed');
-      
-      // Wait for track change, then wait for stable playing state
-      const trackChanged = await trackChangePromise;
-      assert(trackChanged, 'Should receive track change event for album');
-      
-      // Wait for stable state (handles TRANSITIONING properly)
-      const finalState = await eventManager.waitForStableState(deviceId, 20000);
-      assert(finalState === 'PLAYING', `Expected PLAYING state, got ${finalState}`);
-      
-      // Wait a bit for state to stabilize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Verify album is playing
-      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
-      const state = await stateResponse.json();
-      assert.strictEqual(state.playbackState, 'PLAYING');
-      assert(state.currentTrack?.album, 'Should have album info');
-      
-      console.log(`✅ Album search played: ${state.currentTrack.album || 'Unknown Album'}`);
-    });
-
-    it('should handle music search with no results gracefully', async () => {
-      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/apple/song/thisSongDefinitelyDoesNotExist12345xyz`);
-      
-      // Should return 200 with error status or 404
-      assert(response.status === 404 || response.status === 200, 'Should handle invalid queries');
-      
-      if (response.status === 200) {
-        const result = await response.json();
-        if (result.status === 'error') {
-          console.log('✅ Music search returned error for non-existent song');
+      if (favorites.length > 0) {
+        // Test playing a favorite
+        const favorite = favorites[0];
+        console.log(`📻 Testing favorite: ${favorite.title}`);
+        
+        const trackChangePromise = eventManager.waitForTrackChange(deviceId, 15000);
+        const favResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorite/${encodeURIComponent(favorite.title)}`);
+        
+        if (favResponse.status === 200) {
+          const trackChanged = await trackChangePromise;
+          if (trackChanged) {
+            console.log(`✅ Favorite "${favorite.title}" triggered track change`);
+          } else {
+            console.log(`⚠️  Favorite "${favorite.title}" played but no track change event`);
+          }
         } else {
-          console.log('✅ Music search handled non-existent query');
+          console.log(`⚠️  Favorite "${favorite.title}" returned ${favResponse.status}`);
         }
+      }
+    });
+
+    it('should list playlists', async () => {
+      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlists`);
+      assert.strictEqual(response.status, 200);
+      
+      const playlists = await response.json();
+      assert(Array.isArray(playlists), 'Playlists should be an array');
+      
+      console.log(`✅ Found ${playlists.length} playlists`);
+      
+      if (playlists.length > 0) {
+        // Test playing a playlist
+        const playlist = playlists[0];
+        console.log(`📻 Testing playlist: ${playlist.title}`);
+        
+        const trackChangePromise = eventManager.waitForTrackChange(deviceId, 15000);
+        const playlistResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlist/${encodeURIComponent(playlist.title)}`);
+        
+        if (playlistResponse.status === 200) {
+          const trackChanged = await trackChangePromise;
+          if (trackChanged) {
+            console.log(`✅ Playlist "${playlist.title}" triggered track change`);
+          } else {
+            console.log(`⚠️  Playlist "${playlist.title}" played but no track change event`);
+          }
+        } else {
+          console.log(`⚠️  Playlist "${playlist.title}" returned ${playlistResponse.status}`);
+        }
+      }
+    });
+
+    it('should handle content updates', async () => {
+      // Listen for content update events
+      // These occur when favorites, playlists, or music library changes
+      const contentUpdatePromise = eventManager.waitForContentUpdate(deviceId, 1000);
+      
+      // Content updates are typically triggered by external changes
+      // For testing, we'll just verify the event system is ready
+      const updated = await contentUpdatePromise;
+      if (updated) {
+        console.log('✅ Received content update event');
       } else {
-        console.log('✅ Music search returned 404 for non-existent song');
+        console.log('ℹ️  No content updates detected (this is normal)');
       }
     });
   });
@@ -318,83 +307,6 @@ describe('Content Selection Integration Tests', { skip: skipIntegration, timeout
       assert.strictEqual(response.status, 200);
       
       console.log('✅ Crossfade mode commands sent successfully');
-    });
-  });
-
-  describe('Content Discovery', () => {
-    it('should list favorites', async () => {
-      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorites`);
-      assert.strictEqual(response.status, 200);
-      
-      const favorites = await response.json();
-      assert(Array.isArray(favorites), 'Favorites should be an array');
-      
-      console.log(`✅ Found ${favorites.length} favorites`);
-      
-      if (favorites.length > 0) {
-        // Test playing a favorite
-        const favorite = favorites[0];
-        console.log(`📻 Testing favorite: ${favorite.title}`);
-        
-        const trackChangePromise = eventManager.waitForTrackChange(deviceId, 15000);
-        const favResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorite/${encodeURIComponent(favorite.title)}`);
-        
-        if (favResponse.status === 200) {
-          const trackChanged = await trackChangePromise;
-          if (trackChanged) {
-            console.log(`✅ Favorite "${favorite.title}" triggered track change`);
-          } else {
-            console.log(`⚠️  Favorite "${favorite.title}" played but no track change event`);
-          }
-        } else {
-          console.log(`⚠️  Favorite "${favorite.title}" returned ${favResponse.status}`);
-        }
-      }
-    });
-
-    it('should list playlists', async () => {
-      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlists`);
-      assert.strictEqual(response.status, 200);
-      
-      const playlists = await response.json();
-      assert(Array.isArray(playlists), 'Playlists should be an array');
-      
-      console.log(`✅ Found ${playlists.length} playlists`);
-      
-      if (playlists.length > 0) {
-        // Test playing a playlist
-        const playlist = playlists[0];
-        console.log(`📻 Testing playlist: ${playlist.title}`);
-        
-        const trackChangePromise = eventManager.waitForTrackChange(deviceId, 15000);
-        const playlistResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlist/${encodeURIComponent(playlist.title)}`);
-        
-        if (playlistResponse.status === 200) {
-          const trackChanged = await trackChangePromise;
-          if (trackChanged) {
-            console.log(`✅ Playlist "${playlist.title}" triggered track change`);
-          } else {
-            console.log(`⚠️  Playlist "${playlist.title}" played but no track change event`);
-          }
-        } else {
-          console.log(`⚠️  Playlist "${playlist.title}" returned ${playlistResponse.status}`);
-        }
-      }
-    });
-
-    it('should handle content updates', async () => {
-      // Listen for content update events
-      // These occur when favorites, playlists, or music library changes
-      const contentUpdatePromise = eventManager.waitForContentUpdate(deviceId, 1000);
-      
-      // Content updates are typically triggered by external changes
-      // For testing, we'll just verify the event system is ready
-      const updated = await contentUpdatePromise;
-      if (updated) {
-        console.log('✅ Received content update event');
-      } else {
-        console.log('ℹ️  No content updates detected (this is normal)');
-      }
     });
   });
 

@@ -179,8 +179,9 @@ export class MockDevice {
     return { ...this.state };
   }
 
-  getVolume(): number {
-    return this.state.volume;
+  async getVolume(): Promise<{ CurrentVolume: string }> {
+    this.recordCall('getVolume');
+    return { CurrentVolume: this.state.volume.toString() };
   }
 
   async setGroupVolume(level: number): Promise<void> {

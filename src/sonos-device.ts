@@ -40,6 +40,7 @@ export class SonosDevice extends EventEmitter {
   public readonly roomName: string;
   public readonly location: string;
   public readonly baseUrl: string;
+  public readonly ip: string;
   public state: SonosState;
   
   private xmlParser: XMLParser;
@@ -55,6 +56,7 @@ export class SonosDevice extends EventEmitter {
     
     const url = new URL(location);
     this.baseUrl = `http://${url.hostname}:${url.port}`;
+    this.ip = url.hostname;
     
     this.state = {
       playbackState: 'STOPPED',

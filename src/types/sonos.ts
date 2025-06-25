@@ -105,6 +105,7 @@ export interface Config {
   };
   library?: {
     randomQueueLimit: number;
+    reindexInterval?: string;
   };
 }
 

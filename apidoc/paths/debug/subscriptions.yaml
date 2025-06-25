@@ -1,0 +1,37 @@
+get:
+  tags:
+    - Debug
+  summary: Show UPnP subscription status
+  description: Returns the current status of all UPnP event subscriptions
+  operationId: getSubscriptions
+  responses:
+    '200':
+      description: Subscription status
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              activeSubscriptions:
+                type: integer
+                example: 5
+              subscriptions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    device:
+                      type: string
+                      example: Kitchen
+                    service:
+                      type: string
+                      example: AVTransport
+                    sid:
+                      type: string
+                      example: uuid:RINCON_000E58D53F8E01400_sub0000000123
+                    expiry:
+                      type: string
+                      format: date-time
+                    expiresIn:
+                      type: string
+                      example: 4m 30s

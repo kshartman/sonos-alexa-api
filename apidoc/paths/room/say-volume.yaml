@@ -1,0 +1,17 @@
+get:
+  tags:
+    - Room
+  summary: TTS with specific volume
+  description: Say text at a specific volume level
+  operationId: sayTextWithVolume
+  parameters:
+    - $ref: '../../components/parameters.yaml#/parameters/room'
+    - $ref: '../../components/parameters.yaml#/parameters/text'
+    - $ref: '../../components/parameters.yaml#/parameters/volume'
+  responses:
+    '200':
+      $ref: '../../components/responses.yaml#/responses/Success'
+    '400':
+      $ref: '../../components/responses.yaml#/responses/InvalidParameter'
+    '404':
+      $ref: '../../components/responses.yaml#/responses/RoomNotFound'

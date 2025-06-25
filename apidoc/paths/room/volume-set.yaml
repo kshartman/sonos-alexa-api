@@ -1,0 +1,16 @@
+get:
+  tags:
+    - Room
+  summary: Set volume
+  description: Set the volume to a specific level (0-100)
+  operationId: setVolume
+  parameters:
+    - $ref: '../../components/parameters.yaml#/parameters/room'
+    - $ref: '../../components/parameters.yaml#/parameters/level'
+  responses:
+    '200':
+      $ref: '../../components/responses.yaml#/responses/Success'
+    '400':
+      $ref: '../../components/responses.yaml#/responses/InvalidParameter'
+    '404':
+      $ref: '../../components/responses.yaml#/responses/RoomNotFound'

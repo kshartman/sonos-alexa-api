@@ -28,7 +28,8 @@ config.json
 settings-*.json
 
 # Preset files (user-specific)
-/presets/
+/presets/*
+!presets/.gitkeep
 *.preset
 
 # Audio files
@@ -92,6 +93,12 @@ jspm_packages/
 *.temp
 /tmp/
 
+# Debug directory and generated files
+/debug/
+/debug/test-cache/
+/debug/**/*.json
+/debug/**/*.log
+
 # MacOS
 .AppleDouble
 .LSOverride
@@ -107,3 +114,53 @@ jspm_packages/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Temp files
+#*
+*#
+*~
+.#*
+.*#
+.backup
+.backup/**/*
+.local
+.local/**/*
+.old
+.old/**/*
+.tmp
+.tmp/**/*
+
+# Instance-specific and test files
+/test-output*.log
+/test-results/
+/test-reports/
+*.test.json
+*.test.log
+/cache/
+/music-library-cache/
+/pandora-cache/
+/spotify-cache/
+
+# Generated documentation
+/apidoc/openapi-bundled.yaml
+/apidoc/openapi-original.yaml
+/docs/generated/
+
+# Development state files
+/.last-run
+/.test-state
+/state/
+*.state.json
+
+# Backup files
+*.bak
+*.backup
+*.old
+settings-backup*.json
+config-backup*.json
+
+# Local override files
+settings.local.json
+config.local.json
+.env.local
+.env.*.local

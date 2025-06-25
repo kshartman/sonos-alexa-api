@@ -13,7 +13,21 @@ console.log('🧪 Sonos API Test Suite\n');
 const args = process.argv.slice(2);
 const mockOnly = args.includes('--mock-only');
 const noServer = args.includes('--no-server');
-const pattern = args.find(arg => !arg.startsWith('--')) || '{unit,integration}/**/*-tests.ts';
+
+// Extract grep pattern if provided
+let grepPattern: string | undefined;
+const grepIndex = args.findIndex(arg => arg === '--grep' || arg.startsWith('--grep='));
+if (grepIndex !== -1) {
+  const grepArg = args[grepIndex];
+  if (grepArg === '--grep' && args[grepIndex + 1]) {
+    grepPattern = args[grepIndex + 1];
+  } else if (grepArg.startsWith('--grep=')) {
+    grepPattern = grepArg.substring('--grep='.length);
+  }
+}
+
+// Extract file pattern
+const pattern = args.find(arg => !arg.startsWith('--') && arg !== grepPattern) || '{unit,integration}/**/*-tests.ts';
 
 // Determine test mode: mock-only vs integration (always destructive)
 const testMode = mockOnly ? 'mock-only' : 'integration';
@@ -27,6 +41,9 @@ console.log(`   Mode: ${testMode}`);
 console.log(`   Mock only: ${mockOnly}`);
 console.log(`   Auto-start server: ${!noServer}`);
 console.log(`   Pattern: ${pattern}`);
+if (grepPattern) {
+  console.log(`   Grep: ${grepPattern}`);
+}
 console.log(`   Concurrency: Sequential (1 test file at a time)\n`);
 
 if (!mockOnly) {
@@ -49,17 +66,44 @@ async function runTests() {
       } else {
         console.log('✅ Server already running\n');
       }
+      
+      // Enable debug logging on the server
+      try {
+        console.log('🔧 Enabling debug logging on server...');
+        // Enable all debug categories
+        const enableAllResponse = await fetch('http://localhost:5005/debug/enable-all');
+        if (enableAllResponse.ok) {
+          console.log('✅ All debug categories enabled on server');
+        }
+        
+        // Set log level to debug (sets both logger and debugManager)
+        const logLevelResponse = await fetch('http://localhost:5005/loglevel/debug');
+        if (logLevelResponse.ok) {
+          console.log('✅ Server log level set to debug\n');
+        }
+      } catch (error) {
+        console.warn('⚠️  Could not enable debug logging on server:', error);
+      }
     }
 
     // Run tests using tsx to handle TypeScript files
     // IMPORTANT: Using --test-concurrency=1 to run tests sequentially
-    const testProcess = spawn('npx', [
+    const testArgs = [
       'tsx',
       '--test',
       '--test-concurrency=1',  // Force sequential execution
-      '--test-reporter=spec',
-      `test/${pattern}`
-    ], {
+      '--test-reporter=spec'
+    ];
+    
+    // Add grep pattern if provided
+    if (grepPattern) {
+      testArgs.push(`--test-name-pattern=${grepPattern}`);
+    }
+    
+    // Don't prepend test/ if pattern already includes it
+    testArgs.push(pattern.startsWith('test/') ? pattern : `test/${pattern}`);
+    
+    const testProcess = spawn('npx', testArgs, {
       stdio: 'inherit',
       cwd: join(__dirname, '..'),
       env: { ...process.env }
@@ -95,14 +139,17 @@ if (args.includes('--help')) {
 Usage: npm test [options] [pattern]
 
 Options:
-  --mock-only   Run only unit tests (no Sonos required)
-  --no-server   Don't auto-start server (assume it's running)
-  --help        Show this help
+  --mock-only     Run only unit tests (no Sonos required)
+  --no-server     Don't auto-start server (assume it's running)
+  --grep PATTERN  Filter tests by name pattern
+  --help          Show this help
 
 Examples:
-  npm test                    # Run all tests
-  npm test --mock-only        # Run only unit tests
-  npm test unit/*.ts          # Run only unit tests by pattern
+  npm test                            # Run all tests
+  npm test --mock-only                # Run only unit tests
+  npm test unit/*.ts                  # Run only unit tests by pattern
+  npm test -- --grep "Pandora"        # Run only tests matching "Pandora"
+  npm test -- "--grep=Pandora Service" # Alternative grep syntax
   `);
   process.exit(0);
 }

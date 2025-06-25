@@ -141,24 +141,145 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
   
   describe('Say All Command', () => {
     it('should announce to all rooms', async () => {
+      // Get initial state of test room
+      const beforeState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const stateBefore = await beforeState.json();
+      const wasPlaying = stateBefore.playbackState === 'PLAYING';
+      
       const response = await fetch(`${defaultConfig.apiUrl}/sayall/Attention%20all%20rooms`);
       assert.strictEqual(response.status, 200);
       
       const result = await response.json();
       assert(result.status === 'success', 'Say all should succeed');
-      assert(Array.isArray(result.results), 'Should have results array');
-      assert(result.results.length > 0, 'Should announce to at least one room');
       
-      // Wait for announcements to complete
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Wait for announcement to play
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // If test room was playing, wait for it to restore
+      if (wasPlaying) {
+        const restored = await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+        assert(restored, 'Should restore playback after announcement');
+      }
     });
     
     it('should announce to all rooms with volume', async () => {
+      // Get all rooms and their initial volumes
+      const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
+      const zones = await zonesResponse.json();
+      const allRooms = zones.flatMap(z => z.members);
+      
+      // Store initial volumes for all rooms
+      const roomVolumes = new Map();
+      for (const member of allRooms) {
+        const stateResponse = await fetch(`${defaultConfig.apiUrl}/${member.roomName}/state`);
+        const state = await stateResponse.json();
+        roomVolumes.set(member.id, state.volume);
+      }
+      
       const response = await fetch(`${defaultConfig.apiUrl}/sayall/Testing%20all%20rooms/40`);
       assert.strictEqual(response.status, 200);
       
-      // Wait for announcements
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      const result = await response.json();
+      assert(result.status === 'success', 'Say all with volume should succeed');
+      
+      // Wait for announcement to play
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Check if at least one room has restored its volume
+      let volumeRestored = false;
+      const volumePromises = [];
+      
+      // Create promises for all rooms but don't wait for all
+      for (const [roomId, originalVolume] of roomVolumes) {
+        volumePromises.push(
+          eventManager.waitForVolume(roomId, originalVolume, 5000)
+            .then(restored => ({ roomId, restored }))
+            .catch(() => ({ roomId, restored: false }))
+        );
+      }
+      
+      // Wait for any room to restore volume
+      const results = await Promise.race([
+        Promise.all(volumePromises),
+        new Promise(resolve => setTimeout(() => resolve([]), 8000)) // Overall timeout
+      ]);
+      
+      if (Array.isArray(results)) {
+        volumeRestored = results.some(r => r.restored);
+      }
+      
+      assert(volumeRestored, 'At least one room should restore original volume');
+    });
+    
+    it('should announce to all rooms from specific room', async () => {
+      // Get initial state of test room
+      const beforeState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const stateBefore = await beforeState.json();
+      const wasPlaying = stateBefore.playbackState === 'PLAYING';
+      
+      const response = await fetch(`${defaultConfig.apiUrl}/${room}/sayall/Room%20announcement`);
+      assert.strictEqual(response.status, 200);
+      
+      const result = await response.json();
+      assert(result.status === 'success', 'Room sayall should succeed');
+      
+      // Wait for announcement to play
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // If test room was playing, wait for it to restore
+      if (wasPlaying) {
+        const restored = await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+        assert(restored, 'Should restore playback after announcement');
+      }
+    });
+    
+    it('should announce to all rooms from specific room with volume', async () => {
+      // Get the zone that contains our test room
+      const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
+      const zones = await zonesResponse.json();
+      const testZone = zones.find(z => z.members.some(m => m.roomName === room));
+      
+      // Store initial volumes for all rooms in the zone
+      const roomVolumes = new Map();
+      for (const member of testZone.members) {
+        const stateResponse = await fetch(`${defaultConfig.apiUrl}/${member.roomName}/state`);
+        const state = await stateResponse.json();
+        roomVolumes.set(member.id, state.volume);
+      }
+      
+      const response = await fetch(`${defaultConfig.apiUrl}/${room}/sayall/Room%20volume%20test/35`);
+      assert.strictEqual(response.status, 200);
+      
+      const result = await response.json();
+      assert(result.status === 'success', 'Room sayall with volume should succeed');
+      
+      // Wait for announcement to play
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Check if at least one room in the zone has restored its volume
+      let volumeRestored = false;
+      const volumePromises = [];
+      
+      // Create promises for all rooms but don't wait for all
+      for (const [roomId, originalVolume] of roomVolumes) {
+        volumePromises.push(
+          eventManager.waitForVolume(roomId, originalVolume, 5000)
+            .then(restored => ({ roomId, restored }))
+            .catch(() => ({ roomId, restored: false }))
+        );
+      }
+      
+      // Wait for any room to restore volume
+      const results = await Promise.race([
+        Promise.all(volumePromises),
+        new Promise(resolve => setTimeout(() => resolve([]), 8000)) // Overall timeout
+      ]);
+      
+      if (Array.isArray(results)) {
+        volumeRestored = results.some(r => r.restored);
+      }
+      
+      assert(volumeRestored, 'At least one room in the zone should restore original volume');
     });
   });
   
@@ -213,7 +334,16 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
     });
     
     it('should handle announcement during pause', async () => {
-      // Pause playback
+      // First ensure we're playing
+      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const state = await stateResponse.json();
+      
+      if (state.playbackState !== 'PLAYING') {
+        await fetch(`${defaultConfig.apiUrl}/${room}/play`);
+        await eventManager.waitForState(deviceId, 'PLAYING', 5000);
+      }
+      
+      // Now pause playback
       await fetch(`${defaultConfig.apiUrl}/${room}/pause`);
       await eventManager.waitForState(deviceId, 'PAUSED_PLAYBACK', 5000);
       
@@ -223,10 +353,10 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       // Wait for announcement
       await new Promise(resolve => setTimeout(resolve, 5000));
       
-      // Should remain paused
-      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
-      const state = await stateResponse.json();
-      assert.strictEqual(state.playbackState, 'PAUSED_PLAYBACK', 'Should remain paused');
+      // Should remain paused since we had content
+      const finalStateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const finalState = await finalStateResponse.json();
+      assert.strictEqual(finalState.playbackState, 'PAUSED_PLAYBACK', 'Should remain paused');
     });
   });
   

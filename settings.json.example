@@ -28,6 +28,7 @@
   },
   
   "library": {
-    "randomQueueLimit": 50
+    "randomQueueLimit": 50,
+    "reindexInterval": "1 week"
   }
 }

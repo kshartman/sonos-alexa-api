@@ -1,0 +1,29 @@
+get:
+  tags:
+    - Room
+  summary: Search and play songs
+  description: |
+    Search for songs by query and play them. Supported services:
+    - **apple**: Apple Music (no auth required)
+    - **library**: Local music library
+    - **pandora**: Pandora stations (requires credentials)
+  operationId: musicSearchSong
+  parameters:
+    - $ref: '../../components/parameters.yaml#/parameters/room'
+    - $ref: '../../components/parameters.yaml#/parameters/service'
+    - $ref: '../../components/parameters.yaml#/parameters/query'
+  responses:
+    '200':
+      description: Song search successful
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/MusicSearchResult'
+    '404':
+      $ref: '../../components/responses.yaml#/responses/RoomNotFound'
+    '501':
+      description: Service not implemented
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/Error'

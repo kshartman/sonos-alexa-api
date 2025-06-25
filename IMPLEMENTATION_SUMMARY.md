@@ -1,66 +1,187 @@
 # Sonos API Implementation Summary
 
-## Key Improvements Made
+## Overview
 
-### 1. **Proper Group Management**
-- Fixed join/leave operations to handle all legacy cases:
-  - Source device already in a group (leaves first, then joins)
-  - Stereo pairs (uses coordinator)
-  - Detects when already in same group
-- Added proper debug logging using debugManager
+This is a modern TypeScript implementation of a Sonos HTTP API designed for Alexa integration, based on jishi's excellent work on node-sonos-http-api and node-sonos-discovery. The implementation uses minimal dependencies and native Node.js APIs.
 
-### 2. **Device Discovery & Topology**
-- **CRITICAL FIX**: Subscribe to topology events on ALL devices, not just one "preferred" device
-- Initialize device map from initial topology query (creates stub devices)
-- Check for service availability before subscribing
-- Properly handle devices without ZoneGroupTopology service
+## Key Features
 
-### 3. **Event-Driven Architecture**
-- All tests use event-driven patterns (no polling or fixed timeouts)
-- EventManager provides:
-  - `waitForState()` - waits for specific playback state
-  - `waitForVolume()` - waits for volume changes
-  - `waitForTopologyChange()` - waits for group changes
-  - `waitForTrackChange()` - waits for track changes
-- UPnP events flow: Sonos → Discovery → Server → SSE → EventBridge → Tests
+### 1. **Zero HTTP Framework Dependencies**
+- Uses Node.js built-in `http` module
+- Custom router with pattern matching
+- No Express, Koa, or other frameworks
+- Minimal dependencies (winston for logging, fast-xml-parser for SOAP)
 
-### 4. **Development Environment**
-- Added dotenv support (dev dependency only)
-- Debug categories configured via .env file:
-  - topology, upnp, discovery, api, soap
-- Proper TypeScript configuration
+### 2. **Music Service Integration**
+- **Apple Music**: Full search (albums, songs, stations) using iTunes API
+- **Pandora**: Station playback with real API integration, thumbs up/down
+- **Music Library**: Local library search with background indexing
+- **Default Service**: Configurable default music service for room-less endpoints
 
-## Test Suite Structure
+### 3. **Group Management**
+- Proper coordinator routing for grouped speakers
+- Stereo pair detection and handling
+- Join/leave operations with topology awareness
+- Group volume control
+- Non-stereo group warning in tests
 
-### Integration Tests Created:
-1. **01-infrastructure-tests.ts** - Core server/discovery tests
-2. **02-playback-tests.ts** - Basic playback controls  
-3. **03-volume-tests.ts** - Volume and mute controls
-4. **04-content-tests.ts** - Music search and content selection
-5. **05-group-tests.ts** - Group formation and management
-6. **06-playback-modes-tests.ts** - Shuffle, repeat, crossfade
-7. **07-advanced-tests.ts** - Sleep timer, settings, presets
-8. **08-tts-tests.ts** - Text-to-speech and announcements
+### 4. **Text-to-Speech (TTS)**
+- Multiple providers: VoiceRSS, Google TTS, macOS Say
+- Automatic playback save/restore
+- Configurable announcement volume
+- Per-endpoint volume override
+- Audio file caching
 
-## Important Notes
+### 5. **Default Room System**
+- Persistent default room tracking
+- Room-less endpoints use saved default
+- Automatic default update on room usage
+- Essential for Alexa "play music" commands
 
-### Portable Devices (Roam, Move)
-- These devices lack some services (AVTransport, RenderingControl)
-- Excluded from topology subscriptions
-- Still function as group members
+### 6. **Event-Driven Architecture**
+- UPnP event subscriptions with auto-renewal
+- Server-Sent Events (SSE) for real-time updates
+- Event-driven test framework (no polling)
+- Topology change detection
 
-### Stereo Pairs
-- Treated as single units
-- Commands routed through coordinator
-- Members don't subscribe to their own events
+### 7. **Debug System**
+- Categorized debug logging
+- Runtime enable/disable via API
+- Log levels: error, warn, info, debug, wall
+- Categories: soap, topology, discovery, favorites, presets, upnp, api
 
-### Content Loading
-- Many Sonos commands require content to be loaded first
-- Tests must load a URI before testing play/pause/volume
-- TTS temporarily interrupts playback but restores state
+## API Endpoints
 
-## Remaining Work
-- Update existing playback/volume tests to load content first
-- Investigate why some topology events aren't being received
-- Add more comprehensive error handling tests
-- Performance optimization for large Sonos systems
+### System
+- Health check, zones, state, presets, settings
+- Server-Sent Events stream
+
+### Room Control
+- Playback: play, pause, stop, next, previous
+- Volume: set, increase, decrease, mute, group volume
+- Content: favorites, playlists, presets
+- Group: join, leave, add members
+
+### Music Search
+- Multi-service search (apple, library, pandora)
+- Room-specific: `/{room}/musicsearch/{service}/{type}/{query}`
+- Default room: `/song/{query}`, `/album/{name}`, `/station/{name}`
+
+### TTS Announcements
+- Room-specific with optional volume
+- Group announcements
+- System-wide announcements
+
+### Debug & Monitoring
+- Debug configuration and control
+- UPnP subscription status
+- Log level management
+
+## Technical Implementation
+
+### Device Discovery
+- SSDP-based discovery with topology awareness
+- Automatic device detection and tracking
+- Service availability checking
+- Portable device handling (Roam, Move)
+
+### Coordinator Pattern
+- Commands routed to group coordinator
+- Queue operations on coordinator only
+- Individual volume control preserved
+- Stereo pair awareness
+
+### Music Playback Restoration
+- Captures transport state before announcements
+- Handles TRANSITIONING states with retry
+- Preserves queue position and play mode
+
+### Pandora Integration
+- Real API with partner authentication
+- Blowfish encryption for auth tokens
+- Station list caching
+- Feedback support (thumbs up/down)
+
+## Testing
+
+### Adaptive Test Framework
+- Discovers available Sonos system
+- Runs appropriate tests based on system
+- Event-driven (no polling or fixed delays)
+- Safe mode and full mode options
+
+### Test Categories
+1. Infrastructure and discovery
+2. Playback controls
+3. Volume and mute
+4. Content loading (by service)
+5. Group management
+6. Playback modes
+7. Advanced features
+8. TTS functionality
+
+### Test Helpers
+- Content loader with fallback strategies
+- Event bridge for SSE integration
+- State management and verification
+- Mock factory for unit tests
+
+## Configuration
+
+### settings.json
+- Host, port, authentication
+- Default room and announce volume
+- TTS provider keys
+- Music service credentials
+
+### Environment Variables
+- PORT, NODE_ENV, DEFAULT_ROOM
+- LOG_LEVEL, DEBUG_CATEGORIES
+- Legacy support: NODE_OPTIONS='--openssl-legacy-provider'
+
+## Recent Enhancements
+
+1. **Music Library Integration**
+   - Auto-indexing at startup
+   - Cache persistence
+   - Search by song, artist, album
+   - Progress tracking
+
+2. **Pandora Improvements**
+   - Real API integration
+   - Station switching with delays
+   - Proper session management
+   - Browse fallback support
+
+3. **Test Reliability**
+   - Group member names in warnings
+   - Volume mock fixes
+   - Content loading improvements
+   - Timing adjustments
+
+4. **API Completeness**
+   - TTS with volume endpoints
+   - Queue pagination support
+   - Toggle mute endpoint
+   - Library management endpoints
+
+## Known Limitations
+
+- SiriusXM not implemented (returns 501)
+- Spotify requires OAuth2 setup
+- Amazon Music has no public API
+- Some Pandora feedback returns error code 0
+
+## Migration from Legacy
+
+1. Point Alexa skill to new API endpoint
+2. Copy settings.json and presets
+3. No Alexa skill code changes needed
+4. Test voice commands
+5. Monitor with debug logging
+
+## Credits
+
+This implementation builds on the excellent work by:
+- [jishi](https://github.com/jishi) - Original node-sonos-http-api and node-sonos-discovery
+- [dlom](https://github.com/dlom) - Anesidora Pandora API implementation

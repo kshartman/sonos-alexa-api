@@ -177,13 +177,23 @@ async function checkRoomHasContent(room: string): Promise<boolean> {
 export async function getSafeTestRoom(topology: SystemTopology): Promise<string> {
   // Try to find a standalone room that's not playing and is a coordinator with content
   for (const zone of topology.zones) {
-    if (zone.members.length === 1) {
+    // Check if this is a standalone zone (single device or stereo pair)
+    const uniqueRoomNames = new Set(zone.members.map(m => m.roomName));
+    const isStandalone = uniqueRoomNames.size === 1;
+    
+    if (isStandalone) {
       const member = zone.members[0];
       const room = member.roomName;
       
       // Check if this is the coordinator (for stereo pairs, only coordinator has full services)
       if (!member.isCoordinator) {
         console.log(`⚠️  Skipping ${room} - not a coordinator (likely stereo pair member)`);
+        continue;
+      }
+      
+      // Skip portable devices (Roam, Move) as they lack proper services
+      if (room.toLowerCase().includes('roam') || room.toLowerCase().includes('move')) {
+        console.log(`⚠️  Skipping ${room} - portable device (lacks AVTransport/RenderingControl services)`);
         continue;
       }
       
@@ -211,6 +221,11 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
   for (const zone of topology.zones) {
     const coordinator = zone.members.find(m => m.isCoordinator);
     if (coordinator) {
+      // Skip portable devices
+      if (coordinator.roomName.toLowerCase().includes('roam') || coordinator.roomName.toLowerCase().includes('move')) {
+        continue;
+      }
+      
       try {
         const stateResponse = await fetch(`${defaultConfig.apiUrl}/${coordinator.roomName}/state`);
         const state = await stateResponse.json();
@@ -342,7 +357,11 @@ export async function ungroupAllSpeakers(): Promise<void> {
   });
   
   if (stillGrouped.length > 0) {
-    console.log(`   ⚠️  ${stillGrouped.length} non-stereo groups still exist after ungrouping`);
+    const groupDetails = stillGrouped.map(zone => {
+      const memberNames = zone.members.map(m => m.roomName).join(', ');
+      return `[${memberNames}]`;
+    }).join(', ');
+    console.log(`   ⚠️  ${stillGrouped.length} non-stereo groups still exist after ungrouping: ${groupDetails}`);
   } else {
     console.log('   All speakers are now standalone (stereo pairs preserved)');
   }

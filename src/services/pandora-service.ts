@@ -10,6 +10,7 @@ interface FuzzySearchResult {
 
 export class PandoraService {
   private static readonly PANDORA_SID = '236';
+  private static readonly PANDORA_SERVICE_TYPE = (236 << 8) + 7; // 60423
   private static pandoraAPI: PandoraAPI | null = null;
   private static lastLoginTime = 0;
   private static readonly LOGIN_CACHE_TIME = 30 * 60 * 1000; // 30 minutes
@@ -44,7 +45,7 @@ export class PandoraService {
    */
   static generateStationURI(stationId: string): string {
     const encodedId = encodeURIComponent(stationId);
-    return `x-sonosapi-radio:ST%3a${encodedId}?sid=236&flags=8300&sn=1`;
+    return `x-sonosapi-radio:ST%3a${encodedId}?sid=${this.PANDORA_SID}&flags=8300&sn=1`;
   }
 
   /**
@@ -64,7 +65,7 @@ export class PandoraService {
       <item id="100c206cST%3a${encodedId}" parentID="0" restricted="true">
         <dc:title>${encodedName}</dc:title>
         <upnp:class>object.item.audioItem.audioBroadcast.#station</upnp:class>
-        <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SID}_X_#Svc${this.PANDORA_SID}-0-Token</desc>
+        <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SERVICE_TYPE}_X_#Svc${this.PANDORA_SERVICE_TYPE}-0-Token</desc>
       </item>
     </DIDL-Lite>`;
   }
@@ -210,18 +211,107 @@ export class PandoraService {
         return { trackToken: null, stationToken: null };
       }
 
-      // Extract track token (between 'x-sonos-http:' and '%3a%3aST%3a')
-      const trackMatch = trackUri.match(/x-sonos-http:([^%]+)%3a%3aST%3a/);
+      // URI format: x-sonos-http:VC1%3a%3aST%3a%3aST%3a{stationToken}%3a%3aTR%3a{trackToken}%3a%3a...
+      // Extract track token (after '%3a%3aTR%3a')
+      const trackMatch = trackUri.match(/%3a%3aTR%3a([^%]+)%3a%3a/);
       const trackToken = trackMatch ? trackMatch[1] || null : null;
 
-      // Extract station token (between '%3a%3aST%3a' and '%3a%3aRINCON')
-      const stationMatch = trackUri.match(/%3a%3aST%3a([^%]+)%3a%3aRINCON/);
+      // Extract station token (between '%3a%3aST%3a' and '%3a%3aTR%3a')
+      const stationMatch = trackUri.match(/%3a%3aST%3a([^%]+)%3a%3aTR%3a/);
       const stationToken = stationMatch ? stationMatch[1] || null : null;
+      
+      logger.debug(`Extracted tokens - track: ${trackToken}, station: ${stationToken}`);
 
       return { trackToken, stationToken };
     } catch (error) {
       logger.error('Error extracting Pandora tokens:', error);
       return { trackToken: null, stationToken: null };
+    }
+  }
+
+  /**
+   * Search for a Pandora station and return its URI and title
+   */
+  static async searchForStation(api: PandoraAPI, stationName: string): Promise<{ uri: string; title: string } | null> {
+    try {
+      // Get user's station list
+      logger.debug(`Getting Pandora station list for search: ${stationName}`);
+      const stationList = await api.getStationList(true);
+      const allStations: PandoraStation[] = [...stationList.stations];
+      
+      // Search for artists and songs to create stations
+      logger.debug('Searching Pandora music catalog');
+      const searchResult = await api.searchMusic(stationName);
+      
+      // Add high-scoring artists as potential stations
+      if (searchResult.artists) {
+        for (const artist of searchResult.artists) {
+          if (artist.score > 90) {
+            allStations.push({
+              stationId: artist.musicToken,
+              stationName: artist.artistName,
+              type: 'artist' as const
+            });
+          }
+        }
+      }
+      
+      // Add high-scoring songs as potential stations
+      if (searchResult.songs) {
+        for (const song of searchResult.songs) {
+          if (song.score > 90) {
+            allStations.push({
+              stationId: song.musicToken,
+              stationName: song.songName,
+              type: 'song' as const
+            });
+          }
+        }
+      }
+      
+      // Get genre stations
+      logger.debug('Getting Pandora genre stations');
+      const genreResult = await api.getGenreStations();
+      for (const category of genreResult.categories) {
+        for (const genreStation of category.stations) {
+          allStations.push({
+            stationId: genreStation.stationToken,
+            stationName: genreStation.stationName,
+            stationToken: genreStation.stationToken
+          });
+        }
+      }
+      
+      // Find the best matching station
+      logger.debug(`Searching through ${allStations.length} stations for: ${stationName}`);
+      const match = this.fuzzySearch(allStations, stationName);
+      
+      if (!match) {
+        return null;
+      }
+      
+      logger.info(`Found Pandora station: ${match.item.stationName} (score: ${match.score})`);
+      
+      let uri: string;
+      let title: string;
+      
+      // If it's a new station (artist/song), create it first
+      if (match.item.type && match.item.type !== 'genre') {
+        logger.debug(`Creating new station from ${match.item.type}: ${match.item.stationName}`);
+        const newStation = await api.createStation(match.item.stationId, match.item.type as 'artist' | 'song');
+        uri = this.generateStationURI(newStation.stationId);
+        title = newStation.stationName;
+      } else {
+        // Use existing station
+        const stationId = match.item.stationToken || match.item.stationId;
+        uri = this.generateStationURI(stationId);
+        title = match.item.stationName;
+      }
+      
+      return { uri, title };
+    } catch (error) {
+      logger.error('Error searching for Pandora station:', error);
+      return null;
     }
   }
 
@@ -237,10 +327,15 @@ export class PandoraService {
 
       // Check if it's a Pandora track
       const positionInfo = await device.getPositionInfo();
-      const trackUri = positionInfo.trackUri || '';
+      const trackUri = positionInfo.trackUri || currentTrack.uri || '';
+      
+      logger.debug(`Checking Pandora track - positionInfo.trackUri: ${positionInfo.trackUri}`);
+      logger.debug(`Current track URI: ${currentTrack.uri}`);
+      logger.debug(`Using trackUri: ${trackUri}`);
       
       // Pandora tracks have URIs like: x-sonos-http:TRACKTOKEN%3a%3aST%3aSTATIONTOKEN%3a%3aRINCON...
-      if (!trackUri.includes('x-sonos-http:') || !currentTrack.uri.includes('sid=236')) {
+      // The URI contains the sid=236 parameter
+      if (!trackUri.includes('x-sonos-http:') || !trackUri.includes('sid=236')) {
         throw new Error('Current track is not from Pandora');
       }
 

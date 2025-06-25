@@ -8,3 +8,74 @@ README.md
 .vscode
 coverage
 .nyc_output
+
+# Temp files
+#*
+*#
+*~
+.#*
+.*#
+.DS_Store
+.backup
+.backup/**/*
+.local
+.local/**/*
+.old
+.old/**/*
+.tmp
+.tmp/**/*
+
+# Test and debug files
+/test/
+/debug/
+/test-output*.log
+/test-results/
+/test-reports/
+*.test.json
+*.test.log
+/logs/
+
+# Cache directories
+/cache/
+/music-library-cache/
+/pandora-cache/
+/spotify-cache/
+/test-cache/
+
+# Documentation source
+/apidoc/
+/docs/
+*.md
+
+# Development files
+.eslintrc*
+.prettierrc*
+tsconfig.json
+*.ts
+/src/
+
+# Build and CI files
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+/scripts/
+
+# Local config overrides
+settings.local.json
+config.local.json
+.env.local
+.env.*.local
+settings-*.json
+config-*.json
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# State files
+/.last-run
+/.test-state
+/state/
+*.state.json

@@ -1,0 +1,11 @@
+securitySchemes:
+  basicAuth:
+    type: http
+    scheme: basic
+    description: |
+      Optional HTTP Basic Authentication configured in settings.json.
+      Authentication is only enforced if credentials are configured AND rejectUnauthorized is true.
+      
+security:
+  - {}
+  - basicAuth: []

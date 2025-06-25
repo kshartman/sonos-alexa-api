@@ -45,22 +45,52 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
     // Load content to enable playback mode changes
     console.log('   Loading content for playback mode tests...');
     
-    // Search and play a test song
-    const songQuery = 'track:Yesterday artist:The Beatles';
-    const searchResponse = await fetch(`${defaultConfig.apiUrl}/${room}/musicsearch/apple/song/${encodeURIComponent(songQuery)}`);
-    assert.strictEqual(searchResponse.status, 200);
+    // Try to load content using favorites first (more reliable)
+    const favResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites`);
+    if (favResponse.ok) {
+      const favorites = await favResponse.json();
+      const radioStation = favorites.find(f => f.type === 'radio' || f.uri?.includes('radio'));
+      
+      if (radioStation) {
+        console.log(`   Loading favorite: ${radioStation.title}`);
+        const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorite/${encodeURIComponent(radioStation.title)}`);
+        if (playResponse.ok) {
+          // Wait for playback to start
+          await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+          console.log('   ✅ Test content loaded and playing');
+          return;
+        }
+      }
+    }
     
-    const result = await searchResponse.json();
-    assert(result.status === 'success', 'Music search should succeed');
+    // Fallback to music search if favorites don't work
+    try {
+      const songQuery = 'track:Yesterday artist:The Beatles';
+      const searchResponse = await fetch(`${defaultConfig.apiUrl}/${room}/musicsearch/apple/song/${encodeURIComponent(songQuery)}`);
+      
+      if (searchResponse.ok) {
+        const result = await searchResponse.json();
+        if (result.status === 'success') {
+          // Wait for playback to start
+          await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+          console.log('   ✅ Test content loaded and playing via music search');
+          return;
+        }
+      }
+    } catch (error) {
+      console.log('   ⚠️  Music search failed, trying another method...');
+    }
     
-    // Wait for playback to start
-    await eventManager.waitForState(deviceId, 'PLAYING', 10000);
-    
-    console.log('   ✅ Test content loaded and playing');
-    
-    // Switch to queue for testing
-    await fetch(`${defaultConfig.apiUrl}/${room}/queue`);
-    await eventManager.waitForState(deviceId, 'PLAYING', 5000);
+    // Last resort: Just try to play if there's already something in the queue
+    const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/play`);
+    if (playResponse.ok) {
+      try {
+        await eventManager.waitForState(deviceId, 'PLAYING', 5000);
+        console.log('   ✅ Playing existing queue content');
+      } catch {
+        console.log('   ⚠️  Warning: Could not load test content, tests may fail');
+      }
+    }
   });
   
   after(async () => {

@@ -32,12 +32,14 @@ export class PresetLoader {
       failedResolution: 0,
       invalidFormat: 0,
       parseErrors: 0,
-      legacyConverted: 0
+      legacyConverted: 0,
+      invalidRooms: 0
     };
     const validPresetNames: string[] = [];
     const failedResolutionNames: string[] = [];
     const invalidFormatNames: string[] = [];
     const parseErrorNames: string[] = [];
+    const invalidRoomNames: string[] = [];
     
     try {
       const files = await readdir(this.presetDir);
@@ -67,6 +69,15 @@ export class PresetLoader {
             // Check if this was a legacy preset conversion
             if ('_legacy' in convertedPreset) {
               stats.legacyConverted++;
+              
+              // Validate and filter room names in legacy presets
+              const roomValidation = this.validateAndFilterRooms(convertedPreset, presetName);
+              if (roomValidation.hasInvalidRooms) {
+                stats.invalidRooms++;
+                invalidRoomNames.push(presetName);
+                logger.warn(`Preset ${presetName}: Removed invalid rooms - ${roomValidation.invalidRooms?.join(', ')}`);
+                debugManager.debug('presets', `Preset ${presetName}: Invalid rooms removed - ${roomValidation.message}`);
+              }
             }
             
             // Resolve favorites to actual URIs if discovery is available
@@ -115,6 +126,7 @@ export class PresetLoader {
       logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
       logger.info(`  Invalid format: ${stats.invalidFormat}`);
       logger.info(`  Parse errors: ${stats.parseErrors}`);
+      logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
       
       if (validPresetNames.length > 0) {
         const greenPresets = validPresetNames.sort().map(name => `\x1b[32m${name}\x1b[0m`).join(', ');
@@ -134,6 +146,11 @@ export class PresetLoader {
       if (parseErrorNames.length > 0) {
         const redParseErrors = parseErrorNames.sort().map(name => `\x1b[31m${name}\x1b[0m`).join(', ');
         logger.info(`Parse errors: ${redParseErrors}`);
+      }
+      
+      if (invalidRoomNames.length > 0) {
+        const orangeRooms = invalidRoomNames.sort().map(name => `\x1b[33m${name}\x1b[0m`).join(', ');
+        logger.info(`Presets with invalid rooms (loaded with valid rooms only): ${orangeRooms}`);
       }
       
     } catch (error) {
@@ -183,6 +200,54 @@ export class PresetLoader {
 
   getAllPresets(): PresetCollection {
     return { ...this.presets };
+  }
+
+  private validateAndFilterRooms(preset: Preset & { _legacy?: any }, presetName: string): { 
+    hasInvalidRooms: boolean; 
+    invalidRooms?: string[]; 
+    message?: string 
+  } {
+    // Only validate legacy presets that have room information
+    if (!preset._legacy || !preset._legacy.players) {
+      return { hasInvalidRooms: false };
+    }
+    
+    // If discovery is not available, we can't validate
+    if (!this.discovery) {
+      return { hasInvalidRooms: false };
+    }
+    
+    const availableRooms = this.discovery.getAllDevices().map(d => d.roomName.toLowerCase());
+    const invalidRooms: string[] = [];
+    const validPlayers: any[] = [];
+    
+    for (const player of preset._legacy.players) {
+      if (player.roomName) {
+        if (availableRooms.includes(player.roomName.toLowerCase())) {
+          validPlayers.push(player);
+        } else {
+          invalidRooms.push(player.roomName);
+        }
+      }
+    }
+    
+    if (invalidRooms.length > 0) {
+      // Update the preset to only include valid players
+      preset._legacy.players = validPlayers;
+      
+      // If no valid players remain, the preset becomes unusable for grouping
+      if (validPlayers.length === 0) {
+        debugManager.debug('presets', `Preset ${presetName}: All rooms invalid, preset will have no room assignments`);
+      }
+      
+      return { 
+        hasInvalidRooms: true,
+        invalidRooms,
+        message: `Removed ${invalidRooms.length} invalid room(s): ${invalidRooms.join(', ')}. Kept ${validPlayers.length} valid room(s).`
+      };
+    }
+    
+    return { hasInvalidRooms: false };
   }
 
   private async resolveFavorites(preset: Preset, presetName: string): Promise<Preset> {

@@ -265,6 +265,13 @@ async function shutdown(): Promise<void> {
   // Stop preset watching
   presetLoader.stopWatching();
   
+  // Clean up music library cache
+  const musicLibraryCache = router.getMusicLibraryCache();
+  if (musicLibraryCache) {
+    musicLibraryCache.destroy();
+    logger.info('Music library cache cleaned up');
+  }
+  
   // Force exit after 10 seconds
   setTimeout(() => {
     logger.error('Forced shutdown after timeout');
@@ -327,6 +334,20 @@ async function start(): Promise<void> {
       logger.info('═══════════════════════════════════════');
       logger.info('✅ System ready for Alexa requests');
       logger.info('');
+      
+      // Initialize music library cache in the background
+      logger.info('📚 Initializing music library cache...');
+      router.initializeMusicLibrary().then(() => {
+        // Get cache status to show counts
+        const cacheStatus = router.getMusicLibraryCacheStatus();
+        if (cacheStatus && cacheStatus.metadata) {
+          logger.info(`✅ Music library cache initialized: ${cacheStatus.metadata.totalTracks} tracks, ${cacheStatus.metadata.totalAlbums} albums, ${cacheStatus.metadata.totalArtists} artists`);
+        } else {
+          logger.info('✅ Music library cache initialized');
+        }
+      }).catch(error => {
+        logger.error('Failed to initialize music library cache:', error);
+      });
     }, 2000); // Wait 2 seconds for initial device discovery
     
     // Start HTTP server

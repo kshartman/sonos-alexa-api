@@ -120,6 +120,9 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const topologyChanged = await topologyPromise;
       assert(topologyChanged, 'Should receive topology change event');
       
+      // Give a bit more time for the group to stabilize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Verify the group was formed
       const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
       const zones = await zonesResponse.json();

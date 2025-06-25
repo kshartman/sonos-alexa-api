@@ -18,14 +18,15 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 
 ## Important Commands
 - Build: `npm run build`
-- Start: `npm start > logs/server.log 2>&1 &`
-- Start with debug: `npm run dev > logs/server.log 2>&1 &` (enables debug logging)
+- Start: `npm start > logs/server.log 2>&1 &` (includes --openssl-legacy-provider)
+- Start with debug: `npm run dev > logs/server.log 2>&1 &` (enables debug logging, includes NODE_OPTIONS)
 - Kill server: Multiple options depending on how it was started:
   - `pkill -f "node.*dist/server.js"` (for npm start)
   - `pkill -f "tsx.*src/server.ts"` (for npm run dev)
   - `pkill -f "tsx watch"` (kill any tsx watch processes)
   - Check what's running: `ps aux | grep -E "(tsx|node.*server)" | grep -v grep`
 - Test endpoints: Use curl commands, not server restarts
+- **Note**: All npm scripts include `NODE_OPTIONS='--openssl-legacy-provider'` ONLY for Pandora API's Blowfish encryption. This is not needed if Pandora is not used.
 
 ## Debug Logging
 - **IMPORTANT**: Debug logging is NOT enabled by default with `npm start`
@@ -117,19 +118,48 @@ pkill -f "node dist/server.js" && sleep 2 && npm start > logs/server.log 2>&1 &
 ## File Structure
 ```
 src/
-├── server.ts          - Entry point
-├── api-router.ts      - All HTTP endpoints
-├── discovery.ts       - SSDP device discovery
-├── sonos-device.ts    - Device control (SOAP)
+├── server.ts              - Entry point
+├── api-router.ts          - All HTTP endpoints
+├── discovery.ts           - SSDP device discovery
+├── sonos-device.ts        - Device control (SOAP)
+├── preset-loader.ts       - Preset file loader with room validation
+├── topology-manager.ts    - UPnP topology management
+├── actions/
+│   └── favorites.ts       - Favorites management
 ├── services/
-│   ├── tts-service.ts
-│   ├── music-service.ts (base class)
-│   ├── apple-music-service.ts
-│   └── account-service.ts
+│   ├── tts-service.ts     - Text-to-speech service
+│   ├── music-service.ts   - Base music service class
+│   ├── apple-music-service.ts      - Apple Music search
+│   ├── music-library-service.ts    - Local library browsing
+│   ├── music-library-cache.ts      - Library cache with periodic reindex
+│   ├── pandora-service.ts          - Pandora integration
+│   ├── pandora-api.ts              - Pandora API client
+│   ├── pandora-browse.ts           - Pandora browse fallback
+│   └── account-service.ts          - Account management
+├── types/
+│   └── sonos.ts           - TypeScript type definitions
+├── upnp/
+│   └── subscriber.ts      - UPnP event subscriptions
 └── utils/
-    ├── soap.ts        - SOAP XML generation
-    ├── logger.ts      - Winston logger
-    └── default-room-manager.ts
+    ├── soap.ts            - SOAP XML generation
+    ├── logger.ts          - Winston logger
+    ├── debug-manager.ts   - Debug category management
+    ├── default-room-manager.ts     - Default room persistence
+    ├── event-manager.ts   - Event emitter for SSE
+    ├── preset-converter.ts         - Legacy preset conversion
+    ├── announcement-helper.ts      - TTS announcement handling
+    └── validation.ts      - Input validation
+
+apidoc/                    - OpenAPI documentation
+├── openapi.yaml          - Main OpenAPI spec
+├── components/           - Reusable components
+└── paths/               - Endpoint definitions
+
+test/
+├── helpers/              - Test utilities
+├── integration/          - Integration tests by feature
+├── unit/                - Unit tests
+└── debug/               - Debug scripts
 ```
 
 ## Recent Changes
@@ -140,6 +170,30 @@ src/
 - Added credits to jishi in README
 - Converted anesidora library to TypeScript and integrated Pandora API support
 - Note: SiriusXM endpoints exist but are NOT IMPLEMENTED (return 501) due to lack of service access
+- Pandora integration:
+  - Play stations works with real API when credentials configured in settings.json
+  - Falls back to browse/favorites method when no credentials
+  - Thumbs up/down partially working - skip functionality works but API feedback returns error code 0
+  - Requires NODE_OPTIONS='--openssl-legacy-provider' for Blowfish encryption (only needed for Pandora)
+  - Station switching implemented with proper 500ms delays for session management
+- Music Library features:
+  - Auto-indexing at startup with cache persistence
+  - Search by song, artist, album
+  - Periodic reindex via library.reindexInterval setting
+  - Progress tracking during indexing
+- Documentation updates:
+  - Modular OpenAPI spec in apidoc/ folder
+  - Updated README with complete API endpoints
+  - Updated ALEXA_COMPATIBILITY.md and IMPLEMENTATION_SUMMARY.md
+- Test improvements:
+  - Split content tests by service type
+  - Added group member names to warnings
+  - Fixed volume mock response format
+- Preset enhancements:
+  - Room validation with invalid room filtering
+  - Colored output for preset status
+- TTS endpoints now support volume parameter
+- Added library.reindexInterval setting (e.g., "1 week", "2 days", "24 hours")
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
@@ -160,11 +214,12 @@ src/
 - Don't search GitHub for legacy code - use the local copy
 
 ## Notes for Next Session
-- OpenAPI spec needs updating with new music search endpoints
 - Unit tests would be valuable for reliability
 - Docker health check endpoint exists at /health
-- Pandora implementation now uses real API with authentication
 - SiriusXM could be implemented if needed (channel list exists in legacy repo)
 - Spotify could be implemented but requires OAuth2 and developer account
 - Amazon Music search is impossible without reverse engineering (no public API)
 - Deezer not implemented (would need API access)
+- Consider adding more path files to complete the OpenAPI documentation
+- Could add rate limiting to music library refresh endpoint
+- Preset validation could be extended to validate favorites exist

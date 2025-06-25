@@ -145,11 +145,12 @@ When you specify a room in any command, it becomes the new default room for futu
 - `GET /health` - Health check
 - `GET /zones` - List all zones with group information
 - `GET /state` - Get state of all devices
-- `GET /presets` - List all available presets (config and folder)
+- `GET /presets` - List all available presets (shows config presets, folder presets, and combined)
 - `GET /events` - Server-Sent Events stream for real-time updates
+- `GET /settings` - Get current settings
 
 ### Room Control
-- `GET /{room}/state` - Get room state
+- `GET /{room}/state` - Get detailed room state including playback, volume, queue, and play modes
 - `GET /{room}/play` - Start playback
 - `GET /{room}/pause` - Pause playback
 - `GET /{room}/playpause` - Toggle play/pause
@@ -159,16 +160,18 @@ When you specify a room in any command, it becomes the new default room for futu
 
 ### Volume Control
 - `GET /{room}/volume/{level}` - Set volume (0-100)
-- `GET /{room}/volume/+{delta}` - Increase volume
-- `GET /{room}/volume/-{delta}` - Decrease volume
+- `GET /{room}/volume/+{delta}` - Increase volume by delta
+- `GET /{room}/volume/-{delta}` - Decrease volume by delta
 - `GET /{room}/mute` - Mute
 - `GET /{room}/unmute` - Unmute
+- `GET /{room}/togglemute` - Toggle mute state
+- `GET /{room}/groupVolume/{level}` - Set volume for entire group
 
 ### Presets
-- `GET /presets` - List all available presets
-- `GET /{room}/preset/{name}` - Play preset in room
-- `GET /preset/{name}` - Play preset in default room
-- `GET /preset/{name}/room/{room}` - Play preset in room (Alexa-compatible format)
+- `GET /presets` - List all available presets (shows config presets, folder presets, and combined)
+- `GET /{room}/preset/{preset}` - Play preset in specified room
+- `GET /preset/{preset}` - Play preset in default room
+- `GET /preset/{preset}/room/{room}` - Play preset in room (Alexa-compatible format)
 
 ### Group Management
 - `GET /{room}/join/{targetRoom}` - Join another room's group
@@ -187,18 +190,26 @@ When you specify a room in any command, it becomes the new default room for futu
 - `GET /{room}/playlists` - List playlists (add ?detailed=true for full info)
 - `GET /{room}/playlist/{name}` - Play playlist by name
 
-### Playback Control
+### Queue Management
+- `GET /{room}/queue` - Get current queue (default 500 items)
+- `GET /{room}/queue/{limit}` - Get queue with specified limit
+- `GET /{room}/queue/{limit}/{offset}` - Get queue with limit and offset
+- `GET /{room}/queue/detailed` - Get detailed queue information
 - `GET /{room}/clearqueue` - Clear the queue
-- `GET /{room}/repeat/{toggle}` - Turn repeat on/off
+
+### Playback Modes and Controls
+- `GET /{room}/repeat/{toggle}` - Set repeat mode (on, off, one)
 - `GET /{room}/shuffle/{toggle}` - Turn shuffle on/off
 - `GET /{room}/crossfade/{toggle}` - Turn crossfade on/off
 - `GET /{room}/sleep/{seconds}` - Set sleep timer (0 to cancel)
-- `GET /{room}/groupVolume/{level}` - Set volume for entire group
 
 ### Text-to-Speech (TTS)
 - `GET /{room}/say/{text}` - Say text in specified room
+- `GET /{room}/say/{text}/{volume}` - Say text at specific volume
 - `GET /{room}/sayall/{text}` - Say text in all grouped rooms
+- `GET /{room}/sayall/{text}/{volume}` - Say text in grouped rooms at specific volume
 - `GET /sayall/{text}` - Say text in all rooms
+- `GET /sayall/{text}/{volume}` - Say text in all rooms at specific volume
 
 The TTS system supports multiple providers:
 1. **VoiceRSS** - If API key is configured in settings.json (note: key is host-specific)
@@ -208,18 +219,42 @@ The TTS system supports multiple providers:
 The system will automatically pause current playback, announce the text at the configured volume, and resume playback.
 
 ### Music Services
-- `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album (Apple Music only currently)
-- `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs (Apple Music only currently)
-- `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station (Apple Music only currently)
-- `GET /{room}/siriusxm/{name}` - Play SiriusXM station (**NOT IMPLEMENTED** - returns 501)
-- `GET /{room}/pandora/play/{name}` - Play Pandora station (requires Pandora credentials in settings.json)
-- `GET /{room}/pandora/thumbsup` - Thumbs up current track
-- `GET /{room}/pandora/thumbsdown` - Thumbs down current track
+
+#### Music Search (Multiple Services)
+- `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album
+- `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
+- `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station
+- `GET /album/{name}` - Search album using default room and service
+- `GET /song/{query}` - Search songs using default room and service
+- `GET /station/{name}` - Play station using default room and service
+
+Supported services:
+- **apple** - Apple Music (no authentication required)
+- **library** - Local music library (indexes on startup)
+- **pandora** - Pandora (through station search)
+
+#### Music Library
+- `GET /{room}/musicsearch/library/song/{query}` - Search songs in local library
+- `GET /{room}/musicsearch/library/artist/{query}` - Search by artist in local library
+- `GET /{room}/musicsearch/library/album/{query}` - Search albums in local library
+- `GET /library/index` - Get music library indexing status
+- `GET /library/refresh` - Force refresh music library index
+
+#### Apple Music
 - `GET /{room}/applemusic/now/{id}` - Play immediately (id format: type:id, e.g., song:123456)
 - `GET /{room}/applemusic/next/{id}` - Add as next track
 - `GET /{room}/applemusic/queue/{id}` - Add to end of queue
 
-Note: Music service endpoints require proper service authentication. Currently implemented: Apple Music (via Sonos account), Pandora (requires credentials). SiriusXM is not implemented.
+#### Pandora
+- `GET /{room}/pandora/play/{name}` - Play Pandora station
+- `GET /{room}/pandora/stations` - List available Pandora stations
+- `GET /{room}/pandora/thumbsup` - Thumbs up current track
+- `GET /{room}/pandora/thumbsdown` - Thumbs down and skip current track
+
+#### SiriusXM
+- `GET /{room}/siriusxm/{name}` - Play SiriusXM station (**NOT IMPLEMENTED** - returns 501)
+
+Note: Pandora requires credentials in settings.json. Music library is automatically indexed at startup.
 
 ### Line-In
 - `GET /{room}/linein` - Play line-in from the same device
@@ -228,14 +263,27 @@ Note: Music service endpoints require proper service authentication. Currently i
 ### Global Commands
 - `GET /pauseall` - Pause all rooms
 - `GET /resumeAll` - Resume playback in all rooms
-- `GET /loglevel/{level}` - Set log level (error|warn|info|debug)
 
-### Debug Endpoints
+### Default Settings Management
+- `GET /default` - Get current default settings (room and music service)
+- `GET /default/room/{room}` - Set default room
+- `GET /default/service/{service}` - Set default music service
+
+### Room-less Endpoints (use default room)
+- `GET /play` - Play in default room
+- `GET /pause` - Pause in default room
+- `GET /volume/{level}` - Set volume in default room
+- `GET /preset/{preset}` - Play preset in default room
+
+### Debug and Logging
 - `GET /debug` - Show current debug configuration
-- `GET /debug/level/{level}` - Set log level (error|warn|info|debug)
-- `GET /debug/category/{category}/{enabled}` - Enable/disable debug category
+- `GET /debug/level/{level}` - Set log level (error|warn|info|debug|wall)
+- `GET /debug/category/{category}/{enabled}` - Enable/disable debug category (true/false)
 - `GET /debug/enable-all` - Enable all debug categories
 - `GET /debug/disable-all` - Disable all debug categories (except API)
+- `GET /debug/subscriptions` - Show UPnP subscription status
+- `GET /{room}/debug/accounts` - Debug account information for a room
+- `GET /loglevel/{level}` - Set log level (alternative endpoint)
 
 ## Alexa Integration
 
@@ -401,6 +449,9 @@ The following features are not currently implemented but could be added in the f
 This project is based on the excellent work by [jishi](https://github.com/jishi):
 - [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api) - The original Sonos HTTP API that inspired this implementation
 - [node-sonos-discovery](https://github.com/jishi/node-sonos-discovery) - The UPNP discovery and control logic that this project builds upon
+
+The Pandora API integration is based on [Mark Old's](https://github.com/dlom) work:
+- [anesidora](https://github.com/dlom/anesidora) - The original Python implementation of the Pandora API client
 
 This implementation modernizes the original codebase with TypeScript, ES modules, and minimal dependencies while maintaining compatibility with existing Alexa skills and automation systems.
 

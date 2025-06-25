@@ -11,20 +11,21 @@
     "build": "tsc",
     "start": "node --openssl-legacy-provider dist/server.js",
     "dev": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- tsx watch src/server.ts",
-    "dev:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- tsx watch src/server.ts 2>&1 | tee logs/test-output.log",
+    "dev:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- tsx watch src/server.ts 2>&1 | tee logs/server.log",
     "lint": "eslint src/",
-    "test": "npm run build && tsx test/run-tests.ts",
-    "test:log": "npm run build && bash -c 'tsx test/run-tests.ts \"$@\" 2>&1 | tee logs/test-output.log' --",
-    "test:unit": "npm run build && tsx test/run-tests.ts -- --mock-only",
-    "test:integration": "npm run build && tsx test/run-tests.ts -- integration/**/*-tests.ts",
-    "test:full": "npm run build && tsx test/run-tests.ts -- --full",
-    "test:playback": "npm run build && tsx test/run-tests.ts -- unit/playback-tests.ts integration/playback-tests.ts",
-    "test:volume": "npm run build && tsx test/run-tests.ts -- unit/volume-tests.ts",
-    "test:groups": "npm run build && tsx test/run-tests.ts -- integration/group-tests.ts",
-    "test:coverage": "npm run build && tsx test/run-tests.ts -- --coverage",
-    "test:list": "npm run build && tsx test/run-tests.ts -- --list-tests",
-    "test:id": "npm run build && tsx test/run-tests.ts --",
-    "clean": "rm -rf dist"
+    "test": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts",
+    "test:log": "npm run build && bash -c 'NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts \"$@\" 2>&1 | tee logs/test-output.log' --",
+    "test:unit": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- --mock-only",
+    "test:integration": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- integration/**/*-tests.ts",
+    "test:full": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- --full",
+    "test:playback": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- unit/playback-tests.ts integration/playback-tests.ts",
+    "test:volume": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- unit/volume-tests.ts",
+    "test:groups": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- integration/group-tests.ts",
+    "test:coverage": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- --coverage",
+    "test:list": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts -- --list-tests",
+    "test:id": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts --",
+    "clean": "rm -rf dist",
+    "killall": "pkill -f 'node.*dist/server.js' || pkill -f 'tsx.*src/server.ts' || pkill -f 'tsx watch' || lsof -ti:5005 | xargs kill -9 || true"
   },
   "dependencies": {
     "fast-xml-parser": "^4.3.2",
@@ -56,6 +57,11 @@
       "name": "Jimmy Shimizu (jishi)",
       "url": "https://github.com/jishi",
       "note": "Original implementation and inspiration"
+    },
+    {
+      "name": "Mark Old (dlom)",
+      "url": "https://github.com/dlom",
+      "note": "Anesidora Pandora API library"
     }
   ],
   "license": "MIT"

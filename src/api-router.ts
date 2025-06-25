@@ -6,6 +6,7 @@ import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
 import { AccountService } from './services/account-service.js';
+import { MusicLibraryCache } from './services/music-library-cache.js';
 import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 
@@ -19,6 +20,7 @@ export class ApiRouter {
   private ttsService: TTSService;
   private appleMusicService: AppleMusicService;
   private accountService: AccountService;
+  private musicLibraryCache?: MusicLibraryCache;
   private routes = new Map<string, RouteHandler>();
 
   constructor(discovery: SonosDiscovery, config: Config, presetLoader?: PresetLoader | undefined, defaultRoomManager?: DefaultRoomManager, ttsService?: TTSService) {
@@ -31,6 +33,44 @@ export class ApiRouter {
     this.accountService = new AccountService();
     
     this.registerRoutes();
+  }
+
+  async initializeMusicLibrary(): Promise<void> {
+    try {
+      // Get any device IP to access the music library
+      const zones = await this.getZones();
+      if (zones.body && Array.isArray(zones.body) && zones.body.length > 0) {
+        const firstZone = zones.body[0];
+        if (firstZone.members && firstZone.members.length > 0) {
+          const coordinator = firstZone.members.find((m: any) => m.isCoordinator) || firstZone.members[0];
+          const device = this.discovery.getDevice(coordinator.roomName);
+          if (device) {
+            logger.info('Initializing music library cache...');
+            this.musicLibraryCache = new MusicLibraryCache(device.ip, this.config.dataDir || './data');
+            await this.musicLibraryCache.initialize();
+            
+            // Set up periodic reindexing if configured
+            const reindexInterval = this.config.library?.reindexInterval;
+            if (reindexInterval) {
+              this.musicLibraryCache.setReindexInterval(reindexInterval);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to initialize music library cache:', error);
+    }
+  }
+
+  getMusicLibraryCacheStatus(): { isIndexing: boolean; progress: number; metadata: any } | null {
+    if (!this.musicLibraryCache) {
+      return null;
+    }
+    return this.musicLibraryCache.getStatus();
+  }
+
+  getMusicLibraryCache(): MusicLibraryCache | undefined {
+    return this.musicLibraryCache;
   }
 
   private registerRoutes(): void {
@@ -77,6 +117,13 @@ export class ApiRouter {
     // Apple Music routes
     this.routes.set('GET /{room}/applemusic/{action}/{id}', this.appleMusic.bind(this));
 
+    // Music library routes (must be before generic music search routes)
+    this.routes.set('GET /{room}/musicsearch/library/song/{query}', this.musicLibrarySearchSong.bind(this));
+    this.routes.set('GET /{room}/musicsearch/library/artist/{query}', this.musicLibrarySearchArtist.bind(this));
+    this.routes.set('GET /{room}/musicsearch/library/album/{query}', this.musicLibrarySearchAlbum.bind(this));
+    this.routes.set('GET /library/index', this.getMusicLibraryStatus.bind(this));
+    this.routes.set('GET /library/refresh', this.refreshMusicLibrary.bind(this));
+
     // Music search routes (for Alexa compatibility)
     this.routes.set('GET /{room}/musicsearch/{service}/album/{name}', this.musicSearchAlbum.bind(this));
     this.routes.set('GET /{room}/musicsearch/{service}/song/{query}', this.musicSearchSong.bind(this));
@@ -87,6 +134,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/play/{name}', this.pandoraPlay.bind(this));
     this.routes.set('GET /{room}/pandora/thumbsup', this.pandoraThumbsUp.bind(this));
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
+    this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
     
     // Queue management routes
     this.routes.set('GET /{room}/queue', this.getQueue.bind(this));
@@ -116,6 +164,9 @@ export class ApiRouter {
     this.routes.set('GET /debug/enable-all', this.enableAllDebug.bind(this));
     this.routes.set('GET /debug/disable-all', this.disableAllDebug.bind(this));
     
+    // Settings route
+    this.routes.set('GET /settings', this.getSettings.bind(this));
+    
     // Default room management
     this.routes.set('GET /default', this.getDefaults.bind(this));
     this.routes.set('GET /default/room/{room}', this.setDefaultRoom.bind(this));
@@ -130,8 +181,11 @@ export class ApiRouter {
     
     // TTS endpoints
     this.routes.set('GET /{room}/say/{text}', this.sayText.bind(this));
+    this.routes.set('GET /{room}/say/{text}/{volume}', this.sayTextWithVolume.bind(this));
     this.routes.set('GET /{room}/sayall/{text}', this.sayTextAll.bind(this));
+    this.routes.set('GET /{room}/sayall/{text}/{volume}', this.sayTextAllWithVolume.bind(this));
     this.routes.set('GET /sayall/{text}', this.sayTextAllRooms.bind(this));
+    this.routes.set('GET /sayall/{text}/{volume}', this.sayTextAllRoomsWithVolume.bind(this));
     
     // Music search with defaults (room-less endpoints)
     this.routes.set('GET /song/{query}', this.musicSearchSongDefault.bind(this));
@@ -464,6 +518,7 @@ export class ApiRouter {
       trackNo,
       playbackState: coordinator.state.playbackState,  // Playback state from coordinator
       equalizer,
+      ip: device.ip,  // Device IP address
       // Keep our additional field
       coordinator: coordinator.id !== device.id ? {
         id: coordinator.id,
@@ -552,7 +607,9 @@ export class ApiRouter {
       throw { status: 400, message: 'Volume delta must be a number' };
     }
     
-    const currentVolume = device.state.volume;
+    // Get current volume from device to ensure it's up-to-date
+    const volumeResponse = await device.getVolume();
+    const currentVolume = parseInt(volumeResponse.CurrentVolume, 10);
     await device.setVolume(currentVolume + deltaValue);
     return { status: 200, body: { status: 'success' } };
   }
@@ -567,7 +624,9 @@ export class ApiRouter {
       throw { status: 400, message: 'Volume delta must be a number' };
     }
     
-    const currentVolume = device.state.volume;
+    // Get current volume from device to ensure it's up-to-date
+    const volumeResponse = await device.getVolume();
+    const currentVolume = parseInt(volumeResponse.CurrentVolume, 10);
     await device.setVolume(currentVolume - deltaValue);
     return { status: 200, body: { status: 'success' } };
   }
@@ -1214,6 +1273,149 @@ export class ApiRouter {
     return this.performMusicSearch(room, service, 'station', name);
   }
   
+  // Music library search endpoints
+  private async musicLibrarySearchSong({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    
+    if (!this.musicLibraryCache) {
+      throw { status: 503, message: 'Music library not yet indexed' };
+    }
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      const results = await this.musicLibraryCache.search(query, 'title', 50);
+      
+      if (results.length === 0) {
+        throw { status: 404, message: `No songs found matching: ${query}` };
+      }
+      
+      // Play the first result
+      const track = results[0]!;
+      await coordinator.setAVTransportURI(track.uri, '');
+      await coordinator.play();
+      
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          service: 'library'
+        }
+      };
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        throw error;
+      }
+      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+  
+  private async musicLibrarySearchArtist({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    
+    if (!this.musicLibraryCache) {
+      throw { status: 503, message: 'Music library not yet indexed' };
+    }
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      const results = await this.musicLibraryCache.search(query, 'artist', 50);
+      
+      if (results.length === 0) {
+        throw { status: 404, message: `No tracks by artist matching: ${query}` };
+      }
+      
+      // Play the first result
+      const track = results[0]!;
+      await coordinator.setAVTransportURI(track.uri, '');
+      await coordinator.play();
+      
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          service: 'library'
+        }
+      };
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        throw error;
+      }
+      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+  
+  private async musicLibrarySearchAlbum({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    
+    if (!this.musicLibraryCache) {
+      throw { status: 503, message: 'Music library not yet indexed' };
+    }
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      const results = await this.musicLibraryCache.search(query, 'album', 50);
+      
+      if (results.length === 0) {
+        throw { status: 404, message: `No tracks from album matching: ${query}` };
+      }
+      
+      // Play the first result
+      const track = results[0]!;
+      await coordinator.setAVTransportURI(track.uri, '');
+      await coordinator.play();
+      
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          service: 'library'
+        }
+      };
+    } catch (error) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        throw error;
+      }
+      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+    }
+  }
+  
+  private async getMusicLibraryStatus(): Promise<ApiResponse<any>> {
+    if (!this.musicLibraryCache) {
+      return { status: 200, body: { status: 'not initialized' } };
+    }
+    
+    const status = this.musicLibraryCache.getStatus();
+    return { status: 200, body: status };
+  }
+  
+  private async refreshMusicLibrary(): Promise<ApiResponse<SuccessResponse>> {
+    if (!this.musicLibraryCache) {
+      await this.initializeMusicLibrary();
+    } else {
+      await this.musicLibraryCache.refreshCache();
+    }
+    
+    return { status: 200, body: { status: 'success' } };
+  }
+  
   // Service-specific endpoints
   private async siriusXM({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
@@ -1223,6 +1425,7 @@ export class ApiRouter {
     throw { status: 501, message: 'SiriusXM support not yet implemented' };
   }
   
+  
   private async pandoraPlay({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!name) throw { status: 400, message: 'Station name is required' };
@@ -1231,11 +1434,92 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
     try {
-      // Import PandoraService
-      const { PandoraService } = await import('./services/pandora-service.js');
+      const decodedName = decodeURIComponent(name);
+      let stationUri: string | null = null;
+      let stationTitle: string | null = null;
       
-      // Try to play the station
-      await PandoraService.playStation(coordinator, decodeURIComponent(name), this.config);
+      // Try using Pandora API if credentials are configured
+      if (this.config.pandora?.username && this.config.pandora?.password) {
+        logger.debug('Using Pandora API to find station');
+        const { PandoraAPI } = await import('./services/pandora-api.js');
+        const { PandoraService } = await import('./services/pandora-service.js');
+        
+        const api = new PandoraAPI(this.config.pandora.username, this.config.pandora.password);
+        
+        try {
+          // Login to Pandora
+          await api.login();
+          
+          // Search for the station
+          const searchResult = await PandoraService.searchForStation(api, decodedName);
+          
+          if (searchResult) {
+            stationUri = searchResult.uri;
+            stationTitle = searchResult.title;
+            logger.info(`Found Pandora station via API: ${stationTitle}`);
+          }
+        } catch (apiError) {
+          logger.warn('Pandora API failed, falling back to browse method:', apiError);
+        }
+      }
+      
+      // Fall back to browse method if API didn't work
+      if (!stationUri) {
+        logger.debug('Using browse method to find Pandora station');
+        const { PandoraBrowser } = await import('./services/pandora-browse.js');
+        
+        const station = await PandoraBrowser.findStation(coordinator, decodedName);
+        if (!station) {
+          throw new Error(`Pandora station '${decodedName}' not found`);
+        }
+        
+        stationUri = station.uri;
+        stationTitle = station.title;
+      }
+      
+      // Ensure we have both URI and title
+      if (!stationUri || !stationTitle) {
+        throw new Error(`Failed to find complete Pandora station information for '${decodedName}'`);
+      }
+      
+      // Generate metadata with proper service type
+      const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
+        xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
+        xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"
+        xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
+        <item id="${stationUri}" parentID="0" restricted="true">
+          <dc:title>${stationTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
+          <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
+          <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON2311_X_#Svc2311-0-Token</desc>
+        </item>
+      </DIDL-Lite>`;
+      
+      // IMPORTANT: Pandora requires proper session management on Sonos
+      // When switching between Pandora stations, we MUST stop playback first
+      // to release the current session. Otherwise, you'll get 701 or ERROR_NOT_AVAILABLE
+      // See: https://github.com/jishi/node-sonos-http-api/issues/119
+      const currentState = coordinator.state;
+      const isCurrentlyPlayingPandora = currentState.currentTrack?.uri?.includes('x-sonosapi-radio') && 
+                                       currentState.currentTrack?.uri?.includes('sid=236');
+      const isPlayingAnything = currentState.playbackState === 'PLAYING';
+      
+      if (isCurrentlyPlayingPandora || isPlayingAnything) {
+        logger.debug('Stopping playback to ensure clean Pandora session');
+        await coordinator.stop();
+        // Wait for Pandora to release the session
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Set the new Pandora station URI with fresh metadata
+      logger.debug(`Setting Pandora URI: ${stationUri}`);
+      await coordinator.setAVTransportURI(stationUri, metadata);
+      
+      // Wait for transport to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Start playback
+      logger.debug('Starting Pandora playback');
+      await coordinator.play();
       
       // Update default room
       this.defaultRoomManager.setDefaults(room);
@@ -1254,8 +1538,17 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
     try {
-      const { PandoraService } = await import('./services/pandora-service.js');
-      await PandoraService.sendFeedback(coordinator, true, this.config);
+      // Check if Pandora API is configured
+      if (this.config.pandora?.username && this.config.pandora?.password) {
+        logger.debug('Using Pandora API for thumbs up');
+        const { PandoraService } = await import('./services/pandora-service.js');
+        await PandoraService.sendFeedback(coordinator, true, this.config);
+      } else {
+        // Fall back to simple skip for thumbs up when no API
+        logger.info('Pandora API not configured, thumbs up not available');
+        throw new Error('Pandora credentials required for thumbs up/down');
+      }
+      
       return { status: 200, body: { status: 'success' } };
     } catch (error: any) {
       logger.error('Failed to send Pandora thumbs up:', error);
@@ -1270,12 +1563,65 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
     try {
-      const { PandoraService } = await import('./services/pandora-service.js');
-      await PandoraService.sendFeedback(coordinator, false, this.config);
+      // For thumbs down, always skip the track regardless of API availability
+      logger.info('Skipping to next track for thumbs down');
+      await coordinator.next();
+      
+      // Try to send feedback if API is configured, but don't fail if it doesn't work
+      if (this.config.pandora?.username && this.config.pandora?.password) {
+        logger.debug('Attempting to send thumbs down via Pandora API');
+        try {
+          const { PandoraService } = await import('./services/pandora-service.js');
+          await PandoraService.sendFeedback(coordinator, false, this.config);
+          logger.info('Thumbs down sent to Pandora');
+        } catch (feedbackError) {
+          logger.warn('Could not send thumbs down to Pandora API, but track was skipped:', feedbackError);
+        }
+      }
+      
+      // Update default room
+      this.defaultRoomManager.setDefaults(room);
+      
       return { status: 200, body: { status: 'success' } };
     } catch (error: any) {
       logger.error('Failed to send Pandora thumbs down:', error);
       throw { status: 400, message: error.message || 'Failed to send thumbs down' };
+    }
+  }
+  
+  private async pandoraGetStations(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+    const { room } = params;
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    
+    try {
+      // Check if Pandora credentials are configured
+      if (!this.config.pandora?.username || !this.config.pandora?.password) {
+        throw { status: 501, message: 'Pandora credentials not configured' };
+      }
+      
+      const { PandoraAPI } = await import('./services/pandora-api.js');
+      const api = new PandoraAPI(this.config.pandora.username, this.config.pandora.password);
+      
+      // Login to Pandora
+      await api.login();
+      
+      // Get station list
+      const stationData = await api.getStationList();
+      
+      // Check if detailed parameter is in the URL
+      const detailed = queryParams?.get('detailed') === 'true';
+      
+      if (detailed) {
+        // Return full station data with metadata
+        return { status: 200, body: stationData };
+      } else {
+        // Return just the station names for backwards compatibility
+        return { status: 200, body: stationData.stations.map(s => s.stationName) };
+      }
+    } catch (error: any) {
+      logger.error('Failed to get Pandora stations:', error);
+      if (error.status) throw error;
+      throw { status: 500, message: error.message || 'Failed to get Pandora stations' };
     }
   }
   
@@ -1531,6 +1877,42 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
 
+  // TTS with volume as path parameter
+  private async sayTextWithVolume({ room, text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    
+    // Convert volume to query parameter and delegate
+    const queryParams = new URLSearchParams();
+    queryParams.set('volume', volume);
+    
+    return this.sayText({ room, text }, queryParams);
+  }
+
+  private async sayTextAllWithVolume({ room, text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    
+    // Convert volume to query parameter and delegate
+    const queryParams = new URLSearchParams();
+    queryParams.set('volume', volume);
+    
+    return this.sayTextAll({ room, text }, queryParams);
+  }
+
+  private async sayTextAllRoomsWithVolume({ text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    
+    // Convert volume to query parameter and delegate
+    const queryParams = new URLSearchParams();
+    queryParams.set('volume', volume);
+    
+    return this.sayTextAllRooms({ text }, queryParams);
+  }
+
   /**
    * Perform music search and play results
    */
@@ -1546,12 +1928,81 @@ export class ApiRouter {
       throw { status: 404, message: `No coordinator found for room '${roomName}'` };
     }
 
-    // Currently only Apple Music is implemented
-    if (service.toLowerCase() !== 'apple') {
-      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple' is supported.` };
+    // Check supported services and types
+    const serviceLower = service.toLowerCase();
+    if (serviceLower === 'pandora' && type !== 'station') {
+      throw { status: 400, message: `Pandora only supports station search, not ${type}` };
+    }
+    if (serviceLower === 'library' && type === 'station') {
+      throw { status: 400, message: `Library does not support station search, only song and album` };
+    }
+    if (serviceLower !== 'apple' && serviceLower !== 'pandora' && serviceLower !== 'library') {
+      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'pandora', and 'library' are supported.` };
     }
 
     try {
+      // Handle Pandora station search differently
+      if (serviceLower === 'pandora') {
+        logger.info(`Searching Pandora for station: ${term}`);
+        
+        // Use the existing pandoraPlay logic
+        const decodedTerm = decodeURIComponent(term);
+        await this.pandoraPlay({ room: roomName, name: decodedTerm });
+        
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            title: decodedTerm,
+            service: 'pandora'
+          }
+        };
+      }
+      
+      // Handle Library search
+      if (serviceLower === 'library') {
+        logger.info(`Searching local music library for ${type}: ${term}`);
+        
+        if (!this.musicLibraryCache) {
+          throw { status: 503, message: 'Music library not yet indexed' };
+        }
+        
+        const searchType = type === 'album' ? 'album' : 'title';
+        const results = await this.musicLibraryCache.search(term, searchType, 50);
+        
+        if (results.length === 0) {
+          throw { status: 404, message: `No ${type}s found matching: ${term}` };
+        }
+        
+        const track = results[0]!;
+        
+        // Play the first result
+        const uri = track.uri;
+        const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
+        <item id="library-${track.id}" parentID="library" restricted="true">
+          <dc:title>${track.title}</dc:title>
+          <upnp:artist>${track.artist}</upnp:artist>
+          <upnp:album>${track.album}</upnp:album>
+          <upnp:class>object.item.audioItem.musicTrack</upnp:class>
+          <res>${uri}</res>
+        </item></DIDL-Lite>`;
+        
+        await coordinator.setAVTransportURI(uri, metadata);
+        await coordinator.play();
+        
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            service: 'library'
+          }
+        };
+      }
+      
+      // Apple Music logic
       // Get service account from Sonos
       const account = await this.accountService.getServiceAccount(coordinator, service);
       if (!account) {
@@ -1719,6 +2170,31 @@ export class ApiRouter {
     return {
       status: 200,
       body: result
+    };
+  }
+  
+  // Settings endpoint - returns safe config info
+  private async getSettings(): Promise<ApiResponse> {
+    // Return safe settings info without exposing sensitive credentials
+    const safeSettings = {
+      port: this.config.port,
+      host: this.config.host,
+      defaultRoom: this.config.defaultRoom,
+      defaultMusicService: this.config.defaultMusicService,
+      announceVolume: this.config.announceVolume,
+      auth: {
+        configured: !!(this.config.auth?.username && this.config.auth?.password),
+        rejectUnauthorized: this.config.auth?.rejectUnauthorized
+      },
+      pandora: {
+        configured: !!(this.config.pandora?.username && this.config.pandora?.password)
+      },
+      library: this.config.library || {}
+    };
+    
+    return {
+      status: 200,
+      body: safeSettings
     };
   }
 }

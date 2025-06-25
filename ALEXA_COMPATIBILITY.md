@@ -31,8 +31,16 @@ This document provides a comprehensive analysis of the sonos-alexa-api's compati
 - `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
 - `GET /{room}/musicsearch/{service}/station/{name}` - Search and play radio stations
 
-**Currently Implemented Services**: Apple Music only. 
-**Not Implemented**: Spotify (requires OAuth2), Amazon Music (no public API), Deezer - all return 501.
+**Currently Implemented Services**: 
+- **Apple Music** - Full search and playback support
+- **Music Library** - Local library search (song, artist, album)
+- **Pandora** - Station search and playback with thumbs up/down
+
+**Not Implemented**: 
+- **Spotify** - Requires OAuth2 and developer account
+- **Amazon Music** - No public API available
+- **Deezer** - Not implemented
+- **SiriusXM** - Endpoints exist but return 501
 
 ### ✅ Room Control
 - `GET /{room}/play` - Start playback
@@ -61,8 +69,9 @@ This document provides a comprehensive analysis of the sonos-alexa-api's compati
 ### ✅ Music Service Integration
 - `GET /{room}/siriusxm/{name}` - Play SiriusXM station (**NOT IMPLEMENTED** - returns 501)
 - `GET /{room}/pandora/play/{name}` - Play Pandora station (fully implemented with Pandora API)
+- `GET /{room}/pandora/stations` - List available Pandora stations
 - `GET /{room}/pandora/thumbsup` - Thumbs up current track (fully implemented)
-- `GET /{room}/pandora/thumbsdown` - Thumbs down current track (fully implemented)
+- `GET /{room}/pandora/thumbsdown` - Thumbs down and skip current track (fully implemented)
 
 ### ✅ Content Libraries
 - `GET /{room}/playlist/{name}` - Play playlist by name
@@ -138,8 +147,11 @@ The following endpoints are available in the legacy node-sonos-http-api but are 
 ### Text-to-Speech (TTS)
 Our implementation includes TTS functionality not present in the legacy API:
 - `GET /{room}/say/{text}` - Say text in specific room
+- `GET /{room}/say/{text}/{volume}` - Say text at specific volume
 - `GET /{room}/sayall/{text}` - Say text in all grouped rooms
+- `GET /{room}/sayall/{text}/{volume}` - Say text in grouped rooms at specific volume
 - `GET /sayall/{text}` - Say text in all rooms
+- `GET /sayall/{text}/{volume}` - Say text in all rooms at specific volume
 
 **TTS Features**:
 - Multiple provider support (VoiceRSS, Google TTS, macOS Say)
@@ -154,8 +166,33 @@ Optional HTTP Basic Authentication support:
 
 ### Enhanced Configuration
 - Legacy settings.json format support
-- Default room persistence
-- Comprehensive debug categories
+- Default room and music service persistence
+- Comprehensive debug categories with runtime control
+- Music library auto-indexing at startup
+
+### Additional Endpoints
+- `GET /default` - Get current default settings
+- `GET /default/room/{room}` - Set default room
+- `GET /default/service/{service}` - Set default music service
+- `GET /settings` - Get current settings
+- `GET /{room}/togglemute` - Toggle mute state
+- `GET /library/index` - Get music library indexing status
+- `GET /library/refresh` - Force refresh music library
+- `GET /debug` - Show debug configuration
+- `GET /debug/level/{level}` - Set log level
+- `GET /debug/category/{category}/{enabled}` - Enable/disable debug category
+- `GET /debug/subscriptions` - Show UPnP subscription status
+
+### Music Search with Defaults
+- `GET /song/{query}` - Search songs using default room and service
+- `GET /album/{name}` - Search albums using default room and service
+- `GET /station/{name}` - Play station using default room and service
+
+### Queue Management (Implemented)
+- `GET /{room}/queue` - Get current queue (default 500 items)
+- `GET /{room}/queue/{limit}` - Get queue with limit
+- `GET /{room}/queue/{limit}/{offset}` - Get queue with pagination
+- `GET /{room}/queue/detailed` - Get detailed queue information
 
 ## Testing Verification
 

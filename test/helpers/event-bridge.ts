@@ -89,6 +89,7 @@ export class EventBridge {
     logger.debug(`EventBridge: Processing SSE event - type: ${data.type}`);
     
     if (data.type === 'device-state-change') {
+      logger.debug(`EventBridge: State change for ${data.data.room} - volume: ${data.data.state?.volume}, mute: ${data.data.state?.mute}`);
       const roomName = data.data.room;
       const deviceId = data.data.deviceId || this.deviceIdMap.get(roomName) || roomName;
       const newState = data.data.state.playbackState;
@@ -133,13 +134,28 @@ export class EventBridge {
       
       if (data.data.state.mute !== undefined && 
           data.data.previousState?.mute !== data.data.state.mute) {
-        this.eventManager.emit('mute-change', {
+        const muteEvent = {
           deviceId,
           roomName,
           previousMute: data.data.previousState?.mute || false,
           currentMute: data.data.state.mute,
           timestamp: Date.now()
-        });
+        };
+        
+        // Track mute history manually
+        const muteHistory = (this.eventManager as any).muteHistory;
+        if (!muteHistory.has(deviceId)) {
+          muteHistory.set(deviceId, []);
+        }
+        muteHistory.get(deviceId).push(muteEvent);
+        
+        // Keep only last 50 events
+        const deviceMuteHistory = muteHistory.get(deviceId);
+        if (deviceMuteHistory.length > 50) {
+          deviceMuteHistory.shift();
+        }
+        
+        this.eventManager.emit('mute-change', muteEvent);
       }
     } else if (data.type === 'content-update') {
       // Forward content update events

@@ -192,6 +192,7 @@ When you specify a room in any command, it becomes the new default room for futu
 - `GET /{room}/repeat/{toggle}` - Turn repeat on/off
 - `GET /{room}/shuffle/{toggle}` - Turn shuffle on/off
 - `GET /{room}/crossfade/{toggle}` - Turn crossfade on/off
+- `GET /{room}/sleep/{seconds}` - Set sleep timer (0 to cancel)
 - `GET /{room}/groupVolume/{level}` - Set volume for entire group
 
 ### Text-to-Speech (TTS)
@@ -221,6 +222,7 @@ The system will automatically pause current playback, announce the text at the c
 Note: Music service endpoints require proper service authentication. Currently implemented: Apple Music (via Sonos account), Pandora (requires credentials). SiriusXM is not implemented.
 
 ### Line-In
+- `GET /{room}/linein` - Play line-in from the same device
 - `GET /{room}/linein/{source}` - Play line-in from source device
 
 ### Global Commands
@@ -386,7 +388,6 @@ The following features are not currently implemented but could be added in the f
   - Token management for API authentication
   - Implementation of Spotify Web API calls
   - URI transformation to Sonos format
-- **Sleep Timer** - Set a timer to stop playback after specified duration
 - **Alarm Management** - Create, modify, and delete Sonos alarms
 - **Music Library Search** - Search and play from local music library
 

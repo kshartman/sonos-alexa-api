@@ -8,6 +8,7 @@ export interface ZoneGroup {
   coordinator: SonosDevice;
   members: SonosDevice[];
   coordinatorUuid: string;
+  memberDetails?: Array<{uuid: string, roomName: string, channelMapSet?: string}>;
 }
 
 export interface TopologyChangeEvent {
@@ -38,7 +39,7 @@ export class TopologyManager extends EventEmitter {
   }
 
   handleTopologyEvent(deviceId: string, service: string, body: string): void {
-    if (service !== 'ZoneGroupTopology') {
+    if (!service.includes('ZoneGroupTopology')) {
       return;
     }
 
@@ -46,7 +47,7 @@ export class TopologyManager extends EventEmitter {
       const device = this.deviceMap.get(deviceId);
       const deviceName = device ? device.roomName : 'unknown';
       debugManager.info('topology', `Processing topology event from ${deviceName} (${deviceId}), body length: ${body.length}`);
-      debugManager.debug('upnp', `Topology event body: ${body}`);
+      debugManager.wall('upnp', `Topology event body: ${body}`);
       
       // Parse the UPnP event XML or JSON
       let parsed;
@@ -57,7 +58,7 @@ export class TopologyManager extends EventEmitter {
         // It's XML from real UPnP events
         parsed = this.xmlParser.parse(body);
       }
-      debugManager.debug('upnp', 'UPnP event parsed structure:', JSON.stringify(parsed, null, 2));
+      debugManager.wall('upnp', 'UPnP event parsed structure:', JSON.stringify(parsed, null, 2));
       
       const propertySet = parsed['e:propertyset'];
       
@@ -78,7 +79,7 @@ export class TopologyManager extends EventEmitter {
       debugManager.debug('topology', `Processing ${properties.length} properties`);
       
       for (const property of properties) {
-        debugManager.debug('upnp', 'Property content:', JSON.stringify(property, null, 2));
+        debugManager.wall('upnp', 'Property content:', JSON.stringify(property, null, 2));
         if (property.ZoneGroupState) {
           debugManager.debug('topology', 'Found ZoneGroupState property, processing...');
           this.processZoneGroupState(property.ZoneGroupState);
@@ -95,7 +96,7 @@ export class TopologyManager extends EventEmitter {
     try {
       debugManager.debug('topology', 'Processing ZoneGroupState data');
       debugManager.debug('upnp', 'ZoneGroupState data type:', typeof zoneGroupStateData);
-      debugManager.debug('upnp', 'ZoneGroupState data:', JSON.stringify(zoneGroupStateData, null, 2));
+      debugManager.wall('upnp', 'ZoneGroupState data:', JSON.stringify(zoneGroupStateData, null, 2));
       
       // If it's a string, parse it. If it's already an object, use it directly
       let parsed;
@@ -121,7 +122,7 @@ export class TopologyManager extends EventEmitter {
       }
 
       const zoneGroups = zoneGroupState.ZoneGroups.ZoneGroup;
-      debugManager.debug('upnp', 'Found ZoneGroups:', JSON.stringify(zoneGroups, null, 2));
+      debugManager.wall('upnp', 'Found ZoneGroups:', JSON.stringify(zoneGroups, null, 2));
       
       const groups = Array.isArray(zoneGroups) ? zoneGroups : [zoneGroups];
       debugManager.debug('topology', `Processing ${groups.length} zone groups`);
@@ -182,7 +183,8 @@ export class TopologyManager extends EventEmitter {
           id: groupId,
           coordinator,
           members: knownMembers,
-          coordinatorUuid
+          coordinatorUuid,
+          memberDetails: members
         };
 
         newZones.push(zone);
@@ -202,7 +204,7 @@ export class TopologyManager extends EventEmitter {
     }
   }
 
-  private parseZoneGroupMembers(zoneGroupMembers: any): Array<{uuid: string, roomName: string}> {
+  private parseZoneGroupMembers(zoneGroupMembers: any): Array<{uuid: string, roomName: string, channelMapSet?: string}> {
     if (!zoneGroupMembers) {
       return [];
     }
@@ -211,7 +213,8 @@ export class TopologyManager extends EventEmitter {
     
     return members.map(member => ({
       uuid: member['@_UUID'],
-      roomName: member['@_ZoneName']
+      roomName: member['@_ZoneName'],
+      channelMapSet: member['@_ChannelMapSet']
     })).filter(member => member.uuid && member.roomName);
   }
 
@@ -238,5 +241,31 @@ export class TopologyManager extends EventEmitter {
   getGroupMembers(deviceId: string): SonosDevice[] {
     const zone = this.getZoneForDevice(deviceId);
     return zone?.members || [];
+  }
+
+  getStereoPairPrimary(roomName: string): string | undefined {
+    // Find the zone that contains this room
+    for (const zone of this.zones) {
+      const membersInRoom = zone.memberDetails?.filter(m => m.roomName === roomName) || [];
+      
+      // If we have multiple members with same room name, it's a stereo pair
+      if (membersInRoom.length > 1) {
+        // Look for the UUID that appears before :LF in any member's channelMapSet
+        for (const member of membersInRoom) {
+          if (member.channelMapSet) {
+            // ChannelMapSet format: "UUID1:LF,LF;UUID2:RF,RF"
+            // The UUID before :LF is the primary (left) speaker
+            const match = member.channelMapSet.match(/(\w+):LF/);
+            if (match && match[1]) {
+              const primaryUuid = match[1];
+              debugManager.debug('topology', `Found stereo pair primary for ${roomName}: ${primaryUuid} from channelMapSet: ${member.channelMapSet}`);
+              return primaryUuid;
+            }
+          }
+        }
+      }
+    }
+    
+    return undefined;
   }
 }

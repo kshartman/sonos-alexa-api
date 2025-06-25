@@ -31,7 +31,8 @@ This document provides a comprehensive analysis of the sonos-alexa-api's compati
 - `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
 - `GET /{room}/musicsearch/{service}/station/{name}` - Search and play radio stations
 
-**Supported Services**: spotify, apple, deezer, and other music services
+**Currently Implemented Services**: Apple Music only. 
+**Not Implemented**: Spotify (requires OAuth2), Amazon Music (no public API), Deezer - all return 501.
 
 ### ✅ Room Control
 - `GET /{room}/play` - Start playback
@@ -58,10 +59,10 @@ This document provides a comprehensive analysis of the sonos-alexa-api's compati
 - `GET /{room}/crossfade/{on|off}` - Set crossfade mode
 
 ### ✅ Music Service Integration
-- `GET /{room}/siriusxm/{name}` - Play SiriusXM station
-- `GET /{room}/pandora/play/{name}` - Play Pandora station
-- `GET /{room}/pandora/thumbsup` - Thumbs up current track
-- `GET /{room}/pandora/thumbsdown` - Thumbs down current track
+- `GET /{room}/siriusxm/{name}` - Play SiriusXM station (**NOT IMPLEMENTED** - returns 501)
+- `GET /{room}/pandora/play/{name}` - Play Pandora station (fully implemented with Pandora API)
+- `GET /{room}/pandora/thumbsup` - Thumbs up current track (fully implemented)
+- `GET /{room}/pandora/thumbsdown` - Thumbs down current track (fully implemented)
 
 ### ✅ Content Libraries
 - `GET /{room}/playlist/{name}` - Play playlist by name

@@ -12,6 +12,8 @@ info:
     - Server-Sent Events for real-time updates
     - Default room tracking with persistence
     - Text-to-Speech (TTS) with multiple providers
+    - Music search with Apple Music integration
+    - Group management with stereo pair detection
     - Optional basic authentication
     - Full Alexa skill compatibility
     
@@ -19,6 +21,12 @@ info:
     Optional HTTP Basic Authentication can be configured in settings.json.
     Set rejectUnauthorized to false to disable auth checks even with credentials configured.
     For external access, use a reverse proxy (nginx) with HTTPS.
+    
+    ## API Notes
+    - Room names with spaces must be URL-encoded in path parameters
+    - Playback mode toggles (repeat/shuffle/crossfade) require explicit 'on' or 'off' values
+    - Favorites and playlists endpoints support a 'detailed' query parameter but return the same format
+    - Music search endpoints support default room and service configuration for room-less usage
   version: 1.0.0
   license:
     name: MIT
@@ -482,7 +490,9 @@ paths:
         - name: detailed
           in: query
           required: false
-          description: Return detailed favorite information
+          description: |
+            Return detailed favorite information.
+            Note: detailed=true parameter is supported but returns same format as basic.
           schema:
             type: boolean
             default: false
@@ -521,7 +531,9 @@ paths:
         - name: detailed
           in: query
           required: false
-          description: Return detailed favourite information
+          description: |
+            Return detailed favourite information.
+            Note: detailed=true parameter is supported but returns same format as basic.
           schema:
             type: boolean
             default: false
@@ -601,7 +613,9 @@ paths:
         - name: detailed
           in: query
           required: false
-          description: Return detailed playlist information
+          description: |
+            Return detailed playlist information.
+            Note: detailed=true parameter is supported but returns same format as basic.
           schema:
             type: boolean
             default: false
@@ -1098,6 +1112,30 @@ paths:
         '404':
           $ref: '#/components/responses/RoomNotFound'
           
+  /default/service/{service}:
+    get:
+      tags:
+        - Global
+      summary: Set default music service
+      description: Set the default music service for search commands
+      parameters:
+        - name: service
+          in: path
+          required: true
+          description: Music service name
+          schema:
+            type: string
+            example: library
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          
   /play:
     get:
       tags:
@@ -1338,6 +1376,29 @@ paths:
         '404':
           $ref: '#/components/responses/RoomNotFound'
           
+  /{room}/debug/accounts:
+    get:
+      tags:
+        - Debug
+      summary: Debug accounts endpoint
+      description: Get account information for debugging music services
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          description: Account information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+          
   /{room}/say/{text}:
     get:
       tags:
@@ -1444,6 +1505,78 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Success'
+          
+  /song/{query}:
+    get:
+      tags:
+        - Global
+      summary: Search and play song in default room
+      description: Search for songs and play in default room using default music service
+      parameters:
+        - name: query
+          in: path
+          required: true
+          description: Song search query
+          schema:
+            type: string
+            example: Yesterday Beatles
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: No default room or service configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /album/{name}:
+    get:
+      tags:
+        - Global
+      summary: Search and play album in default room
+      description: Search for album and play in default room using default music service
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Album name to search for
+          schema:
+            type: string
+            example: Abbey Road
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: No default room or service configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /station/{name}:
+    get:
+      tags:
+        - Global
+      summary: Play radio station in default room
+      description: Search for radio station and play in default room using default music service
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Station name
+          schema:
+            type: string
+            example: BBC Radio 1
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: No default room or service configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   parameters:

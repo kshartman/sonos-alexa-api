@@ -2,6 +2,16 @@
 
 A lightweight, modern implementation of a Sonos HTTP API designed for Alexa integration with minimal dependencies.
 
+## Acknowledgments
+
+This code depends heavily on Jishi's excellent work ([node-sonos-http-api](https://jishi.github.io/node-sonos-http-api/) and [node-sonos-discovery](https://jishi.github.io/node-sonos-discovery)) which I used for many years to implement an Alexa skill to control the speakers in my homes. In many ways, I still think it is better than the official Sonos skill or the Sonos Voice Control built into some devices.
+
+I was annoyed with the supply chain of these packages, so I decided to use Claude to implement a drop-in replacement with minimal dependencies. That means it will support Pandora, for example, but not Deezer or Apple Music but not Spotify like the original did. I don't care about these services because I don't have them and won't pay for them. I also don't care or test if this works with an S1 system.  I use S2 and the olderst speakers I have are One's and Five's.  The rest are ERA 100, 300, Move or Roam. If you can use the code but need these features, then fork it and have a go. 
+
+I may respond to bug and feature requests if they affect me or I may not. I am retired and have better things to do than support changes in a package that works perfectly well for me.  That said, if you want chabges to support an Arc with subs and Atmos speakers, feel free to send me such a system and I will make it work lol.
+
+*Shane and Claude ;)*
+
 ## Features
 
 - Zero external HTTP framework dependencies (uses Node.js built-in `http`)
@@ -197,18 +207,18 @@ The TTS system supports multiple providers:
 The system will automatically pause current playback, announce the text at the configured volume, and resume playback.
 
 ### Music Services
-- `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album
-- `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs
-- `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station
-- `GET /{room}/siriusxm/{name}` - Play SiriusXM station
-- `GET /{room}/pandora/play/{name}` - Play Pandora station
+- `GET /{room}/musicsearch/{service}/album/{name}` - Search and play album (Apple Music only currently)
+- `GET /{room}/musicsearch/{service}/song/{query}` - Search and play songs (Apple Music only currently)
+- `GET /{room}/musicsearch/{service}/station/{name}` - Play radio station (Apple Music only currently)
+- `GET /{room}/siriusxm/{name}` - Play SiriusXM station (**NOT IMPLEMENTED** - returns 501)
+- `GET /{room}/pandora/play/{name}` - Play Pandora station (requires Pandora credentials in settings.json)
 - `GET /{room}/pandora/thumbsup` - Thumbs up current track
 - `GET /{room}/pandora/thumbsdown` - Thumbs down current track
 - `GET /{room}/applemusic/now/{id}` - Play immediately (id format: type:id, e.g., song:123456)
 - `GET /{room}/applemusic/next/{id}` - Add as next track
 - `GET /{room}/applemusic/queue/{id}` - Add to end of queue
 
-Note: Music service endpoints are implemented for Alexa compatibility but require proper service authentication to function.
+Note: Music service endpoints require proper service authentication. Currently implemented: Apple Music (via Sonos account), Pandora (requires credentials). SiriusXM is not implemented.
 
 ### Line-In
 - `GET /{room}/linein/{source}` - Play line-in from source device
@@ -273,6 +283,40 @@ You can also control debugging at runtime via API:
 - `GET /debug/enable-all` - Enable all categories
 - `GET /debug/disable-all` - Disable all categories (except API)
 
+## Grouped Speakers and Stereo Pairs
+
+When speakers are grouped together or configured as stereo pairs, certain operations must be sent to the group coordinator rather than individual speakers. The API automatically handles this routing for you.
+
+### Operations Automatically Routed to Coordinator
+The following operations are always sent to the group coordinator when a room is part of a group:
+- **Queue Management**: Getting, adding to, clearing, or reordering the queue
+- **Playback Control**: Play, pause, stop, next, previous, seek
+- **Content Selection**: Playing favorites, playlists, music service content
+- **Transport Settings**: Changing tracks or switching sources
+- **Playback Modes**: Repeat, shuffle, crossfade settings
+- **Music Service Operations**: Searching and browsing content
+
+### Operations That Remain Room-Specific
+These operations work on individual speakers even when grouped:
+- **Volume Control**: Each speaker maintains its own volume level
+- **Mute/Unmute**: Individual mute control per speaker
+- **Equalizer Settings**: Bass, treble, loudness per speaker
+- **Group Management**: Join/leave operations
+
+### Example
+```bash
+# If Kitchen and Living Room are grouped with Living Room as coordinator:
+
+# These commands are automatically sent to the coordinator (Living Room):
+GET /Kitchen/play           # Plays on the entire group
+GET /Kitchen/queue          # Returns the group's queue
+GET /Kitchen/shuffle/on     # Sets shuffle for the group
+
+# These commands operate on Kitchen specifically:
+GET /Kitchen/volume/50      # Sets Kitchen's volume only
+GET /Kitchen/mute           # Mutes only Kitchen speaker
+```
+
 ## API Documentation
 
 A complete OpenAPI 3.0 specification is available in `openapi.yaml`. This includes:
@@ -308,6 +352,48 @@ The API supports optional HTTP Basic Authentication. Configure in `settings.json
 - If `rejectUnauthorized` is `false`, authentication headers are not checked even if credentials are configured
 - Use this behind a reverse proxy (nginx) for HTTPS support
 - Designed for local network use; add proper security for external access
+
+## Testing
+
+The project includes an adaptive test suite that discovers your Sonos system and runs appropriate tests:
+
+```bash
+# Run all tests (safe mode)
+npm test
+
+# Run only unit tests (no Sonos required)
+npm run test:unit
+
+# Run integration tests only
+npm run test:integration
+
+# Run full test suite (may interrupt playback)
+npm run test:full
+```
+
+See [test/README.md](test/README.md) for detailed testing documentation.
+
+## Future Enhancements
+
+The following features are not currently implemented but could be added in the future:
+
+### Possible Implementations
+
+- **SiriusXM Support** - Endpoints exist but return 501 Not Implemented. Would require channel list and proper URI generation.
+- **Spotify Music Search** - Not implemented. Would require:
+  - Spotify Developer account and app registration
+  - OAuth2 client credentials (Client ID and Secret in settings.json)
+  - Token management for API authentication
+  - Implementation of Spotify Web API calls
+  - URI transformation to Sonos format
+- **Sleep Timer** - Set a timer to stop playback after specified duration
+- **Alarm Management** - Create, modify, and delete Sonos alarms
+- **Music Library Search** - Search and play from local music library
+
+### Unlikely to be Implemented
+
+- **Amazon Music Search** - Cannot be implemented without reverse engineering private APIs. Amazon does not provide a public search API, which is why even the legacy system never implemented this feature.
+- **Deezer Music Search** - Not implemented. Would require Deezer API integration and credentials.
 
 ## Credits
 

@@ -8,9 +8,10 @@ export interface DebugCategories {
   presets: boolean;
   upnp: boolean;
   api: boolean;
+  sse: boolean;
 }
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'wall';
 
 class DebugManager {
   private categories: DebugCategories;
@@ -25,7 +26,8 @@ class DebugManager {
       favorites: false, // Favorite resolution details
       presets: false,   // Preset loading and resolution
       upnp: false,      // Raw UPnP event details
-      api: true         // API request logging (always on by default)
+      api: true,        // API request logging (always on by default)
+      sse: false        // Server-Sent Events for webhooks
     };
     this.logLevel = 'info';
 
@@ -62,7 +64,7 @@ class DebugManager {
   }
 
   private isValidLogLevel(level: string): boolean {
-    return ['error', 'warn', 'info', 'debug'].includes(level.toLowerCase());
+    return ['error', 'warn', 'info', 'debug', 'wall'].includes(level.toLowerCase());
   }
 
   private isValidCategory(category: string): boolean {
@@ -132,8 +134,14 @@ class DebugManager {
     }
   }
 
+  wall(category: keyof DebugCategories, message: string, meta?: any): void {
+    if (this.categories[category] && this.shouldLog('wall')) {
+      logger.debug(`[${category.toUpperCase()}] [WALL] ${message}`, meta);
+    }
+  }
+
   private shouldLog(level: LogLevel): boolean {
-    const levels: LogLevel[] = ['error', 'warn', 'info', 'debug'];
+    const levels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'wall'];
     const currentLevelIndex = levels.indexOf(this.logLevel);
     const messageLevelIndex = levels.indexOf(level);
     return messageLevelIndex <= currentLevelIndex;

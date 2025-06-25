@@ -31,7 +31,8 @@ export class PresetLoader {
       validPresets: 0,
       failedResolution: 0,
       invalidFormat: 0,
-      parseErrors: 0
+      parseErrors: 0,
+      legacyConverted: 0
     };
     const validPresetNames: string[] = [];
     const failedResolutionNames: string[] = [];
@@ -62,6 +63,11 @@ export class PresetLoader {
           try {
             // Try to convert the preset (handles both new and legacy formats)
             const convertedPreset = tryConvertPreset(rawPreset, presetName);
+            
+            // Check if this was a legacy preset conversion
+            if ('_legacy' in convertedPreset) {
+              stats.legacyConverted++;
+            }
             
             // Resolve favorites to actual URIs if discovery is available
             const resolvedPreset = await this.resolveFavorites(convertedPreset, presetName);
@@ -105,6 +111,7 @@ export class PresetLoader {
       logger.info('Preset loading summary:');
       logger.info(`  Total files processed: ${stats.totalFiles}`);
       logger.info(`  Valid presets: ${stats.validPresets}`);
+      logger.info(`  Legacy presets converted: ${stats.legacyConverted}`);
       logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
       logger.info(`  Invalid format: ${stats.invalidFormat}`);
       logger.info(`  Parse errors: ${stats.parseErrors}`);

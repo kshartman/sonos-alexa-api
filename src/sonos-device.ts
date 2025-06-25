@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { XMLParser } from 'fast-xml-parser';
 import logger from './utils/logger.js';
 import { soapRequest } from './utils/soap.js';
+import { EventManager } from './utils/event-manager.js';
 import type { DeviceInfo, SonosState, SonosTrack, SonosService, Preset, BrowseResult, BrowseItem } from './types/sonos.js';
 
 const SERVICES: Record<string, SonosService> = {
@@ -42,7 +43,6 @@ export class SonosDevice extends EventEmitter {
   public state: SonosState;
   
   private xmlParser: XMLParser;
-  private stateInterval?: NodeJS.Timeout;
 
   constructor(deviceInfo: DeviceInfo, location: string) {
     super();
@@ -72,21 +72,148 @@ export class SonosDevice extends EventEmitter {
   }
 
   async subscribe(): Promise<void> {
-    // In a full implementation, we would set up event subscriptions here
-    // For now, we'll poll for state changes
-    await this.updateState();
-    
-    this.stateInterval = setInterval(() => this.updateState(), 5000);
-  }
+    const discovery = (global as any).discovery;
+    if (!discovery || !discovery.subscriber) {
+      throw new Error(`${this.roomName}: No UPnP subscriber available - cannot use events`);
+    }
 
-  unsubscribe(): void {
-    if (this.stateInterval) {
-      clearInterval(this.stateInterval);
-      this.stateInterval = undefined;
+    try {
+      // Check if this device is part of a stereo pair or group
+      // If so, we should subscribe to the coordinator instead
+      const coordinator = discovery.getCoordinator ? discovery.getCoordinator(this.id) : null;
+      let targetDevice = this;
+      let targetBaseUrl = this.baseUrl;
+      
+      if (coordinator && coordinator.id !== this.id) {
+        logger.info(`${this.roomName}: This device is part of a stereo pair/group. Using coordinator ${coordinator.roomName} for subscriptions.`);
+        targetDevice = coordinator;
+        targetBaseUrl = coordinator.baseUrl;
+      }
+      
+      // Discover available services from the target device
+      const services = await targetDevice.discoverServices();
+      logger.info(`${targetDevice.roomName}: Found ${services.length} services from device description`);
+      
+      // Log all discovered services
+      services.forEach(service => {
+        logger.info(`${targetDevice.roomName}: Service: ${service.serviceType}, EventURL: ${service.eventSubURL}`);
+      });
+      
+      // Subscribe to services that support events
+      // Note: ZoneGroupTopology is handled separately in discovery.ts for ALL devices
+      const eventServices = [
+        'AVTransport',
+        'RenderingControl', 
+        'GroupRenderingControl',
+        'ContentDirectory',
+        'Queue',
+        'DeviceProperties'
+      ];
+      
+      let subscribedCount = 0;
+      for (const serviceName of eventServices) {
+        const service = services.find(s => s.serviceType.includes(serviceName));
+        if (service && service.eventSubURL) {
+          try {
+            const eventUrl = service.eventSubURL.startsWith('/')
+              ? service.eventSubURL
+              : `/${service.eventSubURL}`;
+            // Subscribe using this device's ID but the coordinator's URL
+            await discovery.subscriber.subscribe(targetBaseUrl, eventUrl, this.id);
+            logger.info(`${this.roomName}: Successfully subscribed to ${serviceName} at ${eventUrl} via ${targetDevice.roomName}`);
+            subscribedCount++;
+          } catch (err) {
+            logger.warn(`${this.roomName}: Failed to subscribe to ${serviceName}:`, err);
+          }
+        } else {
+          if (serviceName === 'AVTransport' || serviceName === 'RenderingControl') {
+            logger.debug(`${this.roomName}: Service ${serviceName} not found - this may be a stereo pair member`);
+          } else {
+            logger.debug(`${this.roomName}: Service ${serviceName} not found or has no event URL`);
+          }
+        }
+      }
+      
+      if (subscribedCount === 0 && coordinator && coordinator.id !== this.id) {
+        logger.info(`${this.roomName}: This is a stereo pair member. Events will be handled by coordinator ${coordinator.roomName}.`);
+        // For stereo pair members, we don't need to throw an error - they get events from their coordinator
+        return;
+      } else if (subscribedCount === 0) {
+        throw new Error(`${this.roomName}: Failed to subscribe to any UPnP events`);
+      }
+      
+      logger.info(`${this.roomName}: Subscribed to ${subscribedCount} UPnP event services`);
+      
+      // Get initial state
+      await this.updateState();
+    } catch (error) {
+      logger.error(`${this.roomName}: Critical error in UPnP subscription:`, error);
+      throw error; // Don't fall back to polling - fail fast
     }
   }
 
-  private async updateState(): Promise<void> {
+  async discoverServices(): Promise<any[]> {
+    const deviceDescUrl = `${this.baseUrl}/xml/device_description.xml`;
+    
+    const response = await fetch(deviceDescUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch device description: ${response.status}`);
+    }
+    
+    const xml = await response.text();
+    const parsed = this.xmlParser.parse(xml);
+    
+    const services: any[] = [];
+    
+    // Helper function to extract services from a device
+    const extractServices = (device: any) => {
+      if (device?.serviceList?.service) {
+        const serviceList = Array.isArray(device.serviceList.service) 
+          ? device.serviceList.service 
+          : [device.serviceList.service];
+        
+        for (const service of serviceList) {
+          services.push({
+            serviceType: service.serviceType || '',
+            serviceId: service.serviceId || '',
+            controlURL: service.controlURL || '',
+            eventSubURL: service.eventSubURL || '',
+            SCPDURL: service.SCPDURL || ''
+          });
+        }
+      }
+    };
+    
+    // Extract services from root device
+    const rootDevice = parsed.root?.device;
+    if (rootDevice) {
+      extractServices(rootDevice);
+      
+      // Also check for embedded devices (MediaServer, MediaRenderer, etc.)
+      if (rootDevice.deviceList?.device) {
+        const embeddedDevices = Array.isArray(rootDevice.deviceList.device)
+          ? rootDevice.deviceList.device
+          : [rootDevice.deviceList.device];
+        
+        for (const embeddedDevice of embeddedDevices) {
+          extractServices(embeddedDevice);
+        }
+      }
+    }
+    
+    return services;
+  }
+
+  unsubscribe(): void {
+    // TODO: Properly unsubscribe from UPnP events
+    const discovery = (global as any).discovery;
+    if (discovery && discovery.subscriber) {
+      // We need to track which services we subscribed to
+      logger.debug(`${this.roomName}: Unsubscribing from UPnP events`);
+    }
+  }
+
+  async updateState(): Promise<void> {
     try {
       const [transportInfo, volume, mute, positionInfo] = await Promise.all([
         this.getTransportInfo(),
@@ -95,8 +222,25 @@ export class SonosDevice extends EventEmitter {
         this.getPositionInfo()
       ]);
 
+      // Debug logging for position info
+      logger.debug(`${this.roomName}: Position info:`, {
+        TrackURI: positionInfo.TrackURI,
+        TrackMetaData: positionInfo.TrackMetaData?.substring(0, 100) + '...',
+        TrackDuration: positionInfo.TrackDuration,
+        RelTime: positionInfo.RelTime
+      });
+
+      // When a device is playing from a coordinator (x-rincon:), 
+      // its transport state doesn't reflect the actual playback state
+      let effectivePlaybackState = transportInfo.CurrentTransportState as SonosState['playbackState'];
+      if (positionInfo.TrackURI?.startsWith('x-rincon:')) {
+        // Device is a group member playing from coordinator
+        // For now, we'll trust the transport state, but log it
+        logger.debug(`${this.roomName}: Group member detected (${positionInfo.TrackURI}), transport state: ${effectivePlaybackState}`);
+      }
+
       const newState: SonosState = {
-        playbackState: transportInfo.CurrentTransportState as SonosState['playbackState'],
+        playbackState: effectivePlaybackState,
         volume: parseInt(volume.CurrentVolume, 10),
         mute: mute.CurrentMute === '1',
         currentTrack: this.parseTrackInfo(positionInfo)
@@ -107,8 +251,37 @@ export class SonosDevice extends EventEmitter {
       delete (oldStateForComparison as any).coordinator;
       
       if (JSON.stringify(newState) !== JSON.stringify(oldStateForComparison)) {
+        const previousPlaybackState = this.state.playbackState;
+        const previousVolume = this.state.volume;
+        const previousMute = this.state.mute;
+        
         this.state = { ...this.state, ...newState };
-        this.emit('state-change', this.state);
+        
+        // Emit state change with previous state included
+        this.emit('state-change', this.state, {
+          playbackState: previousPlaybackState,
+          volume: previousVolume,
+          mute: previousMute
+        });
+        
+        // Emit to EventManager for event-driven tests
+        const eventManager = EventManager.getInstance();
+        
+        // Emit playback state change
+        if (previousPlaybackState !== newState.playbackState) {
+          eventManager.emitStateChange(this, previousPlaybackState, newState.playbackState);
+        }
+        
+        // Emit volume change
+        if (previousVolume !== newState.volume) {
+          eventManager.emit('volume-change', {
+            deviceId: this.id,
+            roomName: this.roomName,
+            previousVolume,
+            currentVolume: newState.volume,
+            timestamp: Date.now()
+          });
+        }
       }
     } catch (error) {
       logger.error(`Error updating state for ${this.roomName}:`, error);
@@ -117,26 +290,67 @@ export class SonosDevice extends EventEmitter {
 
   private parseTrackInfo(positionInfo: any): SonosTrack | null {
     if (!positionInfo.TrackMetaData || positionInfo.TrackMetaData === 'NOT_IMPLEMENTED') {
+      logger.debug(`${this.roomName}: No track metadata available (TrackMetaData: ${positionInfo.TrackMetaData})`);
       return null;
     }
 
     try {
       const metadata = this.xmlParser.parse(positionInfo.TrackMetaData);
+      logger.debug(`${this.roomName}: Parsed metadata:`, JSON.stringify(metadata, null, 2).substring(0, 500) + '...');
+      
       const item = metadata['DIDL-Lite']?.item;
       
-      if (!item) return null;
+      if (!item) {
+        logger.debug(`${this.roomName}: No item found in DIDL-Lite metadata`);
+        return null;
+      }
 
-      return {
-        title: item['dc:title'] || 'Unknown',
-        artist: item['dc:creator'] || item['r:albumArtist'] || 'Unknown Artist',
+      // Determine track type based on URI
+      let type = 'track';
+      let stationName = '';
+      
+      if (positionInfo.TrackURI) {
+        if (positionInfo.TrackURI.includes('x-sonosapi-radio:') || 
+            positionInfo.TrackURI.includes('x-sonosapi-stream:') ||
+            positionInfo.TrackURI.includes('x-rincon-mp3radio:')) {
+          type = 'radio';
+          // Extract station name from StreamContent if available
+          if (item['r:streamContent']) {
+            stationName = item['r:streamContent'];
+          } else if (item['dc:title'] && !item['dc:creator']) {
+            // Sometimes radio stations put station name in title
+            stationName = item['dc:title'];
+          }
+        } else if (positionInfo.TrackURI.includes('x-rincon-stream:')) {
+          type = 'line_in';
+        }
+      }
+      
+      // Convert duration to seconds
+      let durationSeconds = 0;
+      if (positionInfo.TrackDuration && positionInfo.TrackDuration !== 'NOT_IMPLEMENTED') {
+        const durationParts = positionInfo.TrackDuration.split(':');
+        durationSeconds = parseInt(durationParts[0]) * 3600 + 
+                         parseInt(durationParts[1]) * 60 + 
+                         parseInt(durationParts[2]);
+      }
+      
+      const track: SonosTrack = {
+        artist: item['dc:creator'] || item['r:albumArtist'] || '',
+        title: item['dc:title'] || '',
         album: item['upnp:album'] || '',
-        duration: positionInfo.TrackDuration,
-        position: positionInfo.RelTime,
-        uri: positionInfo.TrackURI,
-        albumArtURI: item['upnp:albumArtURI']
+        albumArtUri: item['upnp:albumArtURI'] || '',
+        duration: durationSeconds,
+        uri: positionInfo.TrackURI || '',
+        trackUri: positionInfo.TrackURI || '',  // Legacy compatibility
+        type: type as 'track' | 'radio' | 'line_in',
+        stationName
       };
+      
+      logger.debug(`${this.roomName}: Parsed track:`, track);
+      return track;
     } catch (error) {
-      logger.error('Error parsing track metadata:', error);
+      logger.error(`${this.roomName}: Error parsing track metadata:`, error);
       return null;
     }
   }
@@ -231,6 +445,18 @@ export class SonosDevice extends EventEmitter {
 
   async getPositionInfo(): Promise<any> {
     return this.soap('AVTransport', 'GetPositionInfo', {
+      InstanceID: 0
+    });
+  }
+
+  async getTransportSettings(): Promise<any> {
+    return this.soap('AVTransport', 'GetTransportSettings', {
+      InstanceID: 0
+    });
+  }
+
+  async getCrossfadeMode(): Promise<any> {
+    return this.soap('AVTransport', 'GetCrossfadeMode', {
       InstanceID: 0
     });
   }
@@ -374,7 +600,7 @@ export class SonosDevice extends EventEmitter {
     // Handle sleep timer if specified
     if (legacyData?.sleep) {
       logger.debug(`Legacy preset sleep timer: ${legacyData.sleep} seconds`);
-      // This would be implemented as a delayed pause
+      await this.setSleepTimer(legacyData.sleep);
     }
     
     // Favorites should already be resolved at load time
@@ -384,8 +610,18 @@ export class SonosDevice extends EventEmitter {
     // Handle playMode settings
     if (legacyData?.playMode) {
       logger.debug('Legacy preset playMode settings:', legacyData.playMode);
-      // These would need to be implemented via additional SOAP calls
-      // For now, we'll just log them
+      
+      if (legacyData.playMode.repeat !== undefined) {
+        await this.setRepeat(legacyData.playMode.repeat);
+      }
+      
+      if (legacyData.playMode.shuffle !== undefined) {
+        await this.setShuffle(legacyData.playMode.shuffle);
+      }
+      
+      if (legacyData.playMode.crossfade !== undefined) {
+        await this.setCrossfade(legacyData.playMode.crossfade);
+      }
     }
   }
 
@@ -395,6 +631,7 @@ export class SonosDevice extends EventEmitter {
       const pausePromises = allDevices
         .filter((device: SonosDevice) => device.id !== this.id)
         .filter((device: SonosDevice) => discovery.isCoordinator(device.id))
+        .filter((device: SonosDevice) => device.state.playbackState === 'PLAYING')
         .map((device: SonosDevice) => 
           device.pause().catch((err: Error) => {
             logger.debug(`Failed to pause ${device.roomName}: ${err.message}`);
@@ -429,10 +666,24 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  async getQueue(startIndex = 0, limit = 100): Promise<BrowseResult> {
-    logger.debug(`${this.roomName}: getting queue items from ${startIndex}, limit ${limit}`);
-    return this.browse('Q:0', startIndex, limit);
+  async setSleepTimer(seconds: number): Promise<void> {
+    logger.debug(`${this.roomName}: setting sleep timer to ${seconds} seconds`);
+    
+    // Convert seconds to HH:MM:SS format or empty string to cancel
+    let duration = '';
+    if (seconds > 0) {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      duration = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    await this.soap('AVTransport', 'ConfigureSleepTimer', {
+      InstanceID: 0,
+      NewSleepTimerDuration: duration
+    });
   }
+
 
   // Playback mode methods
   async setRepeat(mode: 'none' | 'all' | 'one'): Promise<void> {
@@ -460,10 +711,13 @@ export class SonosDevice extends EventEmitter {
     
     let newMode = 'NORMAL';
     if (transportSettings.PlayMode?.includes('REPEAT_ONE')) {
-      newMode = enabled ? 'SHUFFLE_REPEAT_ONE' : 'REPEAT_ONE';
+      // Sonos doesn't support shuffle with REPEAT_ONE
+      newMode = enabled ? 'SHUFFLE_NOREPEAT' : 'REPEAT_ONE';
     } else if (transportSettings.PlayMode?.includes('REPEAT')) {
+      // SHUFFLE = shuffle and repeat (loop), REPEAT_ALL = repeat without shuffle
       newMode = enabled ? 'SHUFFLE' : 'REPEAT_ALL';
     } else {
+      // SHUFFLE_NOREPEAT = shuffle once, NORMAL = no shuffle/repeat
       newMode = enabled ? 'SHUFFLE_NOREPEAT' : 'NORMAL';
     }
     
@@ -572,6 +826,33 @@ export class SonosDevice extends EventEmitter {
       startIndex,
       numberReturned: parseInt(result.NumberReturned || '0', 10),
       totalMatches: parseInt(result.TotalMatches || '0', 10)
+    };
+  }
+
+  async getQueue(limit = 100, offset = 0): Promise<any> {
+    // Get queue from ContentDirectory - Q:0 is the queue ID
+    const result = await this.browse('Q:0', offset, limit);
+    
+    // Transform the items to match legacy format
+    const queueItems = result.items.map((item: any, index) => {
+      // Since BrowseItem is a simplified type, we access the raw data
+      return {
+        uri: item.uri || '',
+        title: item.title || '',
+        artist: item.artist || '',
+        album: item.album || '',
+        albumTrackNumber: '',
+        albumArtUri: '',
+        metadata: item.metadata || '',
+        queuePosition: offset + index + 1  // 1-based position in queue
+      };
+    });
+    
+    return {
+      items: queueItems,
+      startIndex: result.startIndex,
+      numberReturned: result.numberReturned,
+      totalMatches: result.totalMatches
     };
   }
 }

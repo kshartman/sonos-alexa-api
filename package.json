@@ -9,24 +9,54 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
+    "start": "node --openssl-legacy-provider dist/server.js",
+    "dev": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- tsx watch src/server.ts",
+    "dev:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- tsx watch src/server.ts 2>&1 | tee logs/test-output.log",
     "lint": "eslint src/",
-    "test": "node --test dist/",
+    "test": "npm run build && tsx test/run-tests.ts",
+    "test:log": "npm run build && bash -c 'tsx test/run-tests.ts \"$@\" 2>&1 | tee logs/test-output.log' --",
+    "test:unit": "npm run build && tsx test/run-tests.ts -- --mock-only",
+    "test:integration": "npm run build && tsx test/run-tests.ts -- integration/**/*-tests.ts",
+    "test:full": "npm run build && tsx test/run-tests.ts -- --full",
+    "test:playback": "npm run build && tsx test/run-tests.ts -- unit/playback-tests.ts integration/playback-tests.ts",
+    "test:volume": "npm run build && tsx test/run-tests.ts -- unit/volume-tests.ts",
+    "test:groups": "npm run build && tsx test/run-tests.ts -- integration/group-tests.ts",
+    "test:coverage": "npm run build && tsx test/run-tests.ts -- --coverage",
+    "test:list": "npm run build && tsx test/run-tests.ts -- --list-tests",
+    "test:id": "npm run build && tsx test/run-tests.ts --",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "winston": "^3.11.0",
-    "fast-xml-parser": "^4.3.2"
+    "fast-xml-parser": "^4.3.2",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.0",
-    "tsx": "^4.6.0",
-    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
-    "@typescript-eslint/eslint-plugin": "^6.13.0"
+    "dotenv": "^16.5.0",
+    "dotenv-cli": "^8.0.0",
+    "eslint": "^8.55.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
   },
-  "author": "",
+  "author": "Shane Hartman <shartman@nx.bogometer.com> and Claude (Anthropic)",
+  "contributors": [
+    {
+      "name": "Shane Hartman",
+      "email": "shartman@nx.bogometer.com",
+      "url": "https://github.com/kshartman"
+    },
+    {
+      "name": "Claude",
+      "email": "noreply@anthropic.com",
+      "url": "https://claude.ai"
+    },
+    {
+      "name": "Jimmy Shimizu (jishi)",
+      "url": "https://github.com/jishi",
+      "note": "Original implementation and inspiration"
+    }
+  ],
   "license": "MIT"
 }

@@ -56,6 +56,9 @@ config.defaultRoom = process.env.DEFAULT_ROOM || config.defaultRoom;
 
 // Initialize components
 const discovery = new SonosDiscovery();
+// Make discovery globally available for devices to access subscriber
+(global as any).discovery = discovery;
+
 const presetLoader = new PresetLoader(config.presetDir, discovery);
 const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', config.defaultRoom || '', config.defaultMusicService || 'library');
 const ttsService = new TTSService(config);
@@ -69,7 +72,9 @@ const server = http.createServer((req, res) => {
 // Webhook support
 let webhookClients: ServerResponse[] = [];
 
-discovery.on('device-state-change', (device, state) => {
+discovery.on('device-state-change', (device, state, previousState) => {
+  debugManager.info('sse', `Forwarding device-state-change event for ${device.roomName}`);
+  
   // Create a serializable state without circular references
   const serializableState = {
     playbackState: state.playbackState,
@@ -83,7 +88,9 @@ discovery.on('device-state-change', (device, state) => {
     type: 'device-state-change',
     data: {
       room: device.roomName,
-      state: serializableState
+      deviceId: device.id,
+      state: serializableState,
+      previousState: previousState || undefined
     }
   };
 
@@ -110,6 +117,75 @@ discovery.on('device-state-change', (device, state) => {
   });
 
   // Send to SSE clients
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  debugManager.debug('sse', `Sending to ${webhookClients.length} SSE clients`);
+  webhookClients = webhookClients.filter(client => {
+    try {
+      client.write(sseData);
+      return true;
+    } catch (err) {
+      debugManager.error('sse', 'Error writing to client:', err);
+      return false;
+    }
+  });
+});
+
+// Forward content update events
+discovery.on('content-update', (deviceId, containerUpdateIDs) => {
+  const event = {
+    type: 'content-update',
+    data: {
+      deviceId,
+      containerUpdateIDs,
+      timestamp: new Date().toISOString()
+    }
+  };
+  
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  webhookClients = webhookClients.filter(client => {
+    try {
+      client.write(sseData);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  });
+});
+
+// Forward topology change events  
+discovery.on('topology-change', (_zones) => {
+  // Get serializable zones data
+  const serializableZones = discovery.getZones();
+  
+  const event = {
+    type: 'topology-change',
+    data: {
+      zones: serializableZones,
+      timestamp: new Date().toISOString()
+    }
+  };
+  
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  webhookClients = webhookClients.filter(client => {
+    try {
+      client.write(sseData);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  });
+});
+
+// Forward track change events
+discovery.on('track-change', (trackEvent) => {
+  const event = {
+    type: 'track-change',
+    data: {
+      ...trackEvent,
+      timestamp: new Date().toISOString()
+    }
+  };
+  
   const sseData = `data: ${JSON.stringify(event)}\n\n`;
   webhookClients = webhookClients.filter(client => {
     try {

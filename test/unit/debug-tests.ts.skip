@@ -1,0 +1,207 @@
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import { MockDiscovery, createMockDiscovery } from '../helpers/mock-factory.js';
+import { ApiRouter } from '../../src/api-router.js';
+import type { Config } from '../../src/types/sonos.js';
+import { testEndpoint } from '../helpers/test-helpers.js';
+import { createMockConfig, MockDefaultRoomManager, MockTTSService, MockPresetLoader } from '../helpers/mock-factory.js';
+import { debugManager } from '../../src/utils/debug-manager.js';
+
+describe('Debug Endpoints Unit Tests', () => {
+  let mockDiscovery: MockDiscovery;
+  let router: ApiRouter;
+  let config: Config;
+
+  beforeEach(() => {
+    mockDiscovery = createMockDiscovery('Bedroom');
+    config = createMockConfig();
+    const mockDefaultRoomManager = new MockDefaultRoomManager(config);
+    const mockTTSService = new MockTTSService();
+    const mockPresetLoader = new MockPresetLoader();
+    
+    router = new ApiRouter(
+      mockDiscovery as any, 
+      config,
+      mockPresetLoader as any,
+      mockDefaultRoomManager as any,
+      mockTTSService as any
+    );
+    
+    // Reset debug manager
+    debugManager.setLevel('info');
+    debugManager.disableAllCategories();
+    debugManager.enableCategory('api');
+  });
+
+  describe('Debug Status', () => {
+    it('should get current debug configuration', async () => {
+      const response = await testEndpoint(router, '/debug');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.logLevel, 'info');
+      assert.strictEqual(data.categories.api, true);
+      assert.strictEqual(data.categories.soap, false);
+    });
+  });
+
+  describe('Log Level Management', () => {
+    it('should set log level to debug', async () => {
+      const response = await testEndpoint(router, '/debug/level/debug');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.logLevel, 'debug');
+    });
+
+    it('should set log level to error', async () => {
+      const response = await testEndpoint(router, '/debug/level/error');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.logLevel, 'error');
+    });
+
+    it('should set log level to warn', async () => {
+      const response = await testEndpoint(router, '/debug/level/warn');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.logLevel, 'warn');
+    });
+
+    it('should reject invalid log level', async () => {
+      const response = await testEndpoint(router, '/debug/level/verbose');
+      
+      assert.strictEqual(response.status, 400);
+    });
+
+    it('should handle legacy loglevel endpoint', async () => {
+      const response = await testEndpoint(router, '/loglevel/debug');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.logLevel, 'debug');
+    });
+  });
+
+  describe('Debug Category Management', () => {
+    it('should enable a debug category', async () => {
+      const response = await testEndpoint(router, '/debug/category/soap/true');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.categories.soap, true);
+    });
+
+    it('should disable a debug category', async () => {
+      debugManager.enableCategory('topology');
+      
+      const response = await testEndpoint(router, '/debug/category/topology/false');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.categories.topology, false);
+    });
+
+    it('should enable category with "on"', async () => {
+      const response = await testEndpoint(router, '/debug/category/discovery/on');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.categories.discovery, true);
+    });
+
+    it('should disable category with "off"', async () => {
+      const response = await testEndpoint(router, '/debug/category/api/off');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.categories.api, false);
+    });
+
+    it('should handle invalid category gracefully', async () => {
+      const response = await testEndpoint(router, '/debug/category/invalidcategory/true');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.categories.invalidcategory, true);
+    });
+  });
+
+  describe('Bulk Category Management', () => {
+    it('should enable all debug categories', async () => {
+      const response = await testEndpoint(router, '/debug/enable-all');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      
+      // Check known categories are enabled
+      assert.strictEqual(data.categories.soap, true);
+      assert.strictEqual(data.categories.topology, true);
+      assert.strictEqual(data.categories.discovery, true);
+      assert.strictEqual(data.categories.favorites, true);
+      assert.strictEqual(data.categories.presets, true);
+      assert.strictEqual(data.categories.upnp, true);
+      assert.strictEqual(data.categories.api, true);
+    });
+
+    it('should disable all debug categories except API', async () => {
+      // First enable all
+      debugManager.enableAllCategories();
+      
+      const response = await testEndpoint(router, '/debug/disable-all');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      
+      // Check all are disabled except API
+      assert.strictEqual(data.categories.api, true);
+      assert.strictEqual(data.categories.soap, false);
+      assert.strictEqual(data.categories.topology, false);
+      assert.strictEqual(data.categories.discovery, false);
+    });
+  });
+
+  describe('Debug Response Format', () => {
+    it('should return consistent debug status format', async () => {
+      const response = await testEndpoint(router, '/debug');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      
+      // Check response structure
+      assert(data.hasOwnProperty('logLevel'));
+      assert(data.hasOwnProperty('categories'));
+      assert(typeof data.logLevel === 'string');
+      assert(typeof data.categories === 'object');
+    });
+
+    it('should return same format after changes', async () => {
+      await testEndpoint(router, '/debug/level/debug');
+      await testEndpoint(router, '/debug/category/soap/true');
+      
+      const response = await testEndpoint(router, '/debug');
+      const data = JSON.parse(response.body);
+      
+      assert(data.hasOwnProperty('logLevel'));
+      assert(data.hasOwnProperty('categories'));
+      assert.strictEqual(data.logLevel, 'debug');
+      assert.strictEqual(data.categories.soap, true);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle invalid enabled value', async () => {
+      const response = await testEndpoint(router, '/debug/category/soap/maybe');
+      
+      assert.strictEqual(response.status, 400);
+    });
+
+    it('should handle missing parameters gracefully', async () => {
+      const response = await testEndpoint(router, '/debug/category/soap');
+      
+      assert.strictEqual(response.status, 404);
+    });
+  });
+});

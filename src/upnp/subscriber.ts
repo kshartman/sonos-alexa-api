@@ -63,7 +63,7 @@ export class UPnPSubscriber {
   }
 
   async subscribe(deviceBaseUrl: string, service: string, deviceId?: string, timeout = 300): Promise<string> {
-    const subscriptionId = `${deviceBaseUrl}/${service}`;
+    const subscriptionId = `${deviceBaseUrl}${service}`;
     const existingSub = this.subscriptions.get(subscriptionId);
     
     if (existingSub) {
@@ -71,7 +71,8 @@ export class UPnPSubscriber {
       return subscriptionId;
     }
 
-    const eventUrl = `${deviceBaseUrl}/${service}/Event`;
+    // service already contains the full path (e.g., /MediaRenderer/AVTransport/Event)
+    const eventUrl = `${deviceBaseUrl}${service}`;
     const callbackUrl = `http://${this.callbackHost}:${this.callbackPort}/notify/${encodeURIComponent(subscriptionId)}`;
     
     const subscription: Subscription = {
@@ -93,7 +94,7 @@ export class UPnPSubscriber {
       // Set up renewal timer
       this.scheduleRenewal(subscription);
       
-      debugManager.debug('upnp', `Subscribed to ${service} on ${deviceBaseUrl}`);
+      debugManager.debug('upnp', `Subscribed to ${service} on ${deviceBaseUrl} with ID: ${subscriptionId}`);
       return subscriptionId;
     } catch (error) {
       debugManager.error('upnp', `Failed to subscribe to ${service} on ${deviceBaseUrl}:`, error);
@@ -121,25 +122,40 @@ export class UPnPSubscriber {
     }
   }
 
-  private async performSubscribe(subscription: Subscription): Promise<void> {
+  private async performSubscribe(subscription: Subscription, isRenewal = false): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = new URL(subscription.url);
+      const headers: any = {
+        'TIMEOUT': `Second-${subscription.timeout}`,
+        'USER-AGENT': 'Node.js UPnP/1.0 sonos-alexa-api'
+      };
+      
+      if (isRenewal && subscription.sid) {
+        // Renewal - use existing SID
+        headers['SID'] = subscription.sid;
+      } else {
+        // Initial subscription
+        headers['CALLBACK'] = `<${subscription.callback}>`;
+        headers['NT'] = 'upnp:event';
+      }
+      
       const options = {
         hostname: url.hostname,
         port: url.port || 80,
         path: url.pathname,
         method: 'SUBSCRIBE',
-        headers: {
-          'CALLBACK': `<${subscription.callback}>`,
-          'NT': 'upnp:event',
-          'TIMEOUT': `Second-${subscription.timeout}`,
-          'USER-AGENT': 'Node.js UPnP/1.0 sonos-alexa-api'
-        }
+        headers
       };
 
       const req = http.request(options, (res) => {
         if (res.statusCode === 200) {
-          subscription.sid = res.headers.sid as string;
+          const newSid = res.headers.sid as string;
+          if (isRenewal) {
+            debugManager.debug('upnp', `Renewal successful for ${subscription.id}, SID: ${newSid}`);
+          } else {
+            subscription.sid = newSid;
+            debugManager.info('upnp', `Initial subscription successful for ${subscription.id}, SID: ${newSid}, timeout: ${subscription.timeout}s`);
+          }
           resolve();
         } else {
           reject(new Error(`Subscription failed: ${res.statusCode} ${res.statusMessage}`));
@@ -189,23 +205,39 @@ export class UPnPSubscriber {
     
     subscription.renewalTimer = setTimeout(async () => {
       try {
-        await this.performSubscribe(subscription);
+        await this.performSubscribe(subscription, true); // Pass true for renewal
         this.scheduleRenewal(subscription); // Schedule next renewal
-        debugManager.debug('upnp', `Renewed subscription to ${subscription.id}`);
+        debugManager.info('upnp', `Renewed subscription to ${subscription.id} (SID: ${subscription.sid})`);
       } catch (error) {
         debugManager.error('upnp', `Failed to renew subscription to ${subscription.id}:`, error);
-        // Remove failed subscription
-        this.subscriptions.delete(subscription.id);
+        // Try to resubscribe from scratch
+        try {
+          subscription.sid = undefined; // Clear SID to force new subscription
+          await this.performSubscribe(subscription, false);
+          this.scheduleRenewal(subscription);
+          debugManager.info('upnp', `Resubscribed to ${subscription.id} after renewal failure`);
+        } catch (resubError) {
+          debugManager.error('upnp', `Failed to resubscribe to ${subscription.id}:`, resubError);
+          this.subscriptions.delete(subscription.id);
+        }
       }
     }, renewalTime);
   }
 
   private handleNotification(req: http.IncomingMessage, res: http.ServerResponse): void {
-    res.writeHead(200);
-    res.end();
-
+    // Don't end the response until we've read all the data
+    debugManager.info('upnp', `Received ${req.method} request to ${req.url}`);
+    
     if (req.method !== 'NOTIFY') {
+      debugManager.debug('upnp', `Ignoring non-NOTIFY request: ${req.method}`);
+      res.writeHead(200);
+      res.end();
       return;
+    }
+    
+    // Debug: Check content length for ZoneGroupTopology
+    if (req.url && req.url.includes('ZoneGroupTopology')) {
+      debugManager.debug('upnp', `ZoneGroupTopology notification headers:`, req.headers);
     }
 
     let body = '';
@@ -214,27 +246,44 @@ export class UPnPSubscriber {
     });
 
     req.on('end', () => {
+      debugManager.debug('upnp', `Processing notification for ${req.url}, body length: ${body.length}`);
+      
+      // Send response after we've read all data
+      res.writeHead(200);
+      res.end();
+      
       try {
         // Extract subscription ID from URL path
         const urlPath = req.url || '';
         const match = urlPath.match(/\/notify\/(.+)$/);
         if (!match) {
+          debugManager.warn('upnp', `No match for notification URL pattern: ${urlPath}`);
           return;
         }
 
         const subscriptionId = decodeURIComponent(match[1]!);
+        debugManager.debug('upnp', `Looking up subscription for ID: ${subscriptionId}`);
+        
+        // Debug: show all subscription IDs
+        if (subscriptionId.includes('ZoneGroupTopology')) {
+          debugManager.debug('upnp', `All subscription IDs: ${Array.from(this.subscriptions.keys()).join(', ')}`);
+        }
+        
         const subscription = this.subscriptions.get(subscriptionId);
         if (!subscription) {
+          debugManager.warn('upnp', `No subscription found for ID: ${subscriptionId}`);
           return;
         }
 
         // Look up device ID and service from stored mapping
         const mapping = this.deviceMapping.get(subscriptionId);
         if (!mapping) {
-          debugManager.debug('upnp', `No device mapping found for subscription ${subscriptionId}`);
+          debugManager.warn('upnp', `No device mapping found for subscription ${subscriptionId}`);
+          debugManager.debug('upnp', `Available mappings: ${Array.from(this.deviceMapping.keys()).join(', ')}`);
           return;
         }
 
+        debugManager.info('upnp', `Processing event for device ${mapping.deviceId}, service ${mapping.service}`);
         this.eventHandler(mapping.deviceId, mapping.service, body);
       } catch (error) {
         debugManager.error('upnp', 'Error handling UPnP notification:', error);

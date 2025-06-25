@@ -48,11 +48,13 @@ export class ApiRouter {
     this.routes.set('GET /{room}/stop', this.stop.bind(this));
     this.routes.set('GET /{room}/next', this.next.bind(this));
     this.routes.set('GET /{room}/previous', this.previous.bind(this));
-    this.routes.set('GET /{room}/volume/{level}', this.setVolume.bind(this));
+    // Register more specific routes first
     this.routes.set('GET /{room}/volume/+{delta}', this.volumeUp.bind(this));
     this.routes.set('GET /{room}/volume/-{delta}', this.volumeDown.bind(this));
+    this.routes.set('GET /{room}/volume/{level}', this.setVolume.bind(this));
     this.routes.set('GET /{room}/mute', this.mute.bind(this));
     this.routes.set('GET /{room}/unmute', this.unmute.bind(this));
+    this.routes.set('GET /{room}/togglemute', this.toggleMute.bind(this));
     this.routes.set('GET /{room}/preset/{preset}', this.playPreset.bind(this));
 
     // Group management routes
@@ -86,11 +88,18 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/thumbsup', this.pandoraThumbsUp.bind(this));
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
     
-    // Playback control routes
+    // Queue management routes
+    this.routes.set('GET /{room}/queue', this.getQueue.bind(this));
+    this.routes.set('GET /{room}/queue/{limit}', this.getQueue.bind(this));
+    this.routes.set('GET /{room}/queue/{limit}/{offset}', this.getQueue.bind(this));
+    this.routes.set('GET /{room}/queue/detailed', this.getQueueDetailed.bind(this));
     this.routes.set('GET /{room}/clearqueue', this.clearQueue.bind(this));
+    
+    // Playback control routes
     this.routes.set('GET /{room}/repeat/{toggle}', this.setRepeat.bind(this));
     this.routes.set('GET /{room}/shuffle/{toggle}', this.setShuffle.bind(this));
     this.routes.set('GET /{room}/crossfade/{toggle}', this.setCrossfade.bind(this));
+    this.routes.set('GET /{room}/sleep/{seconds}', this.setSleepTimer.bind(this));
     this.routes.set('GET /{room}/linein/{source}', this.playLineIn.bind(this));
     this.routes.set('GET /{room}/groupVolume/{level}', this.setGroupVolume.bind(this));
     
@@ -130,6 +139,9 @@ export class ApiRouter {
     
     // Debug endpoint for account testing
     this.routes.set('GET /{room}/debug/accounts', this.debugAccounts.bind(this));
+    
+    // Debug endpoint for subscription status
+    this.routes.set('GET /debug/subscriptions', this.debugSubscriptions.bind(this));
   }
 
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -249,6 +261,20 @@ export class ApiRouter {
       if (patternPart.startsWith('{') && patternPart.endsWith('}')) {
         const paramName = patternPart.slice(1, -1);
         params[paramName] = decodeURIComponent(actualPart);
+      } else if (patternPart.includes('{') && patternPart.includes('}')) {
+        // Handle patterns like +{delta} or -{delta}
+        const paramMatch = patternPart.match(/^(.*)\{([^}]+)\}(.*)$/);
+        if (paramMatch) {
+          const [, prefix, paramName, suffix] = paramMatch;
+          if (actualPart.startsWith(prefix!) && actualPart.endsWith(suffix!)) {
+            const value = actualPart.slice(prefix!.length, actualPart.length - suffix!.length);
+            params[paramName!] = decodeURIComponent(value);
+          } else {
+            return null;
+          }
+        } else {
+          return null;
+        }
       } else if (patternPart !== actualPart) {
         return null;
       }
@@ -327,16 +353,121 @@ export class ApiRouter {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
     
+    // Determine if we should use coordinator for certain info
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    // Get transport settings for playMode information from the coordinator
+    let playMode = {
+      repeat: 'none',
+      shuffle: false,
+      crossfade: false
+    };
+    
+    try {
+      // Get transport settings for repeat/shuffle from coordinator
+      const transportSettings = await coordinator.getTransportSettings();
+      const mode = transportSettings.PlayMode || 'NORMAL';
+      
+      // Get crossfade mode separately
+      let crossfade = false;
+      try {
+        const crossfadeMode = await coordinator.getCrossfadeMode();
+        crossfade = crossfadeMode.CrossfadeMode === '1' || crossfadeMode.CrossfadeMode === 1;
+      } catch (e) {
+        // Some devices might not support crossfade
+        logger.debug(`Crossfade not supported for ${room}`);
+      }
+      
+      playMode = {
+        repeat: mode.includes('REPEAT_ONE') ? 'one' : 
+                (mode.includes('REPEAT') || mode === 'SHUFFLE') ? 'all' : 'none',
+        shuffle: mode.includes('SHUFFLE'),
+        crossfade
+      };
+    } catch (error) {
+      logger.debug(`Failed to get transport settings for ${room}:`, error);
+    }
+    
+    // Get position info and track data from coordinator
+    let relTime = 0;
+    let trackNo = 0;
+    let currentTrack = null;
+    let nextTrack = null;
+    
+    try {
+      const positionInfo = await coordinator.getPositionInfo();
+      
+      // Parse time format "0:00:00" to seconds
+      if (positionInfo.RelTime && positionInfo.RelTime !== 'NOT_IMPLEMENTED') {
+        const parts = positionInfo.RelTime.split(':');
+        relTime = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+      }
+      trackNo = parseInt(positionInfo.Track) || 0;
+      
+      // Get current track from coordinator's state
+      currentTrack = coordinator.state.currentTrack;
+    } catch (error) {
+      logger.debug(`Failed to get position info from coordinator for ${room}:`, error);
+    }
+    
+    // Get equalizer settings
+    let equalizer = {
+      bass: 0,
+      treble: 0,
+      loudness: false
+    };
+    
+    try {
+      // Get RenderingControl properties for equalizer
+      const bass = await device.soap('RenderingControl', 'GetBass', { InstanceID: 0, Channel: 'Master' });
+      const treble = await device.soap('RenderingControl', 'GetTreble', { InstanceID: 0, Channel: 'Master' });
+      const loudness = await device.soap('RenderingControl', 'GetLoudness', { InstanceID: 0, Channel: 'Master' });
+      
+      equalizer = {
+        bass: parseInt(bass.CurrentBass) || 0,
+        treble: parseInt(treble.CurrentTreble) || 0,
+        loudness: loudness.CurrentLoudness === '1' || loudness.CurrentLoudness === 1
+      };
+    } catch (error) {
+      logger.debug(`Failed to get equalizer settings for ${room}:`, error);
+    }
+    
     // Create a safe copy of the state without circular references
     const safeState = {
-      playbackState: device.state.playbackState,
-      volume: device.state.volume,
-      mute: device.state.mute,
-      currentTrack: device.state.currentTrack,
-      coordinator: device.state.coordinator ? {
-        id: device.state.coordinator.id,
-        roomName: device.state.coordinator.roomName,
-        modelName: device.state.coordinator.modelName
+      // Use coordinator's track info if this device is not the coordinator
+      currentTrack: currentTrack || coordinator.state.currentTrack || {
+        artist: '',
+        title: '',
+        album: '',
+        albumArtUri: '',
+        duration: 0,
+        uri: '',
+        trackUri: '',
+        type: 'track',
+        stationName: ''
+      },
+      nextTrack: nextTrack || {
+        artist: '',
+        title: '',
+        album: '',
+        albumArtUri: '',
+        duration: 0,
+        uri: ''
+      },
+      playMode,
+      playlistName: '',  // TODO: Implement playlist name detection
+      relTime,
+      stateTime: Date.now(),
+      volume: device.state.volume,  // Volume is device-specific
+      mute: device.state.mute,      // Mute is device-specific
+      trackNo,
+      playbackState: coordinator.state.playbackState,  // Playback state from coordinator
+      equalizer,
+      // Keep our additional field
+      coordinator: coordinator.id !== device.id ? {
+        id: coordinator.id,
+        roomName: coordinator.roomName,
+        modelName: coordinator.modelName
       } : undefined
     };
     
@@ -346,24 +477,28 @@ export class ApiRouter {
   private async play({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    await device.play();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.play();
     return { status: 200, body: { status: 'success' } };
   }
 
   private async pause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    await device.pause();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.pause();
     return { status: 200, body: { status: 'success' } };
   }
 
   private async playPause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    if (device.state.playbackState === 'PLAYING') {
-      await device.pause();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    if (coordinator.state.playbackState === 'PLAYING') {
+      await coordinator.pause();
     } else {
-      await device.play();
+      await coordinator.play();
     }
     return { status: 200, body: { status: 'success' } };
   }
@@ -371,21 +506,24 @@ export class ApiRouter {
   private async stop({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    await device.stop();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.stop();
     return { status: 200, body: { status: 'success' } };
   }
 
   private async next({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    await device.next();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.next();
     return { status: 200, body: { status: 'success' } };
   }
 
   private async previous({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
-    await device.previous();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.previous();
     return { status: 200, body: { status: 'success' } };
   }
 
@@ -447,6 +585,14 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
 
+  private async toggleMute({ room }: RouteParams): Promise<ApiResponse<{status: string, muted: boolean}>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    const device = this.getDevice(room);
+    const currentMute = device.state.mute;
+    await device.setMute(!currentMute);
+    return { status: 200, body: { status: 'success', muted: !currentMute } };
+  }
+
   private async playPreset({ room, preset }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!preset) throw { status: 400, message: 'Preset parameter is required' };
@@ -478,9 +624,20 @@ export class ApiRouter {
   // Global endpoints
   private async pauseAll(): Promise<ApiResponse<SuccessResponse>> {
     const devices = this.discovery.getAllDevices();
-    await Promise.all(devices.map(device => device.pause().catch(err => 
-      logger.error(`Error pausing ${device.roomName}:`, err)
-    )));
+    
+    // Only pause coordinators to avoid duplicate commands
+    const coordinators = devices.filter(device => this.discovery.isCoordinator(device.id));
+    
+    await Promise.all(coordinators.map(async device => {
+      try {
+        // Only pause if the device is actually playing
+        if (device.state.playbackState === 'PLAYING') {
+          await device.pause();
+        }
+      } catch (err) {
+        logger.error(`Error pausing ${device.roomName}:`, err);
+      }
+    }));
     return { status: 200, body: { status: 'success' } };
   }
 
@@ -493,11 +650,30 @@ export class ApiRouter {
     const device = this.getDevice(room);
     const targetDevice = this.getDevice(targetRoom);
     
+    // Get the coordinator of the source device (handles stereo pairs)
+    const sourceCoordinator = this.discovery.getCoordinator(device.id) || device;
+    
     // Get the coordinator of the target room's group
     const targetCoordinator = this.discovery.getCoordinator(targetDevice.id) || targetDevice;
     
-    // Make this device join the target coordinator's group
-    await device.addPlayerToGroup(targetCoordinator.id.replace('uuid:', ''));
+    // Don't join to self
+    if (sourceCoordinator.id === targetCoordinator.id) {
+      debugManager.debug('api', `${room} is already in the same group as ${targetRoom}`);
+      return { status: 200, body: { status: 'success' } };
+    }
+    
+    try {
+      // First, make the source device leave its current group (if in one)
+      debugManager.debug('api', `Making ${sourceCoordinator.roomName} leave its current group`);
+      await sourceCoordinator.becomeCoordinatorOfStandaloneGroup();
+    } catch (error) {
+      // It's OK if this fails - device might already be standalone
+      debugManager.debug('api', `${sourceCoordinator.roomName} leave group failed (might already be standalone):`, error);
+    }
+    
+    // Then join the target coordinator's group
+    debugManager.debug('api', `Adding ${sourceCoordinator.roomName} to ${targetCoordinator.roomName}'s group`);
+    await sourceCoordinator.addPlayerToGroup(targetCoordinator.id.replace('uuid:', ''));
     
     return { status: 200, body: { status: 'success' } };
   }
@@ -507,10 +683,96 @@ export class ApiRouter {
     
     const device = this.getDevice(room);
     
-    // Make this device become a standalone coordinator
-    await device.becomeCoordinatorOfStandaloneGroup();
+    // Get current zone information
+    const zones = this.discovery.getZones();
+    const deviceZone = zones.find(zone => 
+      zone.members.some(member => member.roomName.toLowerCase() === room.toLowerCase())
+    );
     
-    return { status: 200, body: { status: 'success' } };
+    if (!deviceZone) {
+      throw { status: 404, message: `Room '${room}' not found in any zone` };
+    }
+    
+    // Only block breaking up pure stereo pairs (exactly 2 members with same room name in zone)
+    // Allow stereo pairs to leave larger groups (more than 2 members total)
+    if (deviceZone.members.length === 2) {
+      const uniqueRoomNames = new Set(deviceZone.members.map(m => m.roomName));
+      if (uniqueRoomNames.size === 1) {
+        // This is a pure stereo pair - cannot be broken
+        throw { 
+          status: 400, 
+          message: `Cannot break stereo pair '${room}'. Stereo pairs can only be separated using the Sonos app.` 
+        };
+      }
+    }
+    
+    // Try to make the device leave
+    try {
+      await device.becomeCoordinatorOfStandaloneGroup();
+      debugManager.debug('api', `${room} left group successfully`);
+      return { status: 200, body: { status: 'success' } };
+    } catch (error: any) {
+      // Check if this is because the device is already the coordinator
+      if (error.message && (error.message.includes('1023') || error.message.includes('701'))) {
+        throw { 
+          status: 400, 
+          message: `Cannot ungroup '${room}': It appears to be the group coordinator. Other members must leave first.` 
+        };
+      }
+      
+      // For stereo pairs, we need to find the primary (left) speaker
+      const membersWithSameRoom = deviceZone.members.filter(m => m.roomName === room);
+      if (membersWithSameRoom.length > 1) {
+        debugManager.debug('api', `First device failed for stereo pair ${room}, looking for primary speaker`);
+        
+        // Get the stereo pair primary from topology
+        const primaryUuid = this.discovery.topologyManager.getStereoPairPrimary(room);
+        if (primaryUuid) {
+          // Add uuid: prefix if not present
+          const primaryId = primaryUuid.startsWith('uuid:') ? primaryUuid : `uuid:${primaryUuid}`;
+          debugManager.debug('api', `Looking for primary device with ID: ${primaryId}`);
+          const primaryDevice = this.discovery.getDeviceById(primaryId);
+          debugManager.debug('api', `Primary device lookup result: ${primaryDevice ? primaryDevice.id : 'not found'}`);
+          if (primaryDevice && primaryDevice.id !== device.id) {
+            try {
+              debugManager.debug('api', `Trying stereo pair primary device ${primaryDevice.id} for ${room}`);
+              await primaryDevice.becomeCoordinatorOfStandaloneGroup();
+              debugManager.debug('api', `${room} left group successfully via primary device ${primaryDevice.id}`);
+              return { status: 200, body: { status: 'success' } };
+            } catch (e: any) {
+              debugManager.debug('api', `Primary device ${primaryDevice.id} also failed: ${e.message}`);
+            }
+          }
+        }
+        
+        // Fallback: try all devices with this room name
+        for (const member of membersWithSameRoom) {
+          debugManager.debug('api', `Checking member ${member.id} for room ${room}`);
+          const memberDevice = this.discovery.getDeviceById(member.id);
+          if (memberDevice) {
+            debugManager.debug('api', `Found device ${memberDevice.id}, original device was ${device.id}`);
+            if (memberDevice.id !== device.id) {
+              try {
+                debugManager.debug('api', `Trying device ${memberDevice.id} for stereo pair ${room}`);
+                await memberDevice.becomeCoordinatorOfStandaloneGroup();
+                debugManager.debug('api', `${room} left group successfully via device ${member.id}`);
+                return { status: 200, body: { status: 'success' } };
+              } catch (e: any) {
+                // Continue trying other devices
+                debugManager.debug('api', `Device ${member.id} also failed: ${e.message}`);
+              }
+            } else {
+              debugManager.debug('api', `Skipping same device ${memberDevice.id}`);
+            }
+          } else {
+            debugManager.debug('api', `Could not find device for member ${member.id}`);
+          }
+        }
+      }
+      
+      // All attempts failed
+      throw error;
+    }
   }
 
   private async addToGroup({ room, otherRoom }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -530,7 +792,8 @@ export class ApiRouter {
   }
 
   // Favorites endpoints
-  private async getFavorites({ room, queryParams }: RouteParams & { queryParams?: URLSearchParams }): Promise<ApiResponse> {
+  private async getFavorites(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+    const { room } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
@@ -568,11 +831,15 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.playUri(favorite.uri, favorite.metadata, this.discovery);
     
+    // Play the favorite (matching legacy behavior)
+    await coordinator.play();
+    
     return { status: 200, body: { status: 'success' } };
   }
 
   // Playlists endpoints
-  private async getPlaylists({ room, queryParams }: RouteParams & { queryParams?: URLSearchParams }): Promise<ApiResponse> {
+  private async getPlaylists(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+    const { room } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
@@ -613,6 +880,9 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.playUri(playlist.uri, playlist.metadata || '', this.discovery);
     
+    // Play the playlist (matching legacy behavior)
+    await coordinator.play();
+    
     return { status: 200, body: { status: 'success' } };
   }
 
@@ -638,6 +908,7 @@ export class ApiRouter {
     case 'now':
       // Replace queue and play immediately
       await coordinator.playUri(uri, metadata, this.discovery);
+      // playUri already calls play(), so no need to call it again
       break;
       
     case 'next': {
@@ -726,7 +997,7 @@ export class ApiRouter {
   private async setDebugLevel({ level }: RouteParams): Promise<ApiResponse> {
     if (!level) throw { status: 400, message: 'Level parameter is required' };
     
-    const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug'];
+    const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'wall'];
     if (!validLevels.includes(level as LogLevel)) {
       throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
     }
@@ -739,7 +1010,7 @@ export class ApiRouter {
     if (!category) throw { status: 400, message: 'Category parameter is required' };
     if (!enabled) throw { status: 400, message: 'Enabled parameter is required' };
 
-    const validCategories: (keyof DebugCategories)[] = ['soap', 'topology', 'discovery', 'favorites', 'presets', 'upnp', 'api'];
+    const validCategories: (keyof DebugCategories)[] = ['soap', 'topology', 'discovery', 'favorites', 'presets', 'upnp', 'api', 'sse'];
     if (!validCategories.includes(category as keyof DebugCategories)) {
       throw { status: 400, message: `Invalid category. Must be one of: ${validCategories.join(', ')}` };
     }
@@ -830,13 +1101,15 @@ export class ApiRouter {
   // Room-less endpoints that use default room
   private async playDefault(): Promise<ApiResponse<SuccessResponse>> {
     const device = this.getDevice(undefined); // Will use default room
-    await device.play();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.play();
     return { status: 200, body: { status: 'success' } };
   }
   
   private async pauseDefault(): Promise<ApiResponse<SuccessResponse>> {
     const device = this.getDevice(undefined); // Will use default room
-    await device.pause();
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.pause();
     return { status: 200, body: { status: 'success' } };
   }
   
@@ -867,8 +1140,9 @@ export class ApiRouter {
     if (!presetConfig) {
       throw { status: 404, message: `Preset '${preset}' not found` };
     }
-
-    await device.playPreset(presetConfig, this.discovery);
+    
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.playPreset(presetConfig, this.discovery);
     return { status: 200, body: { status: 'success' } };
   }
   
@@ -952,19 +1226,86 @@ export class ApiRouter {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!name) throw { status: 400, message: 'Station name is required' };
     
-    throw { status: 501, message: 'Pandora support not yet implemented' };
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      // Import PandoraService
+      const { PandoraService } = await import('./services/pandora-service.js');
+      
+      // Try to play the station
+      await PandoraService.playStation(coordinator, decodeURIComponent(name), this.config);
+      
+      // Update default room
+      this.defaultRoomManager.setDefaults(room);
+      
+      return { status: 200, body: { status: 'success' } };
+    } catch (error: any) {
+      logger.error(`Failed to play Pandora station '${name}':`, error);
+      throw { status: 404, message: error.message || 'Failed to play Pandora station' };
+    }
   }
   
   private async pandoraThumbsUp({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
-    throw { status: 501, message: 'Pandora support not yet implemented' };
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      const { PandoraService } = await import('./services/pandora-service.js');
+      await PandoraService.sendFeedback(coordinator, true, this.config);
+      return { status: 200, body: { status: 'success' } };
+    } catch (error: any) {
+      logger.error('Failed to send Pandora thumbs up:', error);
+      throw { status: 400, message: error.message || 'Failed to send thumbs up' };
+    }
   }
   
   private async pandoraThumbsDown({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
-    throw { status: 501, message: 'Pandora support not yet implemented' };
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    try {
+      const { PandoraService } = await import('./services/pandora-service.js');
+      await PandoraService.sendFeedback(coordinator, false, this.config);
+      return { status: 200, body: { status: 'success' } };
+    } catch (error: any) {
+      logger.error('Failed to send Pandora thumbs down:', error);
+      throw { status: 400, message: error.message || 'Failed to send thumbs down' };
+    }
+  }
+  
+  // Queue management endpoints
+  private async getQueue({ room, limit, offset }: RouteParams): Promise<ApiResponse> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    
+    const device = this.getDevice(room);
+    // Use coordinator for queue operations
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    const limitNum = limit ? parseInt(limit as string) : 100;
+    const offsetNum = offset ? parseInt(offset as string) : 0;
+    
+    const queueData = await coordinator.getQueue(limitNum, offsetNum);
+    
+    // Return the full queue object for proper API compatibility
+    return { status: 200, body: queueData };
+  }
+  
+  private async getQueueDetailed({ room }: RouteParams): Promise<ApiResponse> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    
+    const device = this.getDevice(room);
+    // Use coordinator for queue operations
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    // For detailed, return the full queue data structure
+    const queueData = await coordinator.getQueue(100, 0);
+    
+    return { status: 200, body: queueData };
   }
   
   // Playback control endpoints
@@ -987,7 +1328,8 @@ export class ApiRouter {
     }
     
     const device = this.getDevice(room);
-    await device.setRepeat(toggle === 'on' ? 'all' : 'none');
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.setRepeat(toggle === 'on' ? 'all' : 'none');
     
     return { status: 200, body: { status: 'success' } };
   }
@@ -1001,7 +1343,8 @@ export class ApiRouter {
     }
     
     const device = this.getDevice(room);
-    await device.setShuffle(toggle === 'on');
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.setShuffle(toggle === 'on');
     
     return { status: 200, body: { status: 'success' } };
   }
@@ -1015,7 +1358,24 @@ export class ApiRouter {
     }
     
     const device = this.getDevice(room);
-    await device.setCrossfade(toggle === 'on');
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.setCrossfade(toggle === 'on');
+    
+    return { status: 200, body: { status: 'success' } };
+  }
+  
+  private async setSleepTimer({ room, seconds }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!seconds) throw { status: 400, message: 'Seconds parameter is required' };
+    
+    const sleepSeconds = parseInt(seconds, 10);
+    if (isNaN(sleepSeconds) || sleepSeconds < 0) {
+      throw { status: 400, message: 'Seconds must be a non-negative number' };
+    }
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.setSleepTimer(sleepSeconds);
     
     return { status: 200, body: { status: 'success' } };
   }
@@ -1025,7 +1385,8 @@ export class ApiRouter {
     if (!source) throw { status: 400, message: 'Source parameter is required' };
     
     const device = this.getDevice(room);
-    await device.playLineIn(source);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    await coordinator.playLineIn(source);
     
     return { status: 200, body: { status: 'success' } };
   }
@@ -1068,8 +1429,9 @@ export class ApiRouter {
       throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
     }
     
-    // Set the winston logger level
+    // Set both winston logger level and debug manager level
     logger.level = level;
+    debugManager.setLogLevel(level as LogLevel);
     
     return { status: 200, body: { status: 'success', logLevel: level } };
   }
@@ -1324,5 +1686,29 @@ export class ApiRouter {
     } catch (error) {
       throw { status: 500, message: `Debug failed: ${(error as Error).message}` };
     }
+  }
+
+  async debugSubscriptions(): Promise<ApiResponse<any>> {
+    const devices = this.discovery.getAllDevices();
+    const subscriber = (this.discovery as any).subscriber;
+    
+    const result = {
+      subscriberStatus: subscriber ? 'active' : 'not initialized',
+      callbackServer: subscriber ? {
+        host: subscriber.callbackHost,
+        port: subscriber.callbackPort
+      } : null,
+      devices: devices.map(device => ({
+        roomName: device.roomName,
+        id: device.id,
+        baseUrl: device.baseUrl,
+        subscriptions: 'Check server logs for subscription details'
+      }))
+    };
+    
+    return {
+      status: 200,
+      body: result
+    };
   }
 }

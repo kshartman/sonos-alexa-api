@@ -1,0 +1,210 @@
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import { MockDevice, MockDiscovery, createMockDiscovery } from '../helpers/mock-factory.js';
+import { ApiRouter } from '../../src/api-router.js';
+import type { Config } from '../../src/types/sonos.js';
+import { testEndpoint } from '../helpers/test-helpers.js';
+import { createMockConfig, MockDefaultRoomManager, MockTTSService, MockPresetLoader } from '../helpers/mock-factory.js';
+import { DefaultRoomManager } from '../../src/utils/default-room-manager.js';
+
+describe('Default Room Management Unit Tests', () => {
+  let mockDiscovery: MockDiscovery;
+  let router: ApiRouter;
+  let config: Config;
+  let defaultManager: MockDefaultRoomManager;
+  let mockPresetLoader: MockPresetLoader;
+
+  beforeEach(() => {
+    mockDiscovery = createMockDiscovery('Bedroom', 'Kitchen', 'Living Room');
+    config = createMockConfig();
+    config.dataDir = '/tmp/test-data';
+    defaultManager = new MockDefaultRoomManager(config);
+    const mockTTSService = new MockTTSService();
+    mockPresetLoader = new MockPresetLoader();
+    
+    router = new ApiRouter(
+      mockDiscovery as any, 
+      config,
+      mockPresetLoader as any,
+      defaultManager as any,
+      mockTTSService as any
+    );
+  });
+
+  describe('Default Room Settings', () => {
+    it('should get current default settings', async () => {
+      defaultManager.setDefaultRoom('Kitchen');
+      defaultManager.setDefaultService('apple');
+      
+      const response = await testEndpoint(router, '/default');
+      
+      assert.strictEqual(response.status, 200);
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.room, 'Kitchen');
+      assert.strictEqual(data.service, 'apple');
+    });
+
+    it('should set default room', async () => {
+      const response = await testEndpoint(router, '/default/room/Bedroom');
+      
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(defaultManager.getDefaultRoom(), 'Bedroom');
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.room, 'Bedroom');
+    });
+
+    it('should set default music service', async () => {
+      const response = await testEndpoint(router, '/default/service/pandora');
+      
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(defaultManager.getDefaultService(), 'pandora');
+      const data = JSON.parse(response.body);
+      assert.strictEqual(data.service, 'pandora');
+    });
+
+    it('should validate room exists when setting default', async () => {
+      const response = await testEndpoint(router, '/default/room/InvalidRoom');
+      
+      assert.strictEqual(response.status, 404);
+    });
+
+    it('should update default room when room is used in command', async () => {
+      defaultManager.setDefaultRoom('Kitchen');
+      
+      const response = await testEndpoint(router, '/bedroom/play');
+      
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(defaultManager.getDefaultRoom(), 'Bedroom');
+    });
+  });
+
+  describe('Room-less Playback Commands', () => {
+    beforeEach(() => {
+      defaultManager.setDefaultRoom('Kitchen');
+    });
+
+    it('should handle play without room', async () => {
+      const kitchenDevice = mockDiscovery.getDeviceByName('Kitchen')!;
+      const response = await testEndpoint(router, '/play');
+      
+      assert.strictEqual(response.status, 200);
+      assert(kitchenDevice.wasMethodCalled('play'));
+    });
+
+    it('should handle pause without room', async () => {
+      const kitchenDevice = mockDiscovery.getDeviceByName('Kitchen')!;
+      const response = await testEndpoint(router, '/pause');
+      
+      assert.strictEqual(response.status, 200);
+      assert(kitchenDevice.wasMethodCalled('pause'));
+    });
+
+    it('should handle volume without room', async () => {
+      const kitchenDevice = mockDiscovery.getDeviceByName('Kitchen')!;
+      const response = await testEndpoint(router, '/volume/65');
+      
+      assert.strictEqual(response.status, 200);
+      assert(kitchenDevice.wasMethodCalled('setVolume'));
+      assert.strictEqual(kitchenDevice.state.volume, 65);
+    });
+
+    it('should return error if no default room set', async () => {
+      defaultManager.setDefaultRoom(undefined as any);
+      
+      const response = await testEndpoint(router, '/play');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('No default room'));
+    });
+  });
+
+  describe('Room-less Music Search', () => {
+    beforeEach(() => {
+      defaultManager.setDefaultRoom('Living Room');
+      defaultManager.setDefaultService('apple');
+    });
+
+    it('should handle song search without room', async () => {
+      const response = await testEndpoint(router, '/song/yesterday');
+      
+      assert.strictEqual(response.status, 200);
+      // Would call music service in real implementation
+    });
+
+    it('should handle album search without room', async () => {
+      const response = await testEndpoint(router, '/album/abbey road');
+      
+      assert.strictEqual(response.status, 200);
+    });
+
+    it('should handle station search without room', async () => {
+      const response = await testEndpoint(router, '/station/jazz');
+      
+      assert.strictEqual(response.status, 200);
+    });
+
+    it('should return error if no default music service', async () => {
+      defaultManager.setDefaultService(undefined as any);
+      
+      const response = await testEndpoint(router, '/song/test');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('No default music service'));
+    });
+  });
+
+  describe('Room-less Preset Commands', () => {
+    beforeEach(() => {
+      defaultManager.setDefaultRoom('Bedroom');
+      
+      // Mock preset configuration
+      mockPresetLoader.setPresets({
+        'morning': {
+          uri: 'x-sonosapi-radio:test',
+          volume: 30
+        }
+      });
+    });
+
+    it('should play preset in default room', async () => {
+      const bedroomDevice = mockDiscovery.getDeviceByName('Bedroom')!;
+      const response = await testEndpoint(router, '/preset/morning');
+      
+      assert.strictEqual(response.status, 200);
+      assert(bedroomDevice.wasMethodCalled('playUri'));
+      assert(bedroomDevice.wasMethodCalled('setVolume'));
+      assert.strictEqual(bedroomDevice.state.volume, 30);
+    });
+
+    it('should handle preset not found', async () => {
+      const response = await testEndpoint(router, '/preset/nonexistent');
+      
+      assert.strictEqual(response.status, 404);
+    });
+  });
+
+  describe('Default Room Persistence', () => {
+    it('should remember room changes across commands', async () => {
+      defaultManager.setDefaultRoom('Kitchen');
+      
+      // Use bedroom explicitly
+      await testEndpoint(router, '/bedroom/play');
+      assert.strictEqual(defaultManager.getDefaultRoom(), 'Bedroom');
+      
+      // Now room-less commands should use Bedroom
+      const bedroomDevice = mockDiscovery.getDeviceByName('Bedroom')!;
+      bedroomDevice.reset();
+      
+      await testEndpoint(router, '/pause');
+      assert(bedroomDevice.wasMethodCalled('pause'));
+    });
+
+    it('should handle room name case variations', async () => {
+      await testEndpoint(router, '/default/room/BEDROOM');
+      assert.strictEqual(defaultManager.getDefaultRoom(), 'Bedroom');
+      
+      await testEndpoint(router, '/default/room/bedroom');
+      assert.strictEqual(defaultManager.getDefaultRoom(), 'Bedroom');
+    });
+  });
+});

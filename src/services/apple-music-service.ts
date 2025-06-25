@@ -120,13 +120,39 @@ export class AppleMusicService extends MusicService {
     const parentId = this.config.parent[type] + result.id;
     const objectClass = this.config.objectClass[type];
     
-    return `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-      <item id="${metaId}" parentID="${parentId}" restricted="true">
-        <dc:title>${this.escapeXml(result.title)}</dc:title>
-        <upnp:class>${objectClass}</upnp:class>
-        <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON52231_X_#Svc52231-0-Token</desc>
-      </item>
-    </DIDL-Lite>`;
+    // Build metadata based on type
+    let metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">`;
+    metadata += `<item id="${metaId}" parentID="${parentId}" restricted="true">`;
+    metadata += `<dc:title>${this.escapeXml(result.title)}</dc:title>`;
+    
+    // Add artist info for songs and albums
+    if (result.artist && (type === 'song' || type === 'album')) {
+      metadata += `<dc:creator>${this.escapeXml(result.artist)}</dc:creator>`;
+      metadata += `<upnp:artist>${this.escapeXml(result.artist)}</upnp:artist>`;
+    }
+    
+    // Add album info for songs
+    if (result.album && type === 'song') {
+      metadata += `<upnp:album>${this.escapeXml(result.album)}</upnp:album>`;
+    }
+    
+    metadata += `<upnp:class>${objectClass}</upnp:class>`;
+    
+    // Add the resource URI for playback
+    if (this.account) {
+      const uri = this.generateURI(type, result);
+      metadata += `<res protocolInfo="http-get:*:audio/mpeg:*">${this.escapeXml(uri)}</res>`;
+    }
+    
+    metadata += `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON52231_X_#Svc52231-0-Token</desc>`;
+    metadata += `</item></DIDL-Lite>`;
+    
+    // Log the important parts of DIDL-Lite
+    const startIdx = metadata.indexOf('<item');
+    const endIdx = metadata.indexOf('</item>') + 7;
+    logger.debug(`Generated DIDL-Lite content: ${metadata.substring(startIdx, endIdx)}`);
+    
+    return metadata;
   }
 
   private escapeXml(text: string): string {
@@ -139,8 +165,13 @@ export class AppleMusicService extends MusicService {
   }
 
   protected override formatSearchTerm(artist: string, album: string, track: string): string {
-    // Apple Music combines all terms with spaces
-    const parts = [artist, album, track].filter(Boolean);
-    return encodeURIComponent(parts.join(' '));
+    // For iTunes API, put track first, then artist, then album for better results
+    const parts: string[] = [];
+    
+    if (track) parts.push(track);
+    if (artist) parts.push(artist);
+    if (album) parts.push(album);
+    
+    return parts.join(' ');
   }
 }

@@ -126,7 +126,12 @@ export async function soapRequest(url: string, serviceType: string, action: stri
     }
 
     const result = parseSoapResponse(responseText);
-    debugManager.debug('soap', `SOAP Response from ${url}`, { action, result });
+    
+    // Log detailed SOAP response at wall level (for massive XML responses)
+    debugManager.wall('soap', `SOAP Response from ${url}`, { action, result });
+    
+    // Log summary at debug level
+    debugManager.debug('soap', `SOAP Response from ${url} - ${action} completed`);
     
     return result;
   } catch (error) {

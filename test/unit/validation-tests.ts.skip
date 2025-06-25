@@ -1,0 +1,220 @@
+import { describe, it, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import { MockDiscovery, createMockDiscovery } from '../helpers/mock-factory.js';
+import { ApiRouter } from '../../src/api-router.js';
+import type { Config } from '../../src/types/sonos.js';
+import { testEndpoint } from '../helpers/test-helpers.js';
+import { createMockConfig, MockDefaultRoomManager, MockTTSService, MockPresetLoader } from '../helpers/mock-factory.js';
+
+describe('Request Validation Unit Tests', () => {
+  let mockDiscovery: MockDiscovery;
+  let router: ApiRouter;
+  let config: Config;
+
+  beforeEach(() => {
+    mockDiscovery = createMockDiscovery('Bedroom', 'Kitchen', 'Living Room');
+    config = createMockConfig();
+    const mockDefaultRoomManager = new MockDefaultRoomManager(config);
+    const mockTTSService = new MockTTSService();
+    const mockPresetLoader = new MockPresetLoader();
+    
+    router = new ApiRouter(
+      mockDiscovery as any, 
+      config,
+      mockPresetLoader as any,
+      mockDefaultRoomManager as any,
+      mockTTSService as any
+    );
+  });
+
+  describe('Room Name Validation', () => {
+    it('should handle case-insensitive room names', async () => {
+      const response1 = await testEndpoint(router, '/BEDROOM/play');
+      const response2 = await testEndpoint(router, '/bedroom/play');
+      const response3 = await testEndpoint(router, '/BeDrOoM/play');
+      
+      assert.strictEqual(response1.status, 200);
+      assert.strictEqual(response2.status, 200);
+      assert.strictEqual(response3.status, 200);
+    });
+
+    it('should handle URL-encoded room names', async () => {
+      const response = await testEndpoint(router, '/Living%20Room/play');
+      
+      assert.strictEqual(response.status, 200);
+    });
+
+    it('should return 404 for non-existent room', async () => {
+      const response = await testEndpoint(router, '/NonExistentRoom/play');
+      
+      assert.strictEqual(response.status, 404);
+      assert(response.body.includes('Room not found'));
+    });
+
+    it('should handle special characters in room names', async () => {
+      mockDiscovery.addDevice(mockDiscovery.getAllDevices()[0]);
+      mockDiscovery.getAllDevices()[0].roomName = "Kid's Room";
+      
+      const response = await testEndpoint(router, "/Kid's%20Room/play");
+      
+      assert.strictEqual(response.status, 200);
+    });
+  });
+
+  describe('Volume Parameter Validation', () => {
+    it('should reject non-numeric volume', async () => {
+      const response = await testEndpoint(router, '/bedroom/volume/loud');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Invalid volume'));
+    });
+
+    it('should reject volume below 0', async () => {
+      const response = await testEndpoint(router, '/bedroom/volume/-5');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Volume must be between'));
+    });
+
+    it('should reject volume above 100', async () => {
+      const response = await testEndpoint(router, '/bedroom/volume/150');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Volume must be between'));
+    });
+
+    it('should handle relative volume with invalid delta', async () => {
+      const response = await testEndpoint(router, '/bedroom/volume/+abc');
+      
+      assert.strictEqual(response.status, 400);
+    });
+
+    it('should accept valid relative volume formats', async () => {
+      const response1 = await testEndpoint(router, '/bedroom/volume/+10');
+      const response2 = await testEndpoint(router, '/bedroom/volume/-10');
+      
+      assert.strictEqual(response1.status, 200);
+      assert.strictEqual(response2.status, 200);
+    });
+  });
+
+  describe('Toggle Parameter Validation', () => {
+    it('should accept valid toggle values', async () => {
+      const validValues = ['on', 'off', 'true', 'false', '1', '0'];
+      
+      for (const value of validValues) {
+        const response = await testEndpoint(router, `/bedroom/repeat/${value}`);
+        assert.strictEqual(response.status, 200, `Failed for value: ${value}`);
+      }
+    });
+
+    it('should reject invalid toggle values', async () => {
+      const invalidValues = ['yes', 'no', 'enable', 'disable', 'maybe'];
+      
+      for (const value of invalidValues) {
+        const response = await testEndpoint(router, `/bedroom/repeat/${value}`);
+        assert.strictEqual(response.status, 400, `Should reject value: ${value}`);
+      }
+    });
+  });
+
+  describe('Music Search Validation', () => {
+    it('should validate music service parameter', async () => {
+      const response = await testEndpoint(router, '/bedroom/musicsearch/invalidservice/song/test');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Invalid music service'));
+    });
+
+    it('should validate search type parameter', async () => {
+      const response = await testEndpoint(router, '/bedroom/musicsearch/apple/invalidtype/test');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Invalid search type'));
+    });
+
+    it('should handle empty search query', async () => {
+      const response = await testEndpoint(router, '/bedroom/musicsearch/apple/song/');
+      
+      assert.strictEqual(response.status, 400);
+      assert(response.body.includes('Search query required'));
+    });
+
+    it('should handle URL-encoded search queries', async () => {
+      const response = await testEndpoint(router, '/bedroom/musicsearch/apple/song/hello%20world');
+      
+      assert.strictEqual(response.status, 200);
+    });
+  });
+
+  describe('Preset Validation', () => {
+    it('should return 404 for non-existent preset', async () => {
+      const response = await testEndpoint(router, '/bedroom/preset/nonexistent');
+      
+      assert.strictEqual(response.status, 404);
+      assert(response.body.includes('Preset not found'));
+    });
+
+    it('should handle URL-encoded preset names', async () => {
+      config.presets = { 'morning jazz': { uri: 'test' } };
+      
+      const response = await testEndpoint(router, '/bedroom/preset/morning%20jazz');
+      
+      assert.strictEqual(response.status, 200);
+    });
+  });
+
+  describe('Path Structure Validation', () => {
+    it('should handle trailing slashes', async () => {
+      const response1 = await testEndpoint(router, '/bedroom/play/');
+      const response2 = await testEndpoint(router, '/bedroom/play');
+      
+      assert.strictEqual(response1.status, 200);
+      assert.strictEqual(response2.status, 200);
+    });
+
+    it('should handle multiple slashes', async () => {
+      const response = await testEndpoint(router, '//bedroom//play');
+      
+      assert.strictEqual(response.status, 200);
+    });
+
+    it('should return 404 for completely invalid paths', async () => {
+      const response = await testEndpoint(router, '/not/a/valid/endpoint');
+      
+      assert.strictEqual(response.status, 404);
+    });
+  });
+
+  describe('Error Response Format', () => {
+    it('should return consistent error format', async () => {
+      const response = await testEndpoint(router, '/invalidroom/play');
+      
+      assert.strictEqual(response.status, 404);
+      assert(response.headers['Content-Type'], 'application/json');
+      
+      const error = JSON.parse(response.body);
+      assert(error.hasOwnProperty('error'));
+      assert(typeof error.error === 'string');
+    });
+
+    it('should include helpful error messages', async () => {
+      const response = await testEndpoint(router, '/bedroom/volume/200');
+      
+      const error = JSON.parse(response.body);
+      assert(error.error.includes('must be between'));
+      assert(error.error.includes('0'));
+      assert(error.error.includes('100'));
+    });
+  });
+
+  describe('HTTP Method Validation', () => {
+    it('should only accept GET requests', async () => {
+      // The router should reject non-GET methods
+      const response = await testEndpoint(router, '/bedroom/play', 'POST');
+      
+      assert.strictEqual(response.status, 405);
+      assert(response.headers['Allow'], 'GET');
+    });
+  });
+});

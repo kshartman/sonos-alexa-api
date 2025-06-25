@@ -1,11 +1,13 @@
 export interface SonosTrack {
-  title: string;
   artist: string;
+  title: string;
   album: string;
-  duration: string;
-  position: string;
+  albumArtUri: string;  // Legacy uses lowercase 'i'
+  duration: number;     // Duration in seconds
   uri: string;
-  albumArtURI?: string;
+  trackUri: string;     // Legacy compatibility - same as uri
+  type: 'track' | 'radio' | 'line_in';
+  stationName: string;  // For radio stations
 }
 
 export interface SonosState {
@@ -133,7 +135,9 @@ export interface StateChangeEvent {
   type: 'device-state-change';
   data: {
     room: string;
+    deviceId: string;
     state: SonosState;
+    previousState?: Partial<SonosState>;
   };
 }
 

@@ -92,12 +92,12 @@ export abstract class MusicService {
       return this.formatSearchTerm(artist, album, track);
     }
     
-    return encodeURIComponent(term);
+    return term;
   }
 
   protected formatSearchTerm(artist: string, album: string, track: string): string {
     // Default implementation - services can override
     const parts = [artist, album, track].filter(Boolean);
-    return encodeURIComponent(parts.join(' '));
+    return parts.join(' ');
   }
 }

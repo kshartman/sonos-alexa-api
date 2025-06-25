@@ -58,10 +58,15 @@ describe('Volume Control Unit Tests', () => {
       assert.strictEqual(response.status, 400);
     });
 
-    it.skip('should reject negative volume', async () => {
+    it('should treat negative values as relative volume decrease', async () => {
+      mockDevice.state.volume = 50;
       const response = await testEndpoint(router, '/bedroom/volume/-10');
       
-      assert.strictEqual(response.status, 400);
+      assert.strictEqual(response.status, 200);
+      assert(mockDevice.wasMethodCalled('setVolume'));
+      const calls = mockDevice.getCallsFor('setVolume');
+      assert.strictEqual(calls[0].args[0], 40);
+      assert.strictEqual(mockDevice.state.volume, 40);
     });
 
     it('should reject non-numeric volume', async () => {

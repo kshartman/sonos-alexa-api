@@ -7,6 +7,7 @@ import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
 import { DefaultRoomManager } from './utils/default-room-manager.js';
 import { TTSService } from './services/tts-service.js';
+import { applicationVersion } from './version.js';
 import type { Config, StateChangeEvent } from './types/sonos.js';
 
 // Load configuration
@@ -306,9 +307,9 @@ async function start(): Promise<void> {
       const hasTopologyData = zones.length > 0;
       
       logger.info('');
-      logger.info('🎵 Sonos Alexa API - System Status');
+      logger.info(`🎵 Sonos Alexa API Version ${applicationVersion.version}`);
       logger.info('═══════════════════════════════════════');
-      logger.info(`🌐 Server running on port ${config.port}`);
+      logger.info(`🌐 Server running on ${config.host || 'http://localhost'}:${config.port}`);
       logger.info(`🔊 Discovered ${devices.length} Sonos device${devices.length !== 1 ? 's' : ''}`);
       
       if (devices.length > 0) {

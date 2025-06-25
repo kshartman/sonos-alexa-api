@@ -194,6 +194,12 @@ test/
   - Colored output for preset status
 - TTS endpoints now support volume parameter
 - Added library.reindexInterval setting (e.g., "1 week", "2 days", "24 hours")
+- Line-in playback functionality implemented
+- Comprehensive TTS test coverage with volume support
+- Test coverage increased to 96% (from 94%)
+- Test runner improved to handle path formats correctly
+- Added setup-local.sh to .dockerignore (user-specific setup script)
+- Removed obsolete test-local.sh file
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
@@ -223,3 +229,4 @@ test/
 - Consider adding more path files to complete the OpenAPI documentation
 - Could add rate limiting to music library refresh endpoint
 - Preset validation could be extended to validate favorites exist
+- **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead

@@ -1,26 +1,39 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
+# setup-local.sh [settings-name]
+#
+# The purpose of this script is to copy the appropriate presets and
+# settings for this host into the project directory.  These are the
+# presets and settings that will be present in the final
+# container. Since I have two homes, there is a host in each home that
+# runs the alexa skill support.  Each home has a different sonos
+# system with some shared presets but many are unique, particularly
+# the room parameters.  It also copies in the correct settings.json
+# for the host. If no argument, it defaults to current hostname,
+# domain stripped, lowercase.
+#
+# This assumes you have ../private/settings-{HOSTNAME}.json and ../presets/presets-${HOSTNAME}/
+#
 if (( $# >= 1 )); then
    BUILDFOR=$1
 else
     BUILDFOR=$(echo "${HOSTNAME%%.*}" | tr '[:upper:]' '[:lower:]')
-fi
+fi    
 
-echo "Setting up local environment for: $BUILDFOR"
-
-# Copy configuration if it exists
-if [ -f ../sonosd-priv/settings-${BUILDFOR}.json ]; then
-    echo "Copying config for $BUILDFOR..."
-    cp ../sonosd-priv/settings-${BUILDFOR}.json config.json
+if [ -f ../private/settings-${BUILDFOR}.json ]; then
+    rm settings.json
+    cp ../private/settings-${BUILDFOR}.json settings.json
+    rm settings-${BUILDFOR}.json
+    ln -s ../private/settings-${BUILDFOR}.json .
 else
-    echo "Warning: No config found at ../sonosd-priv/settings-${BUILDFOR}.json"
-    echo "Using default config.json"
+    echo error: no such settings ../private/settings-${BUILDFOR}.json
+    exit 1
 fi
 
-# Copy presets if they exist
-if [ -d ../sonosd-presets/presets-${BUILDFOR} ]; then
-    echo "Copying presets for $BUILDFOR..."
-    # Remove existing presets
+    cp ../private/settings-${BUILDFOR}.json settings.json
+    rm settings-${BUILDFOR}.json
+    ln -s ../private/settings-${BUILDFOR}.json .
+
+if [ -d ../presets/presets-${BUILDFOR} ]; then
     if [ -L ./presets ]; then
         rm ./presets 
     elif [ -d ./presets ]; then
@@ -28,17 +41,9 @@ if [ -d ../sonosd-presets/presets-${BUILDFOR} ]; then
     elif [ -f ./presets ]; then
         rm ./presets
     fi
-    
-    # Create presets directory and copy files
     mkdir ./presets
-    (cd ../sonosd-presets/presets-${BUILDFOR} && tar cf - .) | (cd ./presets && tar xf -)
-    echo "Copied $(ls presets/*.json 2>/dev/null | wc -l) preset files"
-else
-    echo "Warning: No presets found at ../sonosd-presets/presets-${BUILDFOR}"
-    echo "Creating default presets directory"
-    mkdir -p ./presets
+    (cd ../presets/presets-${BUILDFOR} && tar cf - .) | (cd ./presets && tar xf -)
+ else
+    echo error: no such presets ../presets/presets-${BUILDFOR}/
+    exit 1
 fi
-
-echo ""
-echo "Setup complete! You can now run:"
-echo "  npm start"

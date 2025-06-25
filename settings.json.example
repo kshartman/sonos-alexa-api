@@ -2,7 +2,10 @@
   "port": 5005,
   "host": "your-hostname-or-ip",
   "defaultRoom": "LivingRoom",
+  "defaultMusicService": "library",  // Options: "library", "apple", "pandora"
   "announceVolume": 40,
+  
+  "_comment": "Note: Unlike the legacy system, HTTPS/TLS is not supported. Use a reverse proxy (nginx) for SSL termination. Options like securePort, https.pfx, https.key, https.cert are not available.",
   
   "auth": {
     "username": "your-username",

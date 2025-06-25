@@ -10,16 +10,15 @@ fi
 echo "Building Sonos Alexa API for: $BUILDFOR"
 
 # Copy configuration if it exists
-if [ -f ../sonosd-priv/settings-${BUILDFOR}.json ]; then
+if [ -f ../private/settings-${BUILDFOR}.json ]; then
     echo "Copying config for $BUILDFOR..."
-    cp ../sonosd-priv/settings-${BUILDFOR}.json config.json
-else
-    echo "Warning: No config found at ../sonosd-priv/settings-${BUILDFOR}.json"
-    echo "Using default config.json"
+    cp ../private/settings-${BUILDFOR}.json settings.json
+else echo "Warning: No config found at ../private/settings-${BUILDFOR}.json"
+    echo "Using default settings.json"
 fi
 
 # Copy presets if they exist
-if [ -d ../sonosd-presets/presets-${BUILDFOR} ]; then
+if [ -d ../presets/presets-${BUILDFOR} ]; then
     echo "Copying presets for $BUILDFOR..."
     # Remove existing presets
     if [ -L ./presets ]; then
@@ -32,15 +31,15 @@ if [ -d ../sonosd-presets/presets-${BUILDFOR} ]; then
     
     # Create presets directory and copy files
     mkdir ./presets
-    (cd ../sonosd-presets/presets-${BUILDFOR} && tar cf - .) | (cd ./presets && tar xf -)
+    (cd ../presets/presets-${BUILDFOR} && tar cf - .) | (cd ./presets && tar xf -)
     echo "Copied $(ls presets/*.json 2>/dev/null | wc -l) preset files"
 else
-    echo "Warning: No presets found at ../sonosd-presets/presets-${BUILDFOR}"
+    echo "Warning: No presets found at ../presets/presets-${BUILDFOR}"
     echo "Using default presets"
 fi
 
 # Get version
-version=$(npm run version --silent 2>/dev/null || echo "1.0.0")
+version=$(npm run version:simple --silent 2>/dev/null || echo "1.0.0")
 oldversion=$(cat VERSION 2>/dev/null || echo "")
 echo $version > VERSION
 echo "Version: $version"

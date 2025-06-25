@@ -400,8 +400,52 @@ The API supports optional HTTP Basic Authentication. Configure in `settings.json
 ```
 
 - If `rejectUnauthorized` is `false`, authentication headers are not checked even if credentials are configured
-- Use this behind a reverse proxy (nginx) for HTTPS support
 - Designed for local network use; add proper security for external access
+
+## Security and HTTPS/TLS Support
+
+This API server only supports HTTP connections. **HTTPS/TLS is not built in** - this is a deliberate design choice to keep the application simple and focused.
+
+### Recommended Approach: Reverse Proxy
+
+For production deployments requiring HTTPS, use a reverse proxy such as:
+
+- **nginx** (recommended)
+- **Apache**
+- **Caddy**
+- **HAProxy**
+
+Example nginx configuration:
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    
+    ssl_certificate /path/to/certificate.crt;
+    ssl_certificate_key /path/to/private.key;
+    
+    location / {
+        proxy_pass http://localhost:5005;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Note for Legacy Users
+
+Unlike the original `node-sonos-http-api`, this implementation does not support:
+- `securePort` configuration
+- Built-in HTTPS server
+- Certificate configuration (`pfx`, `key`, `cert`, `ca`)
+
+These features were intentionally omitted in favor of using industry-standard reverse proxy solutions.
 
 ## Testing
 

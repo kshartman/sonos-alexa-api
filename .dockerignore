@@ -68,6 +68,9 @@ config.local.json
 .env.*.local
 settings-*.json
 config-*.json
+setup-local.sh
+set-version.sh
+tag-version.sh
 
 # Backup files
 *.bak

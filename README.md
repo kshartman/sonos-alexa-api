@@ -445,7 +445,9 @@ For production deployments requiring HTTPS, use a reverse proxy such as:
 - **Caddy**
 - **HAProxy**
 
-Example nginx configuration:
+Example configurations that preserve client IP for trusted networks:
+
+**nginx** (recommended):
 ```nginx
 server {
     listen 443 ssl;
@@ -466,6 +468,49 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
+```
+
+**Apache**:
+```apache
+<VirtualHost *:443>
+    ServerName your-domain.com
+    SSLEngine on
+    SSLCertificateFile /path/to/certificate.crt
+    SSLCertificateKeyFile /path/to/private.key
+    
+    ProxyPreserveHost On
+    ProxyPass / http://localhost:5005/
+    ProxyPassReverse / http://localhost:5005/
+    
+    # Important for trusted networks feature
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
+    RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"
+</VirtualHost>
+```
+
+**Caddy**:
+```caddyfile
+your-domain.com {
+    reverse_proxy localhost:5005 {
+        # Caddy automatically sets X-Forwarded-For and X-Forwarded-Proto
+        header_up X-Real-IP {remote_host}
+    }
+}
+```
+
+**HAProxy**:
+```haproxy
+frontend https_frontend
+    bind *:443 ssl crt /path/to/certificate.pem
+    mode http
+    option forwardfor  # Adds X-Forwarded-For
+    http-request set-header X-Real-IP %[src]
+    default_backend sonos_backend
+
+backend sonos_backend
+    mode http
+    server sonos localhost:5005
 ```
 
 ### Note for Legacy Users

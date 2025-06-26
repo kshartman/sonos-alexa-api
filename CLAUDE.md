@@ -232,7 +232,8 @@ test/
 - System automatically selects best available device for topology subscription
 
 ## Legacy System Reference
-- The legacy node-sonos-http-api code is located at: ~/projects/sonosd/node-sonos-http-api
+- The legacy node-sonos-http-api code is located at: ~/projects/sonos-old/node-sonos-http-api
+- The legacy Sonos API layer implementation is at: ~/projects/sonos-old/node-sonos-discovery
 - Don't search GitHub for legacy code - use the local copy
 
 ## Notes for Next Session

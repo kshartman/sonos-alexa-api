@@ -50,9 +50,9 @@ coverage
 # Development files
 .eslintrc*
 .prettierrc*
-tsconfig.json
-*.ts
-/src/
+# tsconfig.json is needed for build
+# *.ts files are needed for build
+# /src/ is needed for build
 
 # Build and CI files
 .github/

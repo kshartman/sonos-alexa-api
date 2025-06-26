@@ -40,18 +40,34 @@ fi
 
 # Get version
 version=$(npm run version:simple --silent 2>/dev/null || echo "1.0.0")
-oldversion=$(cat VERSION 2>/dev/null || echo "")
-echo $version > VERSION
 echo "Version: $version"
+
+# Extract port from settings.json if it exists
+if [ -f settings.json ]; then
+    port=$(node -p "try { require('./settings.json').port || 5005 } catch(e) { 5005 }" 2>/dev/null || echo "5005")
+else
+    port=5005
+fi
+echo "Port: $port"
 
 # Build Docker image
 IMAGE=sonos-alexa-api
 echo "Building Docker image: $IMAGE:latest"
 
-if command -v docker-compose &>/dev/null; then
+# Export as environment variables for docker-compose
+export VERSION=$version
+export PORT=$port
+
+# Check which docker compose command is available
+if docker compose version &>/dev/null 2>&1; then
+    echo "Using: docker compose"
+    docker compose build
+elif command -v docker-compose &>/dev/null; then
+    echo "Using: docker-compose"
     docker-compose build
 else
-    docker compose build
+    echo "Error: Neither 'docker compose' nor 'docker-compose' found"
+    exit 1
 fi
 
 # Tag with version

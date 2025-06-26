@@ -30,6 +30,10 @@ Typical response times:
 ### Docker (Recommended)
 
 ```bash
+# Build the image first
+docker build -t sonos-http-api .
+
+# Then run it
 docker run -d \
   --name sonos-http-api \
   --network host \

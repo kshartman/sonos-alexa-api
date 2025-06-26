@@ -16,10 +16,12 @@ export interface TopologyChangeEvent {
   timestamp: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface TopologyManager {
   on(event: 'topology-change', listener: (event: TopologyChangeEvent) => void): this;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class TopologyManager extends EventEmitter {
   private zones: ZoneGroup[] = [];
   public xmlParser: XMLParser;

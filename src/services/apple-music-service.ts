@@ -121,7 +121,7 @@ export class AppleMusicService extends MusicService {
     const objectClass = this.config.objectClass[type];
     
     // Build metadata based on type
-    let metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">`;
+    let metadata = '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">';
     metadata += `<item id="${metaId}" parentID="${parentId}" restricted="true">`;
     metadata += `<dc:title>${this.escapeXml(result.title)}</dc:title>`;
     
@@ -144,8 +144,8 @@ export class AppleMusicService extends MusicService {
       metadata += `<res protocolInfo="http-get:*:audio/mpeg:*">${this.escapeXml(uri)}</res>`;
     }
     
-    metadata += `<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON52231_X_#Svc52231-0-Token</desc>`;
-    metadata += `</item></DIDL-Lite>`;
+    metadata += '<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON52231_X_#Svc52231-0-Token</desc>';
+    metadata += '</item></DIDL-Lite>';
     
     // Log the important parts of DIDL-Lite
     const startIdx = metadata.indexOf('<item');

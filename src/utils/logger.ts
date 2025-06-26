@@ -27,14 +27,14 @@ const forceJsonLogs = process.env.LOG_FORMAT === 'json';
 // Use JSON format in production or when explicitly requested, pretty format in development
 const consoleFormat = isDevelopment && !forceJsonLogs
   ? winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
+    winston.format.colorize(),
+    winston.format.simple()
+  )
   : winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.errors({ stack: true }),
-      winston.format.json()
-    );
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  );
 
 const logger = winston.createLogger({
   levels: customLevels.levels,

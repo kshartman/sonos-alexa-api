@@ -235,14 +235,14 @@ export class ApiRouter {
             return;
           }
         
-        const base64Credentials = authHeader.split(' ')[1];
-        if (!base64Credentials) {
-          res.statusCode = 401;
-          res.end(JSON.stringify({ status: 'error', error: 'Invalid authorization header' }));
-          return;
-        }
-        const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-        const [username, password] = credentials.split(':');
+          const base64Credentials = authHeader.split(' ')[1];
+          if (!base64Credentials) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ status: 'error', error: 'Invalid authorization header' }));
+            return;
+          }
+          const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+          const [username, password] = credentials.split(':');
         
           if (username !== this.config.auth.username || password !== this.config.auth.password) {
             res.statusCode = 401;
@@ -445,7 +445,7 @@ export class ApiRouter {
       
       playMode = {
         repeat: mode.includes('REPEAT_ONE') ? 'one' : 
-                (mode.includes('REPEAT') || mode === 'SHUFFLE') ? 'all' : 'none',
+          (mode.includes('REPEAT') || mode === 'SHUFFLE') ? 'all' : 'none',
         shuffle: mode.includes('SHUFFLE'),
         crossfade
       };
@@ -457,7 +457,7 @@ export class ApiRouter {
     let relTime = 0;
     let trackNo = 0;
     let currentTrack = null;
-    let nextTrack = null;
+    const nextTrack = null;
     
     try {
       const positionInfo = await coordinator.getPositionInfo();
@@ -1944,7 +1944,7 @@ export class ApiRouter {
       throw { status: 400, message: `Pandora only supports station search, not ${type}` };
     }
     if (serviceLower === 'library' && type === 'station') {
-      throw { status: 400, message: `Library does not support station search, only song and album` };
+      throw { status: 400, message: 'Library does not support station search, only song and album' };
     }
     if (serviceLower !== 'apple' && serviceLower !== 'pandora' && serviceLower !== 'library') {
       throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'pandora', and 'library' are supported.` };

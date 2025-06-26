@@ -88,6 +88,7 @@ export interface Config {
     username: string;
     password: string;
     rejectUnauthorized?: boolean;
+    trustedNetworks?: string[];
   };
   announceVolume?: number;
   voicerss?: string;

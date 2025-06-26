@@ -1,5 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import logger from './utils/logger.js';
+import { getClientIp, isIpTrusted } from './utils/network-utils.js';
 import type { SonosDiscovery } from './discovery.js';
 import type { PresetLoader } from './preset-loader.js';
 import type { DefaultRoomManager } from './utils/default-room-manager.js';
@@ -217,14 +218,22 @@ export class ApiRouter {
       if (this.config.auth.rejectUnauthorized === false) {
         debugManager.debug('api', 'Auth configured but rejectUnauthorized=false, skipping auth check');
       } else {
-        const authHeader = req.headers.authorization;
+        // Check if client IP is in trusted networks
+        const clientIp = getClientIp(req);
+        const trustedNetworks = this.config.auth.trustedNetworks || [];
         
-        if (!authHeader || !authHeader.startsWith('Basic ')) {
-          res.statusCode = 401;
-          res.setHeader('WWW-Authenticate', 'Basic realm="Sonos API"');
-          res.end(JSON.stringify({ status: 'error', error: 'Authentication required' }));
-          return;
-        }
+        if (isIpTrusted(clientIp, trustedNetworks)) {
+          debugManager.debug('api', `Skipping auth for trusted IP: ${clientIp}`);
+        } else {
+          // Require authentication for untrusted IPs
+          const authHeader = req.headers.authorization;
+          
+          if (!authHeader || !authHeader.startsWith('Basic ')) {
+            res.statusCode = 401;
+            res.setHeader('WWW-Authenticate', 'Basic realm="Sonos API"');
+            res.end(JSON.stringify({ status: 'error', error: 'Authentication required' }));
+            return;
+          }
         
         const base64Credentials = authHeader.split(' ')[1];
         if (!base64Credentials) {
@@ -235,10 +244,11 @@ export class ApiRouter {
         const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
         const [username, password] = credentials.split(':');
         
-        if (username !== this.config.auth.username || password !== this.config.auth.password) {
-          res.statusCode = 401;
-          res.end(JSON.stringify({ status: 'error', error: 'Invalid credentials' }));
-          return;
+          if (username !== this.config.auth.username || password !== this.config.auth.password) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ status: 'error', error: 'Invalid credentials' }));
+            return;
+          }
         }
       }
     }

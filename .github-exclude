@@ -5,6 +5,10 @@ settings-*.json
 build-docker.sh
 run-docker.sh
 push-to-github.sh
+set-version.sh
+setup-local.sh
+tag-version.sh
+test-remote.sh
 private/
 .claude/
 .github-exclude

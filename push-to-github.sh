@@ -25,6 +25,9 @@ done
 
 echo "🚀 Preparing to push to GitHub (mode: $ACTION)..."
 
+# Save original directory
+ORIG_DIR=$(pwd)
+
 # Check if upstream remote exists
 if ! git remote | grep -q "^upstream$"; then
     echo "❌ Upstream remote not found. Add it with:"
@@ -35,8 +38,12 @@ fi
 # Files to filter out (uses .github-exclude)
 EXCLUDE_FILE=".github-exclude"
 
+# Get the latest version tag
+VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+
 # Create a temporary directory for the filtered repo
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR="temp/$VERSION"
+mkdir -p "$TEMP_DIR"
 echo "📁 Using temp directory: $TEMP_DIR"
 
 # Clone the current repo to temp directory
@@ -59,7 +66,7 @@ if [ -f "$EXCLUDE_FILE" ]; then
         
         # Remove the files/patterns
         git rm -r --cached "$pattern" 2>/dev/null || true
-    done < "$EXCLUDE_FILE"
+    done < "$ORIG_DIR/$EXCLUDE_FILE"
     
     # Also remove the exclude file itself
     git rm --cached "$EXCLUDE_FILE" 2>/dev/null || true
@@ -67,6 +74,10 @@ if [ -f "$EXCLUDE_FILE" ]; then
     # Commit the removals
     git commit -m "Remove private files for public release" || true
 fi
+
+# Clean up all untracked files to avoid confusion
+echo "🧹 Cleaning up untracked files..."
+git clean -fdx
 
 # Push to GitHub or show dry run results
 if [ "$ACTION" = "execute" ]; then
@@ -92,12 +103,31 @@ else
     echo ""
     echo "📋 To see what would be pushed:"
     echo "   cd $TEMP_DIR/filtered"
-    echo "   git log --oneline"
-    echo "   git ls-files"
+    echo "   git log --oneline -5"
+    echo "   git ls-files | head -20  # List tracked files (what will be pushed)"
+    echo "   git ls-files | wc -l     # Count of tracked files"
+    echo ""
+    echo "📊 Quick summary of what WILL be pushed:"
+    cd "$ORIG_DIR/$TEMP_DIR/filtered"
+    echo "   Total files: $(git ls-files | wc -l)"
+    echo "   Excluded files verified removed:"
+    for pattern in CLAUDE.md .claude/ build-docker.sh run-docker.sh push-to-github.sh docker-compose.yml .github-exclude; do
+        if git ls-files | grep -q "$pattern"; then
+            echo "   ❌ $pattern - STILL IN REPO!"
+        else
+            echo "   ✅ $pattern - successfully excluded"
+        fi
+    done
+    cd - > /dev/null
     echo ""
     echo "🚀 To execute the actual push, run:"
     echo "   $0 --action:execute"
     echo ""
     echo "🗑️  To clean up the temp directory:"
     echo "   rm -rf $TEMP_DIR"
+    
+    # Change to the filtered directory for easy inspection
+    cd "$ORIG_DIR/$TEMP_DIR/filtered"
+    echo ""
+    echo "📍 Changed to filtered directory: $(pwd)"
 fi

@@ -92,6 +92,7 @@ jspm_packages/
 *.tmp
 *.temp
 /tmp/
+/temp/
 
 # Debug directory and generated files
 /debug/

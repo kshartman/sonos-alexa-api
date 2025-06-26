@@ -3,12 +3,32 @@
 
 set -e
 
-echo "🚀 Preparing to push to GitHub..."
+# Parse command line arguments
+ACTION="dryrun"
+for arg in "$@"; do
+    case $arg in
+        --action:dryrun)
+            ACTION="dryrun"
+            shift
+            ;;
+        --action:execute)
+            ACTION="execute"
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $arg"
+            echo "Usage: $0 [--action:dryrun|--action:execute]"
+            exit 1
+            ;;
+    esac
+done
+
+echo "🚀 Preparing to push to GitHub (mode: $ACTION)..."
 
 # Check if upstream remote exists
 if ! git remote | grep -q "^upstream$"; then
     echo "❌ Upstream remote not found. Add it with:"
-    echo "   git remote add upstream git@github.com:kshartman/sonos-http-api.git"
+    echo "   git remote add upstream git@github.com:kshartman/sonos-alexa-api.git"
     exit 1
 fi
 
@@ -27,7 +47,7 @@ cd "$TEMP_DIR/filtered"
 git remote remove origin
 
 # Add GitHub as origin
-git remote add origin git@github.com:kshartman/sonos-http-api.git
+git remote add origin git@github.com:kshartman/sonos-alexa-api.git
 
 # Remove files listed in .github-exclude
 if [ -f "$EXCLUDE_FILE" ]; then
@@ -48,15 +68,36 @@ if [ -f "$EXCLUDE_FILE" ]; then
     git commit -m "Remove private files for public release" || true
 fi
 
-# Push to GitHub
-echo "📤 Pushing to GitHub..."
-git push origin main --force
-
-# Clean up
-cd - > /dev/null
-rm -rf "$TEMP_DIR"
-
-echo "✅ Successfully pushed to GitHub with private files excluded!"
-echo ""
-echo "Note: Your local repository still contains all files."
-echo "The private files were only excluded from the GitHub push."
+# Push to GitHub or show dry run results
+if [ "$ACTION" = "execute" ]; then
+    echo "📤 Pushing to GitHub..."
+    git push origin main --force
+    git push origin --tags
+    
+    # Clean up
+    cd - > /dev/null
+    rm -rf "$TEMP_DIR"
+    
+    echo "✅ Successfully pushed to GitHub with private files excluded!"
+    echo ""
+    echo "Note: Your local repository still contains all files."
+    echo "The private files were only excluded from the GitHub push."
+else
+    # Dry run - keep the directory for inspection
+    echo ""
+    echo "🔍 DRY RUN COMPLETE - Repository prepared but NOT pushed"
+    echo ""
+    echo "📁 Inspect the prepared repository at:"
+    echo "   $TEMP_DIR/filtered"
+    echo ""
+    echo "📋 To see what would be pushed:"
+    echo "   cd $TEMP_DIR/filtered"
+    echo "   git log --oneline"
+    echo "   git ls-files"
+    echo ""
+    echo "🚀 To execute the actual push, run:"
+    echo "   $0 --action:execute"
+    echo ""
+    echo "🗑️  To clean up the temp directory:"
+    echo "   rm -rf $TEMP_DIR"
+fi

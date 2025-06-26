@@ -39,7 +39,8 @@ process.env.MOCK_ONLY = mockOnly ? 'true' : 'false';
 console.log(`📋 Configuration:`);
 console.log(`   Mode: ${testMode}`);
 console.log(`   Mock only: ${mockOnly}`);
-console.log(`   Auto-start server: ${!noServer}`);
+console.log(`   API URL: ${process.env.TEST_API_URL || 'http://localhost:5005'}`);
+console.log(`   Auto-start server: ${!noServer && !process.env.TEST_API_URL}`);
 console.log(`   Pattern: ${pattern}`);
 if (grepPattern) {
   console.log(`   Grep: ${grepPattern}`);

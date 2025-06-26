@@ -461,6 +461,14 @@ npm run test:unit
 # Run integration tests only
 npm run test:integration
 
+# Test against a remote server
+TEST_API_URL=http://192.168.1.100:5005 npm test
+
+# Or use the helper script
+./test-remote.sh                        # Test against localhost
+./test-remote.sh linux-host:5005        # Test against remote host
+./test-remote.sh 192.168.1.100:5005 volume  # Run volume tests on remote
+
 # Run full test suite (may interrupt playback)
 npm run test:full
 ```

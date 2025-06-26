@@ -7,6 +7,13 @@ let serverProcess: ChildProcess | null = null;
  * Start the API server for testing
  */
 export async function startServer(): Promise<void> {
+  // Check if using external server
+  const externalHost = process.env.TEST_API_URL && !process.env.TEST_API_URL.includes('localhost');
+  if (externalHost) {
+    console.log(`🌐 Using external server: ${process.env.TEST_API_URL}`);
+    return;
+  }
+
   if (serverProcess) {
     console.log('Server already running');
     return;
@@ -79,6 +86,12 @@ export async function startServer(): Promise<void> {
  * Stop the API server
  */
 export async function stopServer(): Promise<void> {
+  // Skip if using external server
+  const externalHost = process.env.TEST_API_URL && !process.env.TEST_API_URL.includes('localhost');
+  if (externalHost) {
+    return;
+  }
+
   if (!serverProcess) {
     return;
   }

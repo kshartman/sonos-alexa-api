@@ -71,6 +71,7 @@ config-*.json
 setup-local.sh
 set-version.sh
 tag-version.sh
+test-remote.sh
 
 # Backup files
 *.bak

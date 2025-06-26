@@ -1,7 +1,7 @@
 {
   "port": 5005,
   "host": "your-hostname-or-ip",
-  "defaultRoom": "LivingRoom",
+  "defaultRoom": "Living Room",
   "defaultMusicService": "library",  // Options: "library", "apple", "pandora"
   "announceVolume": 40,
   

@@ -1,0 +1,68 @@
+# Source files (only publish dist)
+src/
+test/
+debug/
+
+# Configuration files
+settings.json
+settings-*.json
+.env*
+
+# Development files
+.vscode/
+.idea/
+*.log
+logs/
+
+# Build files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+
+# Scripts
+build-docker.sh
+run-docker.sh
+test-*.sh
+setup-*.sh
+set-version.sh
+tag-version.sh
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Documentation source
+apidoc/
+docs/
+
+# Git files
+.git/
+.gitignore
+
+# Test output
+coverage/
+.nyc_output/
+test-output*.log
+test-results/
+
+# Cache directories
+cache/
+music-library-cache/
+pandora-cache/
+tts-cache/
+
+# State files
+data/
+state/
+*.state.json
+
+# Private directory
+private/
+
+# Presets
+presets/
+
+# Claude files
+.claude/
+CLAUDE.md

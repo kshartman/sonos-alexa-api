@@ -1,7 +1,29 @@
 {
-  "name": "sonos-alexa-api",
+  "name": "sonos-http-api",
   "version": "1.0.0",
-  "description": "Modern Sonos HTTP API for Alexa integration",
+  "description": "Modern, fast HTTP API for Sonos speakers with Alexa skill compatibility",
+  "author": "Shane Hartman",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kshartman/sonos-http-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kshartman/sonos-http-api/issues"
+  },
+  "homepage": "https://github.com/kshartman/sonos-http-api#readme",
+  "keywords": [
+    "sonos",
+    "sonos-api",
+    "alexa-skill",
+    "home-automation",
+    "smart-home",
+    "typescript",
+    "docker",
+    "sonos-controller",
+    "http-api",
+    "music-streaming"
+  ],
   "main": "dist/server.js",
   "type": "module",
   "engines": {

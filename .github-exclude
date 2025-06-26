@@ -1,0 +1,10 @@
+# Files to exclude when pushing to GitHub
+docker-compose.yml
+CLAUDE.md
+settings-*.json
+build-docker.sh
+run-docker.sh
+push-to-github.sh
+private/
+.claude/
+.github-exclude

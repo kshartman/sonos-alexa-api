@@ -1,0 +1,29 @@
+services:
+  sonos-http-api:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-1.0.0}
+        PORT: ${PORT:-5005}
+    image: sonos-http-api:latest
+    container_name: sonos-http-api
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - PORT=${PORT:-5005}
+    volumes:
+      - ./settings.json:/app/settings.json:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "10"
+        compress: "true"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:' + process.env.PORT + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

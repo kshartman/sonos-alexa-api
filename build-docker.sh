@@ -61,10 +61,10 @@ export PORT=$port
 # Check which docker compose command is available
 if docker compose version &>/dev/null 2>&1; then
     echo "Using: docker compose"
-    docker compose build
+    PORT=$port VERSION=$version docker compose build
 elif command -v docker-compose &>/dev/null; then
     echo "Using: docker-compose"
-    docker-compose build
+    PORT=$port VERSION=$version docker-compose build
 else
     echo "Error: Neither 'docker compose' nor 'docker-compose' found"
     exit 1
@@ -77,6 +77,6 @@ echo "Tagged: $IMAGE:$version"
 echo ""
 echo "Build complete!"
 echo "To run:"
-echo "  docker-compose up -d"
+echo "  PORT=$port docker-compose up -d"
 echo "Or:"
-echo "  docker run -d --name sonos-api --network host $IMAGE:latest"
+echo "  docker run -d --name sonosd --network host -e PORT=$port $IMAGE:latest"

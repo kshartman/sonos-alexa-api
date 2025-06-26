@@ -254,3 +254,49 @@ test/
 - Could add rate limiting to music library refresh endpoint
 - Preset validation could be extended to validate favorites exist
 - **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead
+
+## Architecture Critique & Enhancement Plan
+
+### Architecture Strengths
+- Clean separation of concerns with well-defined modules
+- Minimal dependencies (only winston + fast-xml-parser)
+- Good TypeScript usage with strong typing in most areas
+- Event-driven architecture using native Node.js patterns
+- Excellent test coverage (96%)
+- Well-structured API router without framework overhead
+
+### Architecture Weaknesses
+- 87 TypeScript `any` warnings indicate type safety gaps
+- Some error handling is inconsistent (mix of try/catch and unhandled promises)
+- Hardcoded values that should be configurable
+- Limited authentication options (only basic auth)
+- No rate limiting or request validation middleware
+- Missing some features from legacy system
+
+### Prioritized Enhancement List
+
+#### High Priority (Core Improvements)
+1. **Type Safety Improvements** - Replace all `any` types with proper interfaces, add strict TypeScript compiler options, define SOAP response types
+2. **Error Handling Standardization** - Implement consistent error classes, global error handler middleware, improve SOAP fault handling, retry logic
+3. **Configuration Management** - Move hardcoded values to settings.json, add environment variable support, implement settings validation, hot-reload
+4. **API Rate Limiting** - Implement per-IP rate limiting, add burst protection, configurable limits per endpoint
+
+#### Medium Priority (Feature Completeness)
+5. **Spotify Integration** - Implement OAuth2 flow, add search/playback capabilities, handle token refresh
+6. **SiriusXM Implementation** - Complete the stubbed endpoints, add channel list from legacy system, implement authentication
+7. **Enhanced Security** - Add API key authentication option, implement JWT tokens, add request signing, CORS configuration
+8. **WebSocket Support** - Real-time state updates, push notifications, reduce polling overhead
+9. **Metrics & Monitoring** - Add Prometheus metrics, performance tracking, request/response logging, health check improvements
+
+#### Low Priority (Nice to Have)
+10. **Caching Layer** - Redis support for state caching, reduce SOAP calls, configurable TTLs
+11. **Queue Management** - Better queue manipulation, save/restore queue state, queue templates
+12. **Advanced TTS** - Amazon Polly support, ElevenLabs integration, SSML support
+13. **Playlist Management** - Create/edit playlists, import/export capabilities, cross-service playlist sync
+14. **Database Support** - SQLite for presets/favorites, historical playback data, user preferences
+15. **API Documentation** - Complete OpenAPI spec, interactive API explorer, code examples
+16. **Performance Optimizations** - Connection pooling, batch SOAP requests, parallel device updates
+17. **Docker Improvements** - Multi-stage builds, Alpine-based image, Kubernetes manifests
+18. **CLI Tools** - Device discovery tool, preset manager, diagnostic utilities
+19. **Plugin System** - Custom action plugins, music service plugins, TTS provider plugins
+20. **Home Assistant Integration** - Native integration, auto-discovery, media player entities

@@ -112,31 +112,31 @@ class DebugManager {
   // Conditional logging methods
   debug(category: keyof DebugCategories, message: string, meta?: any): void {
     if (this.categories[category] && this.shouldLog('debug')) {
-      logger.debug(`[${category.toUpperCase()}] ${message}`, meta);
+      logger.debug(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
     }
   }
 
   info(category: keyof DebugCategories, message: string, meta?: any): void {
     if (this.categories[category] && this.shouldLog('info')) {
-      logger.info(`[${category.toUpperCase()}] ${message}`, meta);
+      logger.info(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
     }
   }
 
   warn(category: keyof DebugCategories, message: string, meta?: any): void {
     if (this.categories[category] && this.shouldLog('warn')) {
-      logger.warn(`[${category.toUpperCase()}] ${message}`, meta);
+      logger.warn(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
     }
   }
 
   error(category: keyof DebugCategories, message: string, meta?: any): void {
     if (this.categories[category] && this.shouldLog('error')) {
-      logger.error(`[${category.toUpperCase()}] ${message}`, meta);
+      logger.error(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
     }
   }
 
   wall(category: keyof DebugCategories, message: string, meta?: any): void {
     if (this.categories[category] && this.shouldLog('wall')) {
-      logger.debug(`[${category.toUpperCase()}] [WALL] ${message}`, meta);
+      logger.debug(`[${category.toUpperCase()}] [WALL] ${message}`, { ...meta, category });
     }
   }
 

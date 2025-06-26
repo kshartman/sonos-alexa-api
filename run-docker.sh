@@ -39,14 +39,38 @@ echo "Version: $version"
 export VERSION=$version
 export PORT=$port
 
+# Check for --restart flag
+RESTART=false
+if [[ "$1" == "--restart" ]] || [[ "$2" == "--restart" ]]; then
+    RESTART=true
+fi
+
 # Check if container is already running
 if docker ps --format '{{.Names}}' | grep -q '^sonosd$'; then
     echo ""
     echo "Container 'sonosd' is already running."
-    echo "To restart it, run:"
-    echo "  docker stop sonosd && docker rm sonosd"
-    echo "  ./run-docker.sh $BUILDFOR"
-    exit 1
+    
+    if [ "$RESTART" = true ]; then
+        echo ""
+        read -p "Do you want to restart it? (y/N) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Restarting container..."
+            docker stop sonosd
+            docker rm sonosd 2>/dev/null || true
+            echo ""
+        else
+            echo "Aborted."
+            exit 0
+        fi
+    else
+        echo "To restart it, run:"
+        echo "  ./run-docker.sh --restart"
+        echo "  # or"
+        echo "  docker stop sonosd && docker rm sonosd"
+        echo "  ./run-docker.sh $BUILDFOR"
+        exit 1
+    fi
 fi
 
 # Check if container exists but is stopped

@@ -72,6 +72,8 @@ setup-local.sh
 set-version.sh
 tag-version.sh
 test-remote.sh
+build-docker.sh
+run-docker.sh
 
 # Backup files
 *.bak

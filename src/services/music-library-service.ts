@@ -54,21 +54,21 @@ export class MusicLibraryService {
       
       // Use the appropriate index based on search field
       switch (field) {
-        case 'title':
-          // For title search, we need to browse through albums or tracks
-          // Using A:ALBUM is more efficient than A:TRACKS for large libraries
-          results = await this.searchByTitle(keyword, maxResults);
-          break;
+      case 'title':
+        // For title search, we need to browse through albums or tracks
+        // Using A:ALBUM is more efficient than A:TRACKS for large libraries
+        results = await this.searchByTitle(keyword, maxResults);
+        break;
           
-        case 'artist':
-          // Use the artist index
-          results = await this.searchByArtist(keyword, maxResults);
-          break;
+      case 'artist':
+        // Use the artist index
+        results = await this.searchByArtist(keyword, maxResults);
+        break;
           
-        case 'album':
-          // Use the album index
-          results = await this.searchByAlbum(keyword, maxResults);
-          break;
+      case 'album':
+        // Use the album index
+        results = await this.searchByAlbum(keyword, maxResults);
+        break;
       }
       
       // Convert to search results format

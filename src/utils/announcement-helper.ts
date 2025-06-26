@@ -177,7 +177,7 @@ async function restorePlaybackState(
       
       // Resume playback if it was playing
       if (backup.playbackState === 'PLAYING') {
-        logger.info(`Resuming playback`);
+        logger.info('Resuming playback');
         try {
           await device.play();
           // Wait a bit and check if it's actually playing
@@ -186,7 +186,7 @@ async function restorePlaybackState(
           logger.info(`After play() - transport state: ${newState.CurrentTransportState}`);
           
           if (newState.CurrentTransportState !== 'PLAYING') {
-            logger.warn(`Play command didn't work, trying alternative approach`);
+            logger.warn('Play command didn\'t work, trying alternative approach');
             // Try stopping first then playing
             await device.stop();
             await device.setAVTransportURI(backup.uri, backup.metadata || '');

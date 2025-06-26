@@ -83,7 +83,7 @@ export class SonosDevice extends EventEmitter {
       // Check if this device is part of a stereo pair or group
       // If so, we should subscribe to the coordinator instead
       const coordinator = discovery.getCoordinator ? discovery.getCoordinator(this.id) : null;
-      let targetDevice = this;
+      let targetDevice = this; // eslint-disable-line @typescript-eslint/no-this-alias
       let targetBaseUrl = this.baseUrl;
       
       if (coordinator && coordinator.id !== this.id) {
@@ -234,7 +234,7 @@ export class SonosDevice extends EventEmitter {
 
       // When a device is playing from a coordinator (x-rincon:), 
       // its transport state doesn't reflect the actual playback state
-      let effectivePlaybackState = transportInfo.CurrentTransportState as SonosState['playbackState'];
+      const effectivePlaybackState = transportInfo.CurrentTransportState as SonosState['playbackState'];
       if (positionInfo.TrackURI?.startsWith('x-rincon:')) {
         // Device is a group member playing from coordinator
         // For now, we'll trust the transport state, but log it

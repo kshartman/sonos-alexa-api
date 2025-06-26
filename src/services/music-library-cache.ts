@@ -183,7 +183,6 @@ export class MusicLibraryCache {
       // First, get all artists from the artist index
       logger.info('Fetching artist list...');
       const { totalMatches: totalArtists } = await this.libraryService.browse('A:ALBUMARTIST', 0, 1);
-      let artistsProcessed = 0;
       let artistStartIndex = 0;
       
       while (artistStartIndex < totalArtists) {
@@ -193,7 +192,6 @@ export class MusicLibraryCache {
             newArtistList.push(artist.title);
           }
         }
-        artistsProcessed += artistBatch.length;
         artistStartIndex += 500;
       }
       

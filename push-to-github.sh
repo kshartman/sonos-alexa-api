@@ -82,7 +82,9 @@ git clean -fdx
 # Push to GitHub or show dry run results
 if [ "$ACTION" = "execute" ]; then
     echo "📤 Pushing to GitHub..."
-    git push origin main --force
+    # Get current branch name
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git push origin $CURRENT_BRANCH --force
     git push origin --tags
     
     # Clean up

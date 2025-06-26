@@ -237,7 +237,7 @@ export class UPnPSubscriber {
     
     // Debug: Check content length for ZoneGroupTopology
     if (req.url && req.url.includes('ZoneGroupTopology')) {
-      debugManager.debug('upnp', `ZoneGroupTopology notification headers:`, req.headers);
+      debugManager.debug('upnp', 'ZoneGroupTopology notification headers:', req.headers);
     }
 
     let body = '';

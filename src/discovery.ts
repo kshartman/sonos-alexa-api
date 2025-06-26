@@ -14,6 +14,7 @@ const SSDP_ADDRESS = '239.255.255.250';
 const SSDP_PORT = 1900;
 const SONOS_URN = 'urn:schemas-upnp-org:device:ZonePlayer:1';
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface SonosDiscovery {
   on(event: 'device-found', listener: (device: SonosDevice) => void): this;
   on(event: 'device-state-change', listener: (device: SonosDevice, state: SonosState, previousState?: Partial<SonosState>) => void): this;
@@ -22,6 +23,7 @@ export declare interface SonosDiscovery {
   on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: any; currentTrack: any; timestamp: number }) => void): this;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class SonosDiscovery extends EventEmitter {
   public readonly devices = new Map<string, SonosDevice>();
   private socket?: dgram.Socket;
@@ -421,7 +423,7 @@ export class SonosDiscovery extends EventEmitter {
           this.topologyManager.handleTopologyEvent(deviceId, service, body);
           return;
         } else {
-          debugManager.warn('topology', `ZoneGroupTopology event missing ZoneGroupState property`);
+          debugManager.warn('topology', 'ZoneGroupTopology event missing ZoneGroupState property');
         }
       }
       

@@ -13,8 +13,8 @@
     "rejectUnauthorized": true,
     "_comment_trustedNetworks": "IPs/networks that bypass auth. Supports CIDR notation.",
     "trustedNetworks": [
-      "192.168.11.0/24",
-      "192.168.4.0/24",
+      "192.168.1.0/24",
+      "10.0.0.0/24",
       "127.0.0.1"
     ]
   },

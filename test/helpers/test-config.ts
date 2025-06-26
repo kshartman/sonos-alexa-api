@@ -6,7 +6,7 @@ export interface TestConfig {
 }
 
 export const defaultConfig: TestConfig = {
-  apiUrl: process.env.TEST_API_URL || 'http://localhost:5005',
+  apiUrl: process.env.TEST_API_URL || process.env.API_BASE_URL || 'http://localhost:5005',
   testMode: (process.env.TEST_MODE as any) || 'integration',
   mockOnly: process.env.MOCK_ONLY === 'true',
   timeout: parseInt(process.env.TEST_TIMEOUT || '10000', 10)

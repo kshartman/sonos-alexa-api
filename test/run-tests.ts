@@ -14,7 +14,7 @@ console.log('🧪 Sonos API Test Suite\n');
 // Parse command line arguments
 const args = process.argv.slice(2);
 const mockOnly = args.includes('--mock-only');
-const noServer = args.includes('--no-server');
+const noServer = args.includes('--no-server') || process.env.NO_SERVER === 'true';
 
 // Extract grep pattern if provided
 let grepPattern: string | undefined;
@@ -38,11 +38,17 @@ const testMode = mockOnly ? 'mock-only' : 'integration';
 process.env.TEST_MODE = testMode;
 process.env.MOCK_ONLY = mockOnly ? 'true' : 'false';
 
+// Get the actual API URL that will be used
+const apiUrl = process.env.TEST_API_URL || process.env.API_BASE_URL || 'http://localhost:5005';
+const isRemoteApi = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1');
+const shouldAutoStart = !noServer && !isRemoteApi && !mockOnly;
+
 console.log(`📋 Configuration:`);
 console.log(`   Mode: ${testMode}`);
 console.log(`   Mock only: ${mockOnly}`);
-console.log(`   API URL: ${process.env.TEST_API_URL || 'http://localhost:5005'}`);
-console.log(`   Auto-start server: ${!noServer && !process.env.TEST_API_URL}`);
+console.log(`   API URL: ${apiUrl}`);
+console.log(`   Remote API: ${isRemoteApi}`);
+console.log(`   Auto-start server: ${shouldAutoStart}`);
 console.log(`   Pattern: ${pattern}`);
 if (grepPattern) {
   console.log(`   Grep: ${grepPattern}`);
@@ -60,7 +66,7 @@ async function runTests() {
 
   try {
     // Check if we need to start the server
-    if (!mockOnly && !noServer) {
+    if (!mockOnly && !noServer && !process.env.TEST_API_URL && !process.env.API_BASE_URL) {
       const serverRunning = await isServerRunning();
       if (!serverRunning) {
         console.log('🚀 Starting API server for tests...');
@@ -70,6 +76,9 @@ async function runTests() {
       } else {
         console.log('✅ Server already running\n');
       }
+    } else if (isRemoteApi) {
+      console.log(`🌐 Using remote API at ${apiUrl}\n`);
+    }
       
       // Save current debug settings and enable debug mode
       console.log('🔧 Configuring debug settings for tests...');

@@ -1,12 +1,12 @@
 services:
-  sonos-api:
+  sonosd:
     build:
       context: .
       args:
         VERSION: ${VERSION:-1.0.0}
         PORT: ${PORT:-5005}
     image: sonos-alexa-api:latest
-    container_name: sonos-alexa-api
+    container_name: sonosd
     network_mode: host
     restart: unless-stopped
     environment:

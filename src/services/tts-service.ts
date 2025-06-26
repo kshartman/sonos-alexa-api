@@ -11,15 +11,30 @@ const execAsync = promisify(exec);
 export class TTSService {
   private config: Config;
   private cacheDir: string;
+  private cleanupInterval?: NodeJS.Timeout;
+  private maxAge: number = 24 * 60 * 60 * 1000; // 24 hours default
 
   constructor(config: Config) {
     this.config = config;
     this.cacheDir = path.join(config.dataDir || './data', 'tts-cache');
+    // Allow config override for cache max age
+    this.maxAge = (config as any).ttsCacheMaxAge || this.maxAge;
   }
 
   async init(): Promise<void> {
     // Create cache directory
     await fs.mkdir(this.cacheDir, { recursive: true });
+    
+    // Start cleanup interval - run every hour
+    this.cleanupInterval = setInterval(() => {
+      this.cleanCache(1).catch(err => 
+        logger.error('TTS cache cleanup error:', err)
+      );
+    }, 60 * 60 * 1000); // 1 hour
+    
+    // Run initial cleanup - remove files older than 1 day
+    await this.cleanCache(1);
+    logger.info(`TTS cache cleanup scheduled - removing files older than ${this.maxAge / 1000 / 60 / 60} hours`);
   }
 
   async generateTTS(text: string, language = 'en'): Promise<string> {
@@ -173,6 +188,13 @@ export class TTSService {
       }
     } catch (error) {
       logger.error('Error cleaning TTS cache:', error);
+    }
+  }
+  
+  destroy(): void {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
     }
   }
 }

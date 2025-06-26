@@ -33,5 +33,8 @@
   "library": {
     "randomQueueLimit": 50,
     "reindexInterval": "1 week"
-  }
+  },
+  
+  "_comment_tts": "ttsCacheMaxAge is in milliseconds. Default: 86400000 (24 hours)",
+  "ttsCacheMaxAge": 86400000
 }

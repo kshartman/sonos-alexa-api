@@ -273,6 +273,10 @@ async function shutdown(): Promise<void> {
     logger.info('Music library cache cleaned up');
   }
   
+  // Clean up TTS service
+  ttsService.destroy();
+  logger.info('TTS service cleaned up');
+  
   // Force exit after 10 seconds
   setTimeout(() => {
     logger.error('Forced shutdown after timeout');

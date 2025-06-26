@@ -125,9 +125,7 @@ else
     echo ""
     echo "🗑️  To clean up the temp directory:"
     echo "   rm -rf $TEMP_DIR"
-    
-    # Change to the filtered directory for easy inspection
-    cd "$ORIG_DIR/$TEMP_DIR/filtered"
     echo ""
-    echo "📍 Changed to filtered directory: $(pwd)"
+    echo "💡 To work in the filtered directory, run:"
+    echo "   cd $TEMP_DIR/filtered"
 fi

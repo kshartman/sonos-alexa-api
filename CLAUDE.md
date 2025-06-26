@@ -44,6 +44,11 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - **debug**: All of the above plus debug messages
 - **wall**: Everything including massive XML/SOAP responses (most verbose)
 
+### Log Format
+- **Development**: Colorized simple format (default when NODE_ENV=development)
+- **Production**: JSON format for better parsing/aggregation (default when NODE_ENV=production)
+- **Force JSON**: Set LOG_FORMAT=json to use JSON even in development
+
 ## Configuration Files
 - `settings.json` - Main config (host, port, auth, TTS, default room/service)
 - `data/default-settings.json` - Persisted defaults (room, music service)

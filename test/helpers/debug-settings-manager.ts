@@ -1,7 +1,8 @@
 import { defaultConfig } from './test-config.js';
 
 interface DebugSettings {
-  logLevel: string;
+  logLevel: string;         // winston logger level (from /loglevel)
+  debugLevel: string;       // debugManager level (from /debug)
   categories: Record<string, boolean>;
 }
 
@@ -41,19 +42,27 @@ export class DebugSettingsManager {
       const baseUrl = this.getBaseUrl(defaultConfig.apiUrl);
       const headers = this.getAuthHeaders(defaultConfig.apiUrl);
       
-      const response = await fetch(`${baseUrl}/debug`, { headers });
-      if (!response.ok) {
-        throw new Error(`Failed to get debug settings: ${response.status}`);
+      // Get debug settings (includes debugManager level)
+      const debugResponse = await fetch(`${baseUrl}/debug`, { headers });
+      if (!debugResponse.ok) {
+        throw new Error(`Failed to get debug settings: ${debugResponse.status}`);
       }
       
-      const data = await response.json();
+      const debugData = await debugResponse.json();
+      
+      // Get winston logger level (may be different from debugManager level)
+      // Note: There's no direct endpoint to get winston level, so we assume
+      // it matches the debugManager level unless we track it separately
+      
       this.savedSettings = {
-        logLevel: data.logLevel,
-        categories: data.categories
+        logLevel: debugData.logLevel,    // This is actually the debugManager level
+        debugLevel: debugData.logLevel,   // Same for now
+        categories: debugData.categories
       };
       
       console.log('💾 Saved debug settings:', {
         logLevel: this.savedSettings.logLevel,
+        debugLevel: this.savedSettings.debugLevel,
         enabledCategories: Object.keys(this.savedSettings.categories).filter(k => this.savedSettings!.categories[k])
       });
     } catch (error) {
@@ -74,10 +83,30 @@ export class DebugSettingsManager {
       const baseUrl = this.getBaseUrl(defaultConfig.apiUrl);
       const headers = this.getAuthHeaders(defaultConfig.apiUrl);
       
-      // Restore log level
-      const logLevelResponse = await fetch(`${baseUrl}/debug/level/${this.savedSettings.logLevel}`, { headers });
-      if (!logLevelResponse.ok) {
-        console.warn(`⚠️  Failed to restore log level: ${logLevelResponse.status}`);
+      // Since /loglevel sets BOTH winston and debugManager levels,
+      // we need to be careful about the restore order
+      
+      // First, set the winston logger level (which also sets debugManager)
+      // This ensures winston is at the correct level
+      if (this.savedSettings.logLevel === this.savedSettings.debugLevel) {
+        // If they were the same, just use /loglevel which sets both
+        const logLevelResponse = await fetch(`${baseUrl}/loglevel/${this.savedSettings.logLevel}`, { headers });
+        if (!logLevelResponse.ok) {
+          console.warn(`⚠️  Failed to restore log level: ${logLevelResponse.status}`);
+        }
+      } else {
+        // If they were different, we need to set them separately
+        // First set winston+debug via /loglevel, then correct debug via /debug/level
+        const logLevelResponse = await fetch(`${baseUrl}/loglevel/${this.savedSettings.logLevel}`, { headers });
+        if (!logLevelResponse.ok) {
+          console.warn(`⚠️  Failed to restore winston log level: ${logLevelResponse.status}`);
+        }
+        
+        // Then set just the debugManager level if it was different
+        const debugLevelResponse = await fetch(`${baseUrl}/debug/level/${this.savedSettings.debugLevel}`, { headers });
+        if (!debugLevelResponse.ok) {
+          console.warn(`⚠️  Failed to restore debug level: ${debugLevelResponse.status}`);
+        }
       }
       
       // Restore categories
@@ -90,6 +119,7 @@ export class DebugSettingsManager {
       
       console.log('♻️  Restored debug settings:', {
         logLevel: this.savedSettings.logLevel,
+        debugLevel: this.savedSettings.debugLevel,
         enabledCategories: Object.keys(this.savedSettings.categories).filter(k => this.savedSettings.categories[k])
       });
     } catch (error) {
@@ -105,16 +135,16 @@ export class DebugSettingsManager {
       const baseUrl = this.getBaseUrl(defaultConfig.apiUrl);
       const headers = this.getAuthHeaders(defaultConfig.apiUrl);
       
+      // Use /loglevel/debug to set BOTH winston and debugManager to debug
+      const logLevelResponse = await fetch(`${baseUrl}/loglevel/debug`, { headers });
+      if (logLevelResponse.ok) {
+        console.log('✅ Server log level set to debug (winston + debugManager)');
+      }
+      
       // Enable all debug categories
       const enableAllResponse = await fetch(`${baseUrl}/debug/enable-all`, { headers });
       if (enableAllResponse.ok) {
         console.log('✅ All debug categories enabled on server');
-      }
-      
-      // Set log level to debug
-      const logLevelResponse = await fetch(`${baseUrl}/debug/level/debug`, { headers });
-      if (logLevelResponse.ok) {
-        console.log('✅ Server log level set to debug');
       }
     } catch (error) {
       console.warn('⚠️  Could not enable debug mode:', error);

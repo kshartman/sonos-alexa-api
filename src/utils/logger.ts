@@ -21,6 +21,20 @@ const customLevels = {
 winston.addColors(customLevels.colors);
 
 const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === 'development' ? 'debug' : 'info');
+const isDevelopment = process.env.NODE_ENV === 'development';
+const forceJsonLogs = process.env.LOG_FORMAT === 'json';
+
+// Use JSON format in production or when explicitly requested, pretty format in development
+const consoleFormat = isDevelopment && !forceJsonLogs
+  ? winston.format.combine(
+      winston.format.colorize(),
+      winston.format.simple()
+    )
+  : winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    );
 
 const logger = winston.createLogger({
   levels: customLevels.levels,
@@ -33,10 +47,7 @@ const logger = winston.createLogger({
   defaultMeta: { service: 'sonos-alexa-api' },
   transports: [
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
+      format: consoleFormat
     })
   ]
 });

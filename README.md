@@ -28,7 +28,7 @@ I may respond to bug and feature requests if they affect me or I may not. I am r
 - Comprehensive debug system with categorized logging
 - Default room tracking with persistence
 - Text-to-Speech (TTS) with multiple providers
-- Optional basic authentication
+- Optional basic authentication with trusted network bypass
 - Full Alexa compatibility
 
 ## Quick Start
@@ -60,7 +60,12 @@ The API loads configuration from `settings.json` file for compatibility with leg
   "auth": {
     "username": "user",
     "password": "pass",
-    "rejectUnauthorized": true
+    "rejectUnauthorized": true,
+    "trustedNetworks": [
+      "192.168.1.0/24",
+      "10.0.0.0/24",
+      "127.0.0.1"
+    ]
   },
   "voicerss": "YOUR_API_KEY",
   "macSay": {
@@ -121,6 +126,31 @@ Legacy format (automatically converted):
   "favorite": "My Favorite Station",
   "uri": "x-sonosapi-radio:..."
 }
+```
+
+## Authentication & Security
+
+The API supports optional HTTP Basic Authentication with trusted network bypass. This allows secure access from the internet while maintaining convenience for local network access.
+
+### Authentication Configuration
+In `settings.json`:
+- `auth.username` / `auth.password` - Basic auth credentials
+- `auth.rejectUnauthorized` - Set to `false` to disable auth entirely
+- `auth.trustedNetworks` - Array of IP addresses or CIDR ranges that bypass authentication
+
+### Trusted Networks
+Requests from trusted networks automatically bypass authentication:
+- Always includes localhost (127.0.0.1, ::1)
+- Supports individual IPs: `"192.168.1.100"`
+- Supports CIDR notation: `"192.168.1.0/24"`, `"10.0.0.0/8"`
+- Useful for Docker health checks, local scripts, and internal services
+
+Example: Allow all local network access while requiring auth from internet:
+```json
+"trustedNetworks": [
+  "192.168.1.0/24",
+  "10.0.0.0/24"
+]
 ```
 
 ## Default Room Feature

@@ -50,6 +50,14 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 - Log levels: error, warn, info, debug, wall
 - Categories: soap, topology, discovery, favorites, presets, upnp, api
 
+### 8. **Security & Authentication**
+- Optional HTTP Basic Authentication
+- Trusted network bypass for local access
+- CIDR notation support (192.168.1.0/24)
+- Proxy-aware IP detection (X-Forwarded-For, X-Real-IP)
+- Health check accessible without auth for Docker
+- Designed for reverse proxy deployment
+
 ## API Endpoints
 
 ### System

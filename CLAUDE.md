@@ -58,6 +58,11 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 ## Authentication
 - Optional HTTP Basic Auth configured in settings.json
 - `rejectUnauthorized: false` skips auth check even if credentials exist
+- Trusted networks bypass authentication:
+  - Configure in `auth.trustedNetworks` array
+  - Supports individual IPs and CIDR notation
+  - Localhost (127.0.0.1, ::1) always trusted
+  - Client IP extracted from proxy headers (X-Forwarded-For, X-Real-IP)
 - Designed for use behind nginx proxy
 
 ## Key Technical Details
@@ -200,6 +205,12 @@ test/
 - Test runner improved to handle path formats correctly
 - Added setup-local.sh to .dockerignore (user-specific setup script)
 - Removed obsolete test-local.sh file
+- Implemented trusted networks authentication bypass:
+  - Added trustedNetworks array to auth configuration
+  - IPs in trusted networks skip authentication (includes localhost by default)
+  - Supports CIDR notation (e.g., 192.168.1.0/24)
+  - Extracts client IP from proxy headers (X-Forwarded-For, X-Real-IP)
+  - Fixes Docker health check authentication issues
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML

@@ -1,8 +1,8 @@
 {
   "name": "sonos-http-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Modern, fast HTTP API for Sonos speakers with Alexa skill compatibility",
-  "author": "Shane Hartman",
+  "author": "Shane Hartman <shartman@nx.bogometer.com> and Claude (Anthropic)",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -66,7 +66,6 @@
     "tsx": "^4.6.0",
     "typescript": "^5.3.0"
   },
-  "author": "Shane Hartman <shartman@nx.bogometer.com> and Claude (Anthropic)",
   "contributors": [
     {
       "name": "Shane Hartman",
@@ -88,6 +87,5 @@
       "url": "https://github.com/dlom",
       "note": "Anesidora Pandora API library"
     }
-  ],
-  "license": "MIT"
+  ]
 }

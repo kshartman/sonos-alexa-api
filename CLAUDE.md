@@ -236,6 +236,13 @@ test/
 - The legacy Sonos API layer implementation is at: ~/projects/sonos-old/node-sonos-discovery
 - Don't search GitHub for legacy code - use the local copy
 
+## Release Information
+- **v1.0.0**: Initial public release pushed to GitHub
+  - Tag: v1.0.0 (commit 79ca690)
+  - Maintenance branch: release_1.0.0
+  - GitHub repository: https://github.com/kshartman/sonos-alexa-api
+  - Release date: June 26, 2025
+
 ## Notes for Next Session
 - Unit tests would be valuable for reliability
 - Docker health check endpoint exists at /health

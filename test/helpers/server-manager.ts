@@ -124,7 +124,20 @@ export async function stopServer(): Promise<void> {
  */
 export async function isServerRunning(): Promise<boolean> {
   try {
-    const response = await fetch(`${defaultConfig.apiUrl}/health`);
+    // Parse URL to extract auth if present
+    const url = new URL(defaultConfig.apiUrl);
+    const headers: HeadersInit = {};
+    
+    // If URL contains auth, add it as Basic Auth header
+    if (url.username && url.password) {
+      const auth = Buffer.from(`${url.username}:${url.password}`).toString('base64');
+      headers['Authorization'] = `Basic ${auth}`;
+      // Remove auth from URL for fetch
+      url.username = '';
+      url.password = '';
+    }
+    
+    const response = await fetch(`${url.origin}/health`, { headers });
     if (!response.ok) return false;
     
     const data = await response.json();

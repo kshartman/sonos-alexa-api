@@ -3,6 +3,8 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { startServer, stopServer, isServerRunning, waitForServer } from './helpers/server-manager.js';
+import { DebugSettingsManager } from './helpers/debug-settings-manager.js';
+import { defaultConfig } from './helpers/test-config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -54,6 +56,7 @@ if (!mockOnly) {
 
 async function runTests() {
   let shouldStopServer = false;
+  const debugManager = new DebugSettingsManager();
 
   try {
     // Check if we need to start the server
@@ -68,23 +71,11 @@ async function runTests() {
         console.log('✅ Server already running\n');
       }
       
-      // Enable debug logging on the server
-      try {
-        console.log('🔧 Enabling debug logging on server...');
-        // Enable all debug categories
-        const enableAllResponse = await fetch('http://localhost:5005/debug/enable-all');
-        if (enableAllResponse.ok) {
-          console.log('✅ All debug categories enabled on server');
-        }
-        
-        // Set log level to debug (sets both logger and debugManager)
-        const logLevelResponse = await fetch('http://localhost:5005/loglevel/debug');
-        if (logLevelResponse.ok) {
-          console.log('✅ Server log level set to debug\n');
-        }
-      } catch (error) {
-        console.warn('⚠️  Could not enable debug logging on server:', error);
-      }
+      // Save current debug settings and enable debug mode
+      console.log('🔧 Configuring debug settings for tests...');
+      await debugManager.save();
+      await debugManager.enableDebugMode();
+      console.log('');
     }
 
     // Run tests using tsx to handle TypeScript files
@@ -111,6 +102,12 @@ async function runTests() {
     });
 
     testProcess.on('close', async (code) => {
+      // Restore debug settings
+      if (!mockOnly && !noServer) {
+        console.log('\n🔧 Restoring debug settings...');
+        await debugManager.restore();
+      }
+      
       // Clean up server if we started it
       if (shouldStopServer) {
         console.log('\n🛑 Stopping test server...');
@@ -127,6 +124,13 @@ async function runTests() {
 
   } catch (error) {
     console.error('❌ Failed to start tests:', error);
+    
+    // Restore debug settings on error
+    if (!mockOnly && !noServer) {
+      console.log('\n🔧 Restoring debug settings...');
+      await debugManager.restore();
+    }
+    
     if (shouldStopServer) {
       await stopServer();
     }

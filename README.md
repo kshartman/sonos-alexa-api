@@ -153,6 +153,49 @@ Example: Allow all local network access while requiring auth from internet:
 ]
 ```
 
+### ⚠️ Security Warning: Proxy Configuration
+
+**CRITICAL**: Incorrect proxy configuration can completely bypass authentication!
+
+**Common Security Failures:**
+
+1. **Missing Headers = No Authentication** - If your proxy doesn't forward client IPs and the proxy itself is in trusted networks:
+   ```nginx
+   # ❌ DANGEROUS - No client IP headers + proxy at 192.168.1.10
+   location / {
+       proxy_pass http://127.0.0.1:5005;
+   }
+   # Result: ALL requests appear to come from 192.168.1.10 (trusted)
+   ```
+
+2. **Header Spoofing** - If the proxy accepts client-provided headers:
+   ```nginx
+   # ❌ INSECURE - Accepts client-provided headers
+   proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+   proxy_set_header X-Real-IP $http_x_real_ip;
+   
+   # ✅ SECURE - Only uses actual client IP
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   proxy_set_header X-Real-IP $remote_addr;
+   ```
+
+3. **Direct Access** - If port 5005 is exposed to the internet:
+   ```bash
+   # ❌ INSECURE - API accessible without proxy
+   docker run -p 5005:5005 sonosd
+   
+   # ✅ SECURE - Only localhost can access API
+   docker run -p 127.0.0.1:5005:5005 sonosd
+   ```
+
+**Best Practices:**
+- **Always** configure proxy to forward real client IPs
+- Bind API to localhost only (127.0.0.1:5005)
+- Use firewall to block direct access to API port
+- Never trust client-provided headers
+- Test from external network to verify auth is required
+- Consider removing proxy server's IP from trusted networks
+
 ## Default Room Feature
 
 The API supports a default room that is automatically used when room parameter is omitted. This is essential for Alexa integration where users often don't specify a room. The system remembers the last room used and applies it to subsequent commands.

@@ -64,21 +64,22 @@ fi
 
 # Run the TypeScript analyzer
 if $TSX_CMD analyze-home-content.ts "$API_URL" "$ROOM_NAME" "$OUTPUT_DIR"; then
+    # Extract summary stats for display
+    TOTAL_FAVORITES=$(grep -oE "Total favorites.*: [0-9]+" "$OUTPUT_DIR/content-analysis.md" | grep -oE "[0-9]+$" || echo "?")
+    TOTAL_PRESETS=$(grep -oE "Total presets.*: [0-9]+" "$OUTPUT_DIR/content-analysis.md" | grep -oE "[0-9]+$" || echo "?")
+    VALID_COUNT=$(grep -oE "Valid presets.*: [0-9]+" "$OUTPUT_DIR/preset-validation-results.md" | grep -oE "[0-9]+$" | head -1 || echo "?")
+    FAILED_COUNT=$(grep -oE "Failed favorite resolution.*: [0-9]+" "$OUTPUT_DIR/preset-validation-results.md" | grep -oE "[0-9]+$" | head -1 || echo "?")
+    
     echo -e "\n${GREEN}✅ Analysis complete!${NC}"
     echo -e "\nReports saved to: ${GREEN}$OUTPUT_DIR/${NC}"
     echo "  • content-analysis.md - Detailed breakdown of favorites and presets"
     echo "  • preset-validation-results.md - Validation status of all presets"
     
-    # Show summary
     echo -e "\n${YELLOW}Summary:${NC}"
-    echo -n "  • Favorites: "
-    grep -E "^\*\*Total favorites\*\*:" "$OUTPUT_DIR/content-analysis.md" 2>/dev/null | grep -o '[0-9]*' || echo "?"
-    echo -n "  • Presets: "
-    grep -E "^\*\*Total presets\*\*:" "$OUTPUT_DIR/content-analysis.md" 2>/dev/null | grep -o '[0-9]*' || echo "?"
-    echo -n "  • Valid presets: "
-    grep -E "^\- \*\*Valid presets\*\*:" "$OUTPUT_DIR/preset-validation-results.md" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "?"
-    echo -n "  • Failed presets: "
-    grep -E "^\- \*\*Failed favorite resolution\*\*:" "$OUTPUT_DIR/preset-validation-results.md" 2>/dev/null | grep -o '[0-9]*' | head -1 || echo "?"
+    echo -e "  • Favorites: $TOTAL_FAVORITES"
+    echo -e "  • Presets: $TOTAL_PRESETS"
+    echo -e "  • Valid presets: $VALID_COUNT" 
+    echo -e "  • Failed presets: $FAILED_COUNT"
 else
     echo -e "${RED}❌ Error generating reports${NC}"
     exit 1

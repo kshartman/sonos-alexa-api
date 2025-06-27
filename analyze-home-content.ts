@@ -168,26 +168,44 @@ async function generateValidationReport(): Promise<string> {
   output += `Generated: ${new Date().toISOString().split('T')[0]}\n`;
   output += `API: ${API_URL}\n\n`;
   
-  // Fetch presets
+  // Try to fetch startup info for accurate preset validation data
+  let startupData: any = null;
+  try {
+    const startupRes = await fetch(`${API_URL}/debug/startup`);
+    if (startupRes.ok) {
+      startupData = await startupRes.json();
+    }
+  } catch (error) {
+    console.log('Note: /debug/startup endpoint not available, using preset data only');
+  }
+  
+  // Fetch presets for detailed info
   const presetsRes = await fetch(`${API_URL}/presets?detailed=true`);
   const presetsData = await presetsRes.json();
-  const validPresets = presetsData.valid || [];
-  const failedPresets = presetsData.failed || [];
-  const invalidPresets = presetsData.invalid || [];
   const allPresets = presetsData.all || {};
   
-  const totalPresets = Object.keys(allPresets).length;
-  const validCount = validPresets.length;
-  const failedCount = failedPresets.length;
-  const invalidCount = invalidPresets.length;
+  // Use startup data if available, otherwise fall back to preset data
+  const stats = startupData?.presets?.stats || {};
+  const validPresets = startupData?.presets?.validPresets || presetsData.valid || [];
+  const failedPresets = startupData?.presets?.failedPresets || presetsData.failed || [];
+  const invalidPresets = startupData?.presets?.invalidPresets || presetsData.invalid || [];
+  const parseErrors = startupData?.presets?.parseErrors || [];
+  const invalidRooms = startupData?.presets?.invalidRooms || [];
+  
+  const totalPresets = stats.totalFiles || Object.keys(allPresets).length;
+  const validCount = stats.validPresets || validPresets.length;
+  const failedCount = stats.failedResolution || failedPresets.length;
+  const invalidCount = stats.invalidFormat || invalidPresets.length;
+  const parseErrorCount = stats.parseErrors || parseErrors.length;
+  const invalidRoomCount = stats.invalidRooms || invalidRooms.length;
   
   output += '## Summary\n\n';
   output += `- **Total presets found**: ${totalPresets}\n`;
-  output += `- **Valid presets**: ${validCount} (${((validCount/totalPresets)*100).toFixed(1)}%)\n`;
-  output += `- **Failed favorite resolution**: ${failedCount} (${((failedCount/totalPresets)*100).toFixed(1)}%)\n`;
+  output += `- **Valid presets**: ${validCount} (${totalPresets > 0 ? ((validCount/totalPresets)*100).toFixed(1) : '0.0'}%)\n`;
+  output += `- **Failed favorite resolution**: ${failedCount} (${totalPresets > 0 ? ((failedCount/totalPresets)*100).toFixed(1) : '0.0'}%)\n`;
   output += `- **Invalid format**: ${invalidCount}\n`;
-  output += `- **Parse errors**: 0\n`;
-  output += `- **Invalid rooms**: 0\n\n`;
+  output += `- **Parse errors**: ${parseErrorCount}\n`;
+  output += `- **Invalid rooms**: ${invalidRoomCount}\n\n`;
   
   // Valid presets
   output += `## Valid Presets (${validCount})\n\n`;

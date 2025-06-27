@@ -36,10 +36,12 @@ export class MusicLibraryCache {
   private cacheFile: string;
   private libraryService: MusicLibraryService;
   private reindexTimer?: NodeJS.Timeout;
+  private onStatsUpdate?: (stats: any) => void;
 
-  constructor(deviceIP: string, cacheDir: string = './cache') {
+  constructor(deviceIP: string, cacheDir: string = './cache', onStatsUpdate?: (stats: any) => void) {
     this.libraryService = new MusicLibraryService(deviceIP);
     this.cacheFile = path.join(cacheDir, 'music-library.json');
+    this.onStatsUpdate = onStatsUpdate;
   }
 
   async initialize(): Promise<void> {
@@ -47,6 +49,17 @@ export class MusicLibraryCache {
     try {
       await this.loadCache();
       logger.info(`Loaded music library cache with ${this.tracks.size} tracks`);
+      
+      // Report loaded cache stats
+      if (this.onStatsUpdate && this.metadata) {
+        this.onStatsUpdate({
+          metadata: this.metadata,
+          cacheFile: this.cacheFile,
+          isComplete: true,
+          error: null,
+          fromCache: true
+        });
+      }
       
       // Start background refresh if cache is older than 24 hours
       if (this.metadata && this.isCacheStale()) {
@@ -281,8 +294,29 @@ export class MusicLibraryCache {
         tracksPerSecond: Number((this.metadata.totalTracks / (duration / 1000)).toFixed(0))
       });
 
+      // Report stats to callback if provided
+      if (this.onStatsUpdate) {
+        this.onStatsUpdate({
+          metadata: this.metadata,
+          cacheFile: this.cacheFile,
+          isComplete: true,
+          error: null
+        });
+      }
+
     } catch (error) {
       logger.error('Music library indexing failed:', error);
+      
+      // Report error to callback if provided
+      if (this.onStatsUpdate) {
+        this.onStatsUpdate({
+          metadata: this.metadata,
+          cacheFile: this.cacheFile,
+          isComplete: false,
+          error: (error as Error).message
+        });
+      }
+      
       throw error;
     } finally {
       this.isIndexing = false;

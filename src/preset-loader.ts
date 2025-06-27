@@ -13,10 +13,12 @@ export class PresetLoader {
   private watchTimeout?: NodeJS.Timeout;
   private watcher?: ReturnType<typeof watchFs>;
   private discovery?: SonosDiscovery;
+  private onStatsUpdate?: (stats: any) => void;
 
-  constructor(presetDir = './presets', discovery?: SonosDiscovery) {
+  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: any) => void) {
     this.presetDir = presetDir;
     this.discovery = discovery;
+    this.onStatsUpdate = onStatsUpdate;
   }
 
   async init(): Promise<void> {
@@ -165,6 +167,19 @@ export class PresetLoader {
           useColors ? `\x1b[33m${name}\x1b[0m` : name
         ).join(', ');
         logger.info(`Presets with invalid rooms (loaded with valid rooms only): ${presets}`);
+      }
+      
+      // Report stats to callback if provided
+      if (this.onStatsUpdate) {
+        this.onStatsUpdate({
+          stats,
+          validPresets: validPresetNames,
+          failedPresets: failedResolutionNames,
+          invalidPresets: invalidFormatNames,
+          parseErrors: parseErrorNames,
+          invalidRooms: invalidRoomNames,
+          allPresets: newPresets
+        });
       }
       
     } catch (error) {

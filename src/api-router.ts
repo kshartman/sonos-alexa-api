@@ -23,6 +23,13 @@ export class ApiRouter {
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
   private routes = new Map<string, RouteHandler>();
+  private startupInfo: any = {
+    timestamp: new Date().toISOString(),
+    presets: {},
+    musicLibrary: {},
+    devices: {},
+    errors: []
+  };
 
   constructor(discovery: SonosDiscovery, config: Config, presetLoader?: PresetLoader | undefined, defaultRoomManager?: DefaultRoomManager, ttsService?: TTSService) {
     this.discovery = discovery;
@@ -47,7 +54,13 @@ export class ApiRouter {
           const device = this.discovery.getDevice(coordinator.roomName);
           if (device) {
             logger.info('Initializing music library cache...');
-            this.musicLibraryCache = new MusicLibraryCache(device.ip, this.config.dataDir || './data');
+            this.musicLibraryCache = new MusicLibraryCache(
+              device.ip, 
+              this.config.dataDir || './data',
+              (musicLibraryStats) => {
+                this.updateStartupInfo('musicLibrary', musicLibraryStats);
+              }
+            );
             await this.musicLibraryCache.initialize();
             
             // Set up periodic reindexing if configured
@@ -60,6 +73,9 @@ export class ApiRouter {
       }
     } catch (error) {
       logger.error('Failed to initialize music library cache:', error);
+      this.updateStartupInfo('errors', {
+        musicLibrary: (error as Error).message
+      });
     }
   }
 
@@ -164,6 +180,7 @@ export class ApiRouter {
     this.routes.set('GET /debug/category/{category}/{enabled}', this.setDebugCategory.bind(this));
     this.routes.set('GET /debug/enable-all', this.enableAllDebug.bind(this));
     this.routes.set('GET /debug/disable-all', this.disableAllDebug.bind(this));
+    this.routes.set('GET /debug/startup', this.getStartupInfo.bind(this));
     
     // Settings route
     this.routes.set('GET /settings', this.getSettings.bind(this));
@@ -1132,6 +1149,21 @@ export class ApiRouter {
         message: 'All debug categories disabled (except API)',
         categories: debugManager.getCategories()
       } 
+    };
+  }
+  
+  private async getStartupInfo(): Promise<ApiResponse> {
+    return {
+      status: 200,
+      body: this.startupInfo
+    };
+  }
+  
+  updateStartupInfo(category: string, data: any): void {
+    this.startupInfo[category] = {
+      ...this.startupInfo[category],
+      ...data,
+      lastUpdated: new Date().toISOString()
     };
   }
   

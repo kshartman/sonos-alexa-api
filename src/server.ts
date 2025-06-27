@@ -60,10 +60,22 @@ const discovery = new SonosDiscovery();
 // Make discovery globally available for devices to access subscriber
 (global as any).discovery = discovery;
 
-const presetLoader = new PresetLoader(config.presetDir, discovery);
+// Create the router first (we'll need it for the callback)
 const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', config.defaultRoom || '', config.defaultMusicService || 'library');
 const ttsService = new TTSService(config);
-const router = new ApiRouter(discovery, config, presetLoader, defaultRoomManager, ttsService);
+
+// Create a temporary router variable that will be initialized later
+let router: ApiRouter;
+
+// Create preset loader with callback to update startup info
+const presetLoader = new PresetLoader(config.presetDir, discovery, (presetStats) => {
+  if (router) {
+    router.updateStartupInfo('presets', presetStats);
+  }
+});
+
+// Now create the router with all dependencies
+router = new ApiRouter(discovery, config, presetLoader, defaultRoomManager, ttsService);
 
 // Create HTTP server
 const server = http.createServer((req, res) => {
@@ -319,6 +331,12 @@ async function start(): Promise<void> {
       if (devices.length > 0) {
         const deviceNames = devices.map(d => d.roomName).sort().join(', ');
         logger.info(`   Rooms: ${deviceNames}`);
+        
+        // Report device info to startup stats
+        router.updateStartupInfo('devices', {
+          count: devices.length,
+          rooms: devices.map(d => d.roomName).sort()
+        });
       }
       
       logger.info(`🏠 Zone groups: ${zones.length}`);
@@ -329,8 +347,22 @@ async function start(): Promise<void> {
           const memberInfo = memberCount > 1 ? ` (${memberCount} speakers)` : '';
           logger.info(`   ${zone.coordinator}${memberInfo}`);
         });
+        
+        // Report topology info to startup stats
+        router.updateStartupInfo('topology', {
+          zoneCount: zones.length,
+          zones: zones.map(zone => ({
+            coordinator: zone.coordinator,
+            memberCount: zone.members.length,
+            members: zone.members.map(m => m.roomName)
+          }))
+        });
       } else {
         logger.info('⏳ Topology data: Pending (will update when received)');
+        router.updateStartupInfo('topology', {
+          zoneCount: 0,
+          status: 'pending'
+        });
       }
       
       logger.info(`🎼 Presets: ${totalPresets} total`);

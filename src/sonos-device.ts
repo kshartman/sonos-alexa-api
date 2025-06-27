@@ -590,6 +590,49 @@ export class SonosDevice extends EventEmitter {
       return;
     }
     
+    // Handle x-rincon-cpcontainer: URIs (e.g., Hearts of Space, Spotify playlists)
+    // These are treated like music library items - add to queue and play from queue
+    if (uri.startsWith('x-rincon-cpcontainer:')) {
+      logger.debug(`${this.roomName}: handling x-rincon-cpcontainer URI by adding to queue`);
+      
+      // First ensure we're coordinator if needed
+      const hasTopologyData = discovery && discovery.getZones().length > 0;
+      if (!hasTopologyData) {
+        // Wait briefly for topology data
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (discovery && discovery.getZones().length > 0) break;
+        }
+      }
+      
+      const isCurrentlyCoordinator = discovery ? discovery.isCoordinator(this.id) : true;
+      if (!isCurrentlyCoordinator) {
+        logger.debug(`${this.roomName}: becoming coordinator before queue operation`);
+        try {
+          await this.becomeCoordinatorOfStandaloneGroup();
+        } catch (error) {
+          logger.warn(`${this.roomName}: becomeCoordinatorOfStandaloneGroup failed: ${(error as Error).message}`);
+        }
+      }
+      
+      // Clear the queue
+      logger.debug(`${this.roomName}: clearing queue`);
+      await this.clearQueue();
+      
+      // Add the container to the queue
+      logger.debug(`${this.roomName}: adding container to queue: ${uri}`);
+      await this.addURIToQueue(uri, metadata);
+      
+      // Play from the queue
+      const deviceId = this.id.replace('uuid:', '');
+      const queueUri = `x-rincon-queue:${deviceId}#0`;
+      logger.debug(`${this.roomName}: setting AVTransport to queue: ${queueUri}`);
+      
+      await this.setAVTransportURI(queueUri, '');
+      await this.play();
+      return;
+    }
+    
     // Regular URI handling
     const playUri = uri;
     const playMetadata = metadata;

@@ -2,7 +2,7 @@ import winston from 'winston';
 import pino from 'pino';
 
 // Determine environment and logger preference
-const isDevelopment = process.env.NODE_ENV === 'development';
+const isDevelopment = !process.env.NODE_ENV || process.env.NODE_ENV === '' || process.env.NODE_ENV === 'development';
 const loggerType = process.env.LOGGER?.toLowerCase() || (isDevelopment ? 'winston' : 'pino');
 const logLevel = process.env.LOG_LEVEL || (isDevelopment ? 'debug' : 'info');
 

@@ -233,16 +233,28 @@ async function generateValidationReport(): Promise<string> {
     });
   }
   
-  // Special cases analysis
-  const presetFavorites = new Set(
-    Object.values(allPresets).map((p: any) => p._originalFavorite).filter(Boolean)
+  // Special cases analysis - create case-insensitive lookup
+  const presetFavoritesLower = new Set(
+    Object.values(allPresets)
+      .map((p: any) => p._originalFavorite)
+      .filter(Boolean)
+      .map((name: string) => name.toLowerCase())
+  );
+  
+  // Also check preset names themselves for favorites
+  const presetNamesLower = new Set(
+    Object.keys(allPresets).map(name => name.toLowerCase())
   );
   
   // Fetch favorites to find missing ones
   const favoritesRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites?detailed=true`);
   const favorites = await favoritesRes.json();
   
-  const missingFromPresets = favorites.filter((f: any) => !presetFavorites.has(f.title));
+  // Check both _originalFavorite and preset names (case-insensitive)
+  const missingFromPresets = favorites.filter((f: any) => {
+    const favLower = f.title.toLowerCase();
+    return !presetFavoritesLower.has(favLower) && !presetNamesLower.has(favLower);
+  });
   
   if (missingFromPresets.length > 0) {
     output += '## Favorites NOT in Presets\n\n';
@@ -255,7 +267,7 @@ async function generateValidationReport(): Promise<string> {
   output += '\n## Recommendations\n\n';
   output += '1. **Update Legacy Presets**: Convert failed presets from `favorite:` format to direct URIs\n';
   output += '2. **Create Missing Presets**: Add presets for favorites that don\'t have them\n';
-  output += '3. **Consistent Naming**: Ensure favorite names match exactly (case-sensitive)\n';
+  output += '3. **Note**: Favorite matching is case-insensitive, so "Classical 101" matches "classical 101"\n';
   
   return output;
 }

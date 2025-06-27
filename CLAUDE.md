@@ -217,6 +217,19 @@ test/
   - Supports CIDR notation (e.g., 192.168.1.0/24)
   - Extracts client IP from proxy headers (X-Forwarded-For, X-Real-IP)
   - Fixes Docker health check authentication issues
+- Fixed x-rincon-cpcontainer URI support:
+  - Implemented proper handling for music service containers (e.g., Hearts of Space, This Weeks Show)
+  - These URIs now use queue-based playback (clear queue, add container, play from queue)
+  - Fixes SOAP 500 errors when playing certain music service favorites
+- Fixed x-rincon-playlist URI support:
+  - Music library playlists now properly browse and add all tracks to queue
+  - Handles playlist URIs by extracting playlist ID and browsing contents
+- Improved content analysis script:
+  - Added case-insensitive favorite matching
+  - Better detection of favorites referenced by presets
+- Logger improvements:
+  - NODE_ENV defaults to development when not set (enables colorized output)
+  - Respects LOG_LEVEL and DEBUG_CATEGORIES from environment/dotenv
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML

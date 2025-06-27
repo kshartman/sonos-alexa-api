@@ -73,7 +73,6 @@ export function tryConvertPreset(data: any, presetName: string): Preset {
 
   // Check if it's in legacy format
   if (isLegacyPreset(data)) {
-    logger.debug(`Converting legacy preset: ${presetName}`);
     return convertLegacyPreset(data, presetName);
   }
 

@@ -272,13 +272,14 @@ export class MusicLibraryCache {
       // Save cache to disk
       await this.saveCache();
 
-      logger.info(`Music library indexing complete:
-        - Total tracks: ${this.metadata.totalTracks}
-        - Total albums: ${this.metadata.totalAlbums}
-        - Total unique artists (from tracks): ${this.metadata.totalArtists}
-        - Total artists in catalog: ${this.metadata.totalArtistEntries}
-        - Duration: ${(duration / 1000).toFixed(1)} seconds
-        - Rate: ${(this.metadata.totalTracks / (duration / 1000)).toFixed(0)} tracks/second`);
+      logger.info('Music library indexing complete', {
+        totalTracks: this.metadata.totalTracks,
+        totalAlbums: this.metadata.totalAlbums,
+        totalUniqueArtists: this.metadata.totalArtists,
+        totalArtistEntries: this.metadata.totalArtistEntries,
+        durationSeconds: Number((duration / 1000).toFixed(1)),
+        tracksPerSecond: Number((this.metadata.totalTracks / (duration / 1000)).toFixed(0))
+      });
 
     } catch (error) {
       logger.error('Music library indexing failed:', error);

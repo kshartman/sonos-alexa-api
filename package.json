@@ -54,10 +54,12 @@
   },
   "dependencies": {
     "fast-xml-parser": "^4.3.2",
+    "pino": "^9.7.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/pino": "^7.0.4",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "dotenv": "^16.5.0",

@@ -4,7 +4,7 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 
 ## Project Overview
 - Modern TypeScript rewrite of jishi's node-sonos-http-api
-- Designed for Alexa skill compatibility with minimal dependencies
+- Designed for Alexa skill compatibility with minimal dependencies (winston, pino, fast-xml-parser)
 - Uses native Node.js APIs (requires Node 18+)
 - No HTTP framework - just built-in `http` module
 
@@ -45,9 +45,10 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - **wall**: Everything including massive XML/SOAP responses (most verbose)
 
 ### Log Format
-- **Development**: Colorized simple format (default when NODE_ENV=development)
-- **Production**: JSON format for better parsing/aggregation (default when NODE_ENV=production)
-- **Force JSON**: Set LOG_FORMAT=json to use JSON even in development
+- **Development**: Winston with colorized output (default when NODE_ENV=development)
+- **Production**: Pino with JSON format for better parsing/aggregation (default when NODE_ENV=production)
+- **Logger Selection**: Set LOGGER=winston or LOGGER=pino to override defaults
+- **Legacy**: LOG_FORMAT=json is deprecated, use LOGGER=pino instead
 
 ## Configuration Files
 - `settings.json` - Main config (host, port, auth, TTS, default room/service)
@@ -260,7 +261,8 @@ The Docker container now supports configuration via .env file:
 - **PORT**: API server port (default: 5005)
 - **HOST_PRESET_PATH**: External preset directory to mount as volume
 - **LOG_LEVEL**: Log level (error, warn, info, debug)
-- **LOG_FORMAT**: Log format (simple or json)
+- **LOGGER**: Logger type - winston or pino (default: winston for dev, pino for prod)
+- **LOG_FORMAT**: DEPRECATED - use LOGGER instead
 - **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, wall)
 - **DEBUG_CATEGORIES**: Comma-separated debug categories (soap, topology, discovery, favorites, presets, upnp, api, sse, or "all")
 
@@ -268,7 +270,7 @@ The Docker container now supports configuration via .env file:
 
 ### Architecture Strengths
 - Clean separation of concerns with well-defined modules
-- Minimal dependencies (only winston + fast-xml-parser)
+- Minimal dependencies (only winston + pino + fast-xml-parser)
 - Good TypeScript usage with strong typing in most areas
 - Event-driven architecture using native Node.js patterns
 - Excellent test coverage (96%)

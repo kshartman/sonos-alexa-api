@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a modern TypeScript implementation of a Sonos HTTP API designed for Alexa integration, based on jishi's excellent work on node-sonos-http-api and node-sonos-discovery. The implementation uses minimal dependencies and native Node.js APIs.
+This is a modern TypeScript implementation of a Sonos HTTP API designed for Alexa integration, based on jishi's excellent work on node-sonos-http-api and node-sonos-discovery. The implementation uses minimal dependencies (3 production packages) and native Node.js APIs.
 
 ## Key Features
 
@@ -10,7 +10,7 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 - Uses Node.js built-in `http` module
 - Custom router with pattern matching
 - No Express, Koa, or other frameworks
-- Minimal dependencies (winston for logging, fast-xml-parser for SOAP)
+- Minimal dependencies (winston for logging, pino for production logging, fast-xml-parser for SOAP)
 
 ### 2. **Music Service Integration**
 - **Apple Music**: Full search (albums, songs, stations) using iTunes API

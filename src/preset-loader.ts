@@ -60,6 +60,7 @@ export class PresetLoader {
         try {
           const content = await readFile(fullPath, 'utf-8');
           const rawPreset = JSON.parse(content);
+          // Always use the filename (which could be a symlink name) as the preset name
           const presetName = file.replace(/\.json$/i, '');
           
           try {

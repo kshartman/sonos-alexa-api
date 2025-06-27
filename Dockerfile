@@ -50,8 +50,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 # Copy version file
 COPY --from=builder --chown=nodejs:nodejs /app/src/version.ts ./src/
 
-# Copy configuration files (using correct name)
-COPY --chown=nodejs:nodejs settings.json* ./
+# Copy default settings (renamed during copy)
+COPY --chown=nodejs:nodejs settings.default.json ./settings.json
 
 # Create presets directory
 RUN mkdir -p presets

@@ -12,3 +12,4 @@ test-remote.sh
 private/
 .claude/
 .github-exclude
+archive/

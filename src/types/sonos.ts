@@ -68,6 +68,7 @@ export interface PresetCollection {
 }
 
 export interface WebhookConfig {
+  type?: 'volume' | 'transport' | 'topology';
   url: string;
   headers?: Record<string, string>;
 }
@@ -103,11 +104,24 @@ export interface Config {
   spotify?: {
     clientId: string;
     clientSecret: string;
+    refreshToken?: string;
   };
   library?: {
-    randomQueueLimit: number;
+    randomQueueLimit?: number;
     reindexInterval?: string;
   };
+  tts?: {
+    provider?: string;
+    lang?: string;
+    voice?: string;
+    endpoint?: string;
+    apiKey?: string;
+  };
+  // Advanced settings
+  disableDiscovery?: boolean;
+  discoveryTimeout?: number;
+  httpTimeout?: number;
+  cacheDir?: string;
 }
 
 export interface ApiResponse<T = any> {

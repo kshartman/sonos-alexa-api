@@ -1,5 +1,4 @@
 import http, { ServerResponse } from 'http';
-import { readFileSync } from 'fs';
 import { SonosDiscovery } from './discovery.js';
 import { ApiRouter } from './api-router.js';
 import { PresetLoader } from './preset-loader.js';
@@ -8,52 +7,13 @@ import { debugManager } from './utils/debug-manager.js';
 import { DefaultRoomManager } from './utils/default-room-manager.js';
 import { TTSService } from './services/tts-service.js';
 import { applicationVersion } from './version.js';
+import { loadConfiguration } from './utils/config-loader.js';
 import type { Config, StateChangeEvent } from './types/sonos.js';
 
-// Load configuration
-let config: Config = {
-  port: 5005,
-  logLevel: 'info',
-  presets: {},
-  presetDir: './presets',
-  webhooks: []
-};
+// Load configuration from multiple sources
+const config: Config = loadConfiguration();
 
-// Load config.json if exists
-try {
-  const configFile = readFileSync('./config.json', 'utf-8');
-  config = { ...config, ...JSON.parse(configFile) };
-} catch (error) {
-  logger.info('No config.json found, using defaults');
-}
-
-// Load settings.json if exists (legacy compatibility)
-try {
-  const settingsFile = readFileSync('./settings.json', 'utf-8');
-  const settings = JSON.parse(settingsFile);
-  
-  // Map settings.json fields to config
-  if (settings.port) config.port = settings.port;
-  if (settings.host) config.host = settings.host;
-  if (settings.listenAddress) config.listenAddress = settings.listenAddress;
-  if (settings.defaultRoom) config.defaultRoom = settings.defaultRoom;
-  if (settings.auth) config.auth = settings.auth;
-  if (settings.announceVolume) config.announceVolume = settings.announceVolume;
-  if (settings.voicerss) config.voicerss = settings.voicerss;
-  if (settings.macSay) config.macSay = settings.macSay;
-  if (settings.pandora) config.pandora = settings.pandora;
-  if (settings.spotify) config.spotify = settings.spotify;
-  if (settings.library) config.library = settings.library;
-  
-  logger.info('Loaded settings from settings.json');
-} catch (error) {
-  // settings.json is optional
-}
-
-// Override with environment variables
-config.port = Number(process.env.PORT) || config.port;
-config.logLevel = process.env.LOG_LEVEL || config.logLevel;
-config.defaultRoom = process.env.DEFAULT_ROOM || config.defaultRoom;
+// Environment variables are now handled in config-loader.ts
 
 // Initialize components
 const discovery = new SonosDiscovery();

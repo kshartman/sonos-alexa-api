@@ -30,14 +30,24 @@ Typical response times:
 ### Docker (Recommended)
 
 ```bash
-# Build the image first
+# Build the image
 docker build -t sonos-http-api .
 
-# Then run it
+# Run with environment variables
 docker run -d \
   --name sonos-http-api \
   --network host \
-  -v ./settings.json:/app/settings.json:ro \
+  -e PORT=5005 \
+  -e DEFAULT_ROOM=LivingRoom \
+  -v ./presets:/app/presets \
+  sonos-http-api:latest
+
+# Or use an env file
+docker run -d \
+  --name sonos-http-api \
+  --network host \
+  --env-file .env \
+  -v ./presets:/app/presets \
   sonos-http-api:latest
 ```
 
@@ -50,31 +60,59 @@ npm start
 
 ## Configuration
 
-Copy `settings.json.example` to `settings.json` and customize:
+The API can be configured via environment variables, settings.json, or both. Environment variables take precedence.
+
+### Environment Variables (Recommended)
+
+Copy `example.env` to `.env` and customize. Key variables:
+
+```bash
+# Server
+PORT=5005
+HOST=0.0.0.0
+
+# Authentication (optional)
+AUTH_USERNAME=admin
+AUTH_PASSWORD=secret
+AUTH_TRUSTED_NETWORKS=192.168.1.0/24
+
+# Defaults
+DEFAULT_ROOM=LivingRoom
+DEFAULT_SERVICE=apple
+
+# TTS
+TTS_PROVIDER=google
+TTS_LANG=en-US
+```
+
+See `example.env` for all available options.
+
+### settings.json (Alternative)
+
+For complex configurations, you can use `settings.json`:
 
 ```json
 {
   "port": 5005,
-  "host": "your-hostname-or-ip",
+  "host": "0.0.0.0",
   "defaultRoom": "Living Room",
-  "defaultMusicService": "library",
+  "defaultService": "apple",
   "announceVolume": 40,
   
   "auth": {
-    "username": "your-username",
-    "password": "your-password",
+    "username": "admin",
+    "password": "secret",
     "rejectUnauthorized": true,
-    "trustedNetworks": [
-      "192.168.1.0/24",
-      "10.0.0.0/24",
-      "127.0.0.1"
-    ]
+    "trustedNetworks": ["192.168.1.0/24"]
   },
   
-  "voicerss": "your-voicerss-api-key",
+  "tts": {
+    "provider": "google",
+    "lang": "en-US"
+  },
   
   "macSay": {
-    "voice": "Alex",
+    "voice": "Samantha",
     "rate": 175
   },
   

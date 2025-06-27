@@ -9,15 +9,18 @@ services:
     container_name: sonosd
     network_mode: host
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-5005}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FORMAT=${LOG_FORMAT:-}
+      - LOGGER=${LOGGER:-}
       - DEBUG_LEVEL=${DEBUG_LEVEL:-}
       - DEBUG_CATEGORIES=${DEBUG_CATEGORIES:-}
     volumes:
-      - ./settings.json:/app/settings.json:ro
+      # Optional: Mount custom settings.json (env vars take precedence)
+      # - ./settings.json:/app/settings.json:ro
       # Mount external presets if HOST_PRESET_PATH is set in .env
       - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
     logging:

@@ -55,6 +55,16 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - `data/default-settings.json` - Persisted defaults (room, music service)
 - `presets/` - Preset files in JSON format
 
+## Preset Behavior
+- **Multi-room presets**: When a preset contains multiple players:
+  - The **first player in the list becomes the group coordinator**
+  - All other players join the coordinator's group
+  - The current/default room is set to the coordinator
+  - Future commands to any room in the group affect the entire group
+  - Example: If preset has `[LivingRoom, Bedroom]`, LivingRoom becomes coordinator
+- **pauseOthers**: When true, pauses all rooms not in the preset BEFORE grouping/playing
+- **Order matters**: Players are processed in array order for grouping
+
 ## API Patterns
 - Room endpoints: `/{room}/command`
 - Default room endpoints: `/command` (uses saved default)

@@ -166,3 +166,6 @@ settings.local.json
 config.local.json
 .env.local
 .env.*.local
+
+# Homes directory (environment-specific data)
+homes/

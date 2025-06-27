@@ -399,18 +399,31 @@ export class ApiRouter {
     };
   }
 
-  private async getPresets(): Promise<ApiResponse> {
+  private async getPresets(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const configPresets = this.config.presets || {};
     const folderPresets = this.presetLoader ? this.presetLoader.getAllPresets() : {};
+    const allPresets = { ...configPresets, ...folderPresets };
     
-    return {
-      status: 200,
-      body: {
-        config: configPresets,
-        folder: folderPresets,
-        all: { ...configPresets, ...folderPresets }
-      }
-    };
+    // Check if detailed parameter is in the URL
+    const detailed = queryParams?.get('detailed') === 'true';
+    
+    if (detailed) {
+      // Return full preset objects with metadata
+      return {
+        status: 200,
+        body: {
+          config: configPresets,
+          folder: folderPresets,
+          all: allPresets
+        }
+      };
+    } else {
+      // Return just an array of preset names
+      return {
+        status: 200,
+        body: Object.keys(allPresets)
+      };
+    }
   }
 
   // Room-specific endpoints

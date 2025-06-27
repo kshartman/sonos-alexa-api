@@ -522,7 +522,79 @@ export class SonosDevice extends EventEmitter {
 
   // Utility methods
   async playUri(uri: string, metadata = '', discovery?: any): Promise<void> {
-    logger.debug(`${this.roomName}: playUri called with uri=${uri.substring(0, 50)}...`);
+    // Handle x-rincon-playlist: URIs for music library playlists
+    // These need special handling - we browse the playlist and add its contents to the queue
+    if (uri.startsWith('x-rincon-playlist:')) {
+      logger.debug(`${this.roomName}: handling x-rincon-playlist URI by browsing and adding contents to queue`);
+      
+      // Extract the playlist ID from the URI
+      const match = uri.match(/#(.+)$/);
+      if (!match) {
+        throw new Error('Invalid x-rincon-playlist URI format');
+      }
+      const playlistId = match[1]!; // e.g., "S://media/mgplaylists/Blues(Acoustic Favorites).m3u"
+      
+      // First ensure we're coordinator if needed
+      const hasTopologyData = discovery && discovery.getZones().length > 0;
+      if (!hasTopologyData) {
+        // Wait briefly for topology data
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (discovery && discovery.getZones().length > 0) break;
+        }
+      }
+      
+      const isCurrentlyCoordinator = discovery ? discovery.isCoordinator(this.id) : true;
+      if (!isCurrentlyCoordinator) {
+        logger.debug(`${this.roomName}: becoming coordinator before queue operation`);
+        try {
+          await this.becomeCoordinatorOfStandaloneGroup();
+        } catch (error) {
+          logger.warn(`${this.roomName}: becomeCoordinatorOfStandaloneGroup failed: ${(error as Error).message}`);
+        }
+      }
+      
+      // Clear the queue
+      logger.debug(`${this.roomName}: clearing queue`);
+      await this.clearQueue();
+      
+      // Browse the playlist to get its contents
+      logger.debug(`${this.roomName}: browsing playlist ${playlistId}`);
+      const browseResult = await this.browse(playlistId, 0, 1000); // Get up to 1000 tracks
+      
+      if (browseResult.items.length === 0) {
+        throw new Error('Playlist is empty or could not be browsed');
+      }
+      
+      logger.debug(`${this.roomName}: found ${browseResult.items.length} tracks in playlist`);
+      
+      // Add all tracks to the queue
+      for (let i = 0; i < browseResult.items.length; i++) {
+        const item = browseResult.items[i];
+        if (item && item.uri && item.metadata) {
+          logger.debug(`${this.roomName}: adding track ${i + 1}/${browseResult.items.length}: ${item.title}`);
+          await this.addURIToQueue(item.uri, item.metadata);
+        }
+      }
+      
+      // Play from the queue - we need to set the transport URI to the queue
+      const deviceId = this.id.replace('uuid:', '');
+      const queueUri = `x-rincon-queue:${deviceId}#0`;
+      logger.debug(`${this.roomName}: setting AVTransport to queue: ${queueUri}`);
+      
+      // Use empty metadata for queue playback
+      await this.setAVTransportURI(queueUri, '');
+      
+      logger.debug(`${this.roomName}: starting playback from queue`);
+      await this.play();
+      return;
+    }
+    
+    // Regular URI handling
+    let playUri = uri;
+    let playMetadata = metadata;
+    
+    logger.debug(`${this.roomName}: playUri called with uri=${playUri.substring(0, 50)}...`);
     
     // Check if we need to become coordinator using real topology data
     let hasTopologyData = discovery && discovery.getZones().length > 0;
@@ -579,7 +651,7 @@ export class SonosDevice extends EventEmitter {
     }
     
     logger.debug(`${this.roomName}: setting AVTransport URI`);
-    await this.setAVTransportURI(uri, metadata);
+    await this.setAVTransportURI(playUri, playMetadata);
     
     logger.debug(`${this.roomName}: starting playback`);
     await this.play();
@@ -856,4 +928,5 @@ export class SonosDevice extends EventEmitter {
       totalMatches: result.totalMatches
     };
   }
+
 }

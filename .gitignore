@@ -168,4 +168,6 @@ config.local.json
 .env.*.local
 
 # Homes directory (environment-specific data)
-homes/
+# Keep the directory and README but ignore all analysis reports
+homes/*/
+!homes/README.md

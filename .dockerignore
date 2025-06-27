@@ -92,3 +92,8 @@ LICENSE
 /.test-state
 /state/
 *.state.json
+
+# Analysis and environment-specific data
+/homes/
+analyze-content.sh
+analyze-home-content.ts

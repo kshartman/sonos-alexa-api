@@ -129,29 +129,42 @@ export class PresetLoader {
       logger.info(`  Parse errors: ${stats.parseErrors}`);
       logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
       
+      // Only use colors if we're in development and not using Pino
+      const useColors = process.env.NODE_ENV === 'development' && process.env.LOGGER?.toLowerCase() !== 'pino';
+      
       if (validPresetNames.length > 0) {
-        const greenPresets = validPresetNames.sort().map(name => `\x1b[32m${name}\x1b[0m`).join(', ');
-        logger.info(`Working presets: ${greenPresets}`);
+        const presets = validPresetNames.sort().map(name => 
+          useColors ? `\x1b[32m${name}\x1b[0m` : name
+        ).join(', ');
+        logger.info(`Working presets: ${presets}`);
       }
       
       if (failedResolutionNames.length > 0) {
-        const yellowPresets = failedResolutionNames.sort().map(name => `\x1b[33m${name}\x1b[0m`).join(', ');
-        logger.info(`Failed resolution: ${yellowPresets}`);
+        const presets = failedResolutionNames.sort().map(name => 
+          useColors ? `\x1b[33m${name}\x1b[0m` : name
+        ).join(', ');
+        logger.info(`Failed resolution: ${presets}`);
       }
       
       if (invalidFormatNames.length > 0) {
-        const redPresets = invalidFormatNames.sort().map(name => `\x1b[31m${name}\x1b[0m`).join(', ');
-        logger.info(`Invalid format: ${redPresets}`);
+        const presets = invalidFormatNames.sort().map(name => 
+          useColors ? `\x1b[31m${name}\x1b[0m` : name
+        ).join(', ');
+        logger.info(`Invalid format: ${presets}`);
       }
       
       if (parseErrorNames.length > 0) {
-        const redParseErrors = parseErrorNames.sort().map(name => `\x1b[31m${name}\x1b[0m`).join(', ');
-        logger.info(`Parse errors: ${redParseErrors}`);
+        const presets = parseErrorNames.sort().map(name => 
+          useColors ? `\x1b[31m${name}\x1b[0m` : name
+        ).join(', ');
+        logger.info(`Parse errors: ${presets}`);
       }
       
       if (invalidRoomNames.length > 0) {
-        const orangeRooms = invalidRoomNames.sort().map(name => `\x1b[33m${name}\x1b[0m`).join(', ');
-        logger.info(`Presets with invalid rooms (loaded with valid rooms only): ${orangeRooms}`);
+        const presets = invalidRoomNames.sort().map(name => 
+          useColors ? `\x1b[33m${name}\x1b[0m` : name
+        ).join(', ');
+        logger.info(`Presets with invalid rooms (loaded with valid rooms only): ${presets}`);
       }
       
     } catch (error) {

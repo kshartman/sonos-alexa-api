@@ -310,7 +310,7 @@ async function start(): Promise<void> {
       const zones = discovery.getZones();
       const hasTopologyData = zones.length > 0;
       
-      logger.info('');
+      logger.info('═══════════════════════════════════════');
       logger.info(`🎵 Sonos Alexa API Version ${applicationVersion.version}`);
       logger.info('═══════════════════════════════════════');
       logger.info(`🌐 Server running on ${config.host || 'http://localhost'}:${config.port}`);
@@ -338,7 +338,7 @@ async function start(): Promise<void> {
       logger.info(`🔗 Webhooks: ${config.webhooks.length} configured`);
       logger.info('═══════════════════════════════════════');
       logger.info('✅ System ready for Alexa requests');
-      logger.info('');
+      logger.info('═══════════════════════════════════════');
       
       // Initialize music library cache in the background
       logger.info('📚 Initializing music library cache...');

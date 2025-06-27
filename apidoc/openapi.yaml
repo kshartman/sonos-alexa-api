@@ -202,6 +202,8 @@ paths:
     $ref: './paths/debug/enable-all.yaml'
   /debug/disable-all:
     $ref: './paths/debug/disable-all.yaml'
+  /debug/startup:
+    $ref: './paths/debug/startup.yaml'
   /debug/subscriptions:
     $ref: './paths/debug/subscriptions.yaml'
   /{room}/debug/accounts:

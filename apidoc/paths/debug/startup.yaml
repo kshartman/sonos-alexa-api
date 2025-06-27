@@ -1,0 +1,97 @@
+get:
+  tags:
+    - Debug
+  summary: Get startup information
+  description: |
+    Returns detailed information about the system startup including:
+    - Discovery status and device count
+    - Preset loading results (valid, failed, skipped)
+    - Favorite resolution statistics
+    - Music library indexing progress
+    - Topology data availability
+  operationId: getStartupInfo
+  responses:
+    '200':
+      description: Startup information
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              discovery:
+                type: object
+                properties:
+                  devicesFound:
+                    type: integer
+                    description: Number of Sonos devices discovered
+                  zonesFound:
+                    type: integer
+                    description: Number of zone groups found
+                  hasTopologyData:
+                    type: boolean
+                    description: Whether topology data is available
+                  lastUpdated:
+                    type: string
+                    format: date-time
+              presets:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: Total number of presets found
+                  valid:
+                    type: integer
+                    description: Number of successfully loaded presets
+                  failed:
+                    type: integer
+                    description: Number of presets that failed to load
+                  skipped:
+                    type: integer
+                    description: Number of presets skipped (invalid rooms)
+                  favoritesResolved:
+                    type: integer
+                    description: Number of favorites successfully resolved
+                  lastUpdated:
+                    type: string
+                    format: date-time
+              library:
+                type: object
+                properties:
+                  tracks:
+                    type: integer
+                    description: Number of tracks in music library
+                  albums:
+                    type: integer
+                    description: Number of albums in music library
+                  artists:
+                    type: integer
+                    description: Number of artists in music library
+                  indexingInProgress:
+                    type: boolean
+                    description: Whether library indexing is in progress
+                  lastIndexed:
+                    type: string
+                    format: date-time
+                  lastUpdated:
+                    type: string
+                    format: date-time
+            example:
+              discovery:
+                devicesFound: 13
+                zonesFound: 9
+                hasTopologyData: true
+                lastUpdated: "2025-06-27T05:33:28.074Z"
+              presets:
+                total: 129
+                valid: 128
+                failed: 1
+                skipped: 0
+                favoritesResolved: 45
+                lastUpdated: "2025-06-27T05:33:28.074Z"
+              library:
+                tracks: 48140
+                albums: 3756
+                artists: 4401
+                indexingInProgress: false
+                lastIndexed: "2025-06-27T05:33:28.219Z"
+                lastUpdated: "2025-06-27T05:33:28.219Z"

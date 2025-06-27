@@ -591,8 +591,8 @@ export class SonosDevice extends EventEmitter {
     }
     
     // Regular URI handling
-    let playUri = uri;
-    let playMetadata = metadata;
+    const playUri = uri;
+    const playMetadata = metadata;
     
     logger.debug(`${this.roomName}: playUri called with uri=${playUri.substring(0, 50)}...`);
     

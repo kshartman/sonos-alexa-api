@@ -399,7 +399,7 @@ export class ApiRouter {
     };
   }
 
-  private async getPresets(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+  private async getPresets(_params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const configPresets = this.config.presets || {};
     const folderPresets = this.presetLoader ? this.presetLoader.getAllPresets() : {};
     const allPresets = { ...configPresets, ...folderPresets };

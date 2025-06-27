@@ -29,9 +29,15 @@ else
     exit 1
 fi
 
-    cp ../private/settings-${BUILDFOR}.json settings.json
-    rm settings-${BUILDFOR}.json
-    ln -s ../private/settings-${BUILDFOR}.json .
+if [ -f ../private/.env-${BUILDFOR} ]; then
+    rm .env
+    cp ../private/.env-${BUILDFOR} .env
+    rm .env-${BUILDFOR}
+    ln -s ../private/.env-${BUILDFOR} .
+else
+    echo error: no such .env ../private/.env-${BUILDFOR}
+    exit 1
+fi
 
 if [ -d ../presets/presets-${BUILDFOR} ]; then
     if [ -L ./presets ]; then

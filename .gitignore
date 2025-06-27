@@ -170,4 +170,5 @@ config.local.json
 # Homes directory (environment-specific data)
 # Keep the directory and README but ignore all analysis reports
 homes/*/
-!homes/README.md
+!homes/README.md# Draft release notes
+releases/draft-*

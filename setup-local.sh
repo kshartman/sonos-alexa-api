@@ -19,6 +19,8 @@ else
     BUILDFOR=$(echo "${HOSTNAME%%.*}" | tr '[:upper:]' '[:lower:]')
 fi    
 
+echo Copying files to build ${BUILDFOR}...
+
 if [ -f ../private/settings-${BUILDFOR}.json ]; then
     rm settings.json
     cp ../private/settings-${BUILDFOR}.json settings.json

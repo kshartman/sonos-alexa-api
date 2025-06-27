@@ -44,6 +44,7 @@ settings-*.json
 /tts-cache/
 
 # Environment variables
+.env-*
 .env
 .env.local
 .env.development.local

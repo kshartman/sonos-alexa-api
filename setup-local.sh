@@ -22,6 +22,7 @@ fi
 echo Copying files to build ${BUILDFOR}...
 
 if [ -f ../private/settings-${BUILDFOR}.json ]; then
+    echo cp ../private/settings-${BUILDFOR}.json settings.json
     rm settings.json
     cp ../private/settings-${BUILDFOR}.json settings.json
     rm settings-${BUILDFOR}.json
@@ -32,6 +33,7 @@ else
 fi
 
 if [ -f ../private/.env-${BUILDFOR} ]; then
+    echo cp ../private/.env-${BUILDFOR} .env
     rm .env
     cp ../private/.env-${BUILDFOR} .env
     rm .env-${BUILDFOR}
@@ -50,6 +52,7 @@ if [ -d ../presets/presets-${BUILDFOR} ]; then
         rm ./presets
     fi
     mkdir ./presets
+    echo  "cp ../presets/presets-${BUILDFOR} -> ,/presets"
     (cd ../presets/presets-${BUILDFOR} && tar cf - .) | (cd ./presets && tar xf -)
  else
     echo error: no such presets ../presets/presets-${BUILDFOR}/

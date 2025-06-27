@@ -56,8 +56,9 @@ COPY --chown=nodejs:nodejs settings.json* ./
 # Create presets directory
 RUN mkdir -p presets
 
-# Copy preset files
-COPY --chown=nodejs:nodejs presets/*.json ./presets/
+# Copy preset files only if not mounting external volume
+# This allows the container to work with or without external presets
+COPY --chown=nodejs:nodejs presets/*.json ./presets/ || true
 
 # Create runtime directories with proper permissions
 RUN mkdir -p /app/data /app/logs /app/tts-cache /app/music-library-cache && \

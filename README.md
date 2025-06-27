@@ -156,11 +156,36 @@ npm run build
 ### Docker Compose
 
 ```bash
-# Using the provided docker-compose file
-docker-compose -f docker-compose.public.yml up -d
+# Copy and configure the environment file
+cp .env.example .env
+# Edit .env to set your preferences
 
-# Or create your own docker-compose.yml
+# Start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
 ```
+
+#### Environment Variables
+
+The Docker container supports configuration via `.env` file:
+
+```bash
+# API server port
+PORT=5005
+
+# External preset directory (optional)
+HOST_PRESET_PATH=/path/to/your/presets
+
+# Logging configuration
+LOG_LEVEL=info              # error, warn, info, debug
+LOG_FORMAT=json             # json or simple
+DEBUG_LEVEL=debug           # error, warn, info, debug, wall
+DEBUG_CATEGORIES=api,soap   # soap, topology, discovery, favorites, presets, upnp, api, sse
+```
+
+#### Custom docker-compose.yml
 
 ```yaml
 services:
@@ -169,8 +194,12 @@ services:
     container_name: sonos-http-api
     network_mode: host
     restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DEBUG_CATEGORIES=${DEBUG_CATEGORIES:-}
     volumes:
       - ./settings.json:/app/settings.json:ro
+      - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
     logging:
       driver: "json-file"
       options:

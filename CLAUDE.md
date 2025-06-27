@@ -255,6 +255,15 @@ test/
 - Preset validation could be extended to validate favorites exist
 - **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead
 
+## Docker Environment Variables
+The Docker container now supports configuration via .env file:
+- **PORT**: API server port (default: 5005)
+- **HOST_PRESET_PATH**: External preset directory to mount as volume
+- **LOG_LEVEL**: Log level (error, warn, info, debug)
+- **LOG_FORMAT**: Log format (simple or json)
+- **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, wall)
+- **DEBUG_CATEGORIES**: Comma-separated debug categories (soap, topology, discovery, favorites, presets, upnp, api, sse, or "all")
+
 ## Architecture Critique & Enhancement Plan
 
 ### Architecture Strengths

@@ -2,7 +2,7 @@
 set -e
 
 # Parse arguments
-CONTAINER_NAME="sonos-api"
+CONTAINER_NAME="sonosd"
 RESTART=false
 
 for arg in "$@"; do

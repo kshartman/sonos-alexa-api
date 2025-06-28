@@ -43,6 +43,13 @@ VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
 
 # Create a temporary directory for the filtered repo
 TEMP_DIR="temp/$VERSION"
+
+# If executing, clean up any existing temp directory first
+if [ "$ACTION" = "execute" ] && [ -d "$TEMP_DIR" ]; then
+    echo "🗑️  Cleaning up existing temp directory from previous dry run..."
+    rm -rf "$TEMP_DIR"
+fi
+
 mkdir -p "$TEMP_DIR"
 echo "📁 Using temp directory: $TEMP_DIR"
 

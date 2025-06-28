@@ -1,8 +1,20 @@
 #!/bin/bash
 set -e
 
-# Container name - can be overridden with first argument
-CONTAINER_NAME="${1:-sonos-api}"
+# Parse arguments
+CONTAINER_NAME="sonos-api"
+RESTART=false
+
+for arg in "$@"; do
+    if [[ "$arg" == "--restart" ]]; then
+        RESTART=true
+    else
+        # First non-flag argument is container name
+        if [[ "$arg" != -* ]]; then
+            CONTAINER_NAME="$arg"
+        fi
+    fi
+done
 
 echo "Running Sonos Alexa API container: $CONTAINER_NAME"
 
@@ -31,15 +43,6 @@ echo "Version: $version"
 
 # Export for docker-compose
 export VERSION=$version
-
-# Check for --restart flag
-RESTART=false
-for arg in "$@"; do
-    if [[ "$arg" == "--restart" ]]; then
-        RESTART=true
-        break
-    fi
-done
 
 # Check if either the custom name or compose default name exists
 check_container() {

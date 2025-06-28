@@ -68,18 +68,10 @@ if [ "$CONTAINER_STATUS" = "running" ] || [ "$COMPOSE_STATUS" = "running" ]; the
     echo "Container '${EXISTING_NAME}' is already running."
     
     if [ "$RESTART" = true ]; then
+        echo "Restarting container..."
+        docker stop "${EXISTING_NAME}"
+        docker rm "${EXISTING_NAME}" 2>/dev/null || true
         echo ""
-        read -p "Do you want to restart it? (y/N) " -n 1 -r
-        echo ""
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Stopping container..."
-            docker stop "${EXISTING_NAME}"
-            docker rm "${EXISTING_NAME}" 2>/dev/null || true
-            echo ""
-        else
-            echo "Aborted."
-            exit 0
-        fi
     else
         echo "To restart it, run:"
         echo "  ./run-docker.sh ${CONTAINER_NAME} --restart"

@@ -4,6 +4,8 @@ CLAUDE.md
 settings-*.json
 docker-build.sh
 docker-run.sh
+docker-build-local.sh
+docker-run-local.sh
 push-to-github.sh
 set-version.sh
 setup-local.sh

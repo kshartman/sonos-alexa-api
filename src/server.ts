@@ -290,7 +290,7 @@ async function start(): Promise<void> {
     await discovery.start();
     
     // Show detected IP for TTS after discovery starts
-    const ttsHostIp = process.env.TTS_HOST_IP || config.tts?.hostIp;
+    const ttsHostIp = process.env.TTS_HOST_IP;
     if (!ttsHostIp) {
       // Wait a moment for discovery to find devices
       await new Promise(resolve => setTimeout(resolve, 1000));

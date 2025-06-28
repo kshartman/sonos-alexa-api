@@ -116,7 +116,26 @@ test/
 ├── unit/                  # Unit tests
 ├── integration/           # Integration tests
 └── helpers/               # Test utilities
+
+Analysis Tools:
+├── analyze-infrastructure.sh      # System topology analyzer
+├── analyze-home-infrastructure.ts # Infrastructure analysis logic
+├── analyze-content.sh            # Content analyzer
+└── analyze-home-content.ts       # Content analysis logic
 ```
+
+## Analysis Tools
+
+The project includes analysis tools for debugging and documenting Sonos systems:
+
+- **Infrastructure Analysis**: Use `./analyze-infrastructure.sh` to generate detailed reports about device models, network topology, and capabilities
+- **Content Analysis**: Use `./analyze-content.sh` to analyze favorites, presets, and validate configurations
+
+These tools are helpful for:
+- Debugging system issues
+- Understanding device capabilities
+- Documenting multi-home setups
+- Validating preset configurations
 
 ## Adding Music Services
 

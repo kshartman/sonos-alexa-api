@@ -248,6 +248,20 @@ npm test -- integration/playback-tests.ts
 npm run build
 ```
 
+### Analysis Tools
+
+The project includes tools for analyzing your Sonos system:
+
+```bash
+# Analyze system infrastructure
+./analyze-infrastructure.sh [home-name] [api-url]
+
+# Analyze content (favorites, presets)
+./analyze-content.sh [home-name] [api-url] [room-name]
+```
+
+These tools generate detailed reports in the `homes/` directory documenting your system configuration, device capabilities, and content.
+
 ## Deployment
 
 ### Docker Deployment

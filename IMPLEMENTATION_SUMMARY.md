@@ -173,6 +173,18 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
    - Toggle mute endpoint
    - Library management endpoints
 
+5. **Device Information API**
+   - `/devices` endpoints for detailed hardware info
+   - Model name resolution for all devices
+   - Stereo pair role detection
+   - Network topology analysis
+
+6. **Analysis Tools**
+   - Infrastructure analyzer for system documentation
+   - Device capability matrix generation
+   - Content analyzer for favorites/presets
+   - Multi-home support
+
 ## Known Limitations
 
 - SiriusXM not implemented (returns 501)

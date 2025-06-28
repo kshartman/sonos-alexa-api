@@ -67,6 +67,41 @@ This release adds comprehensive device information endpoints to provide detailed
 - Added comprehensive channel role mapping for all Sonos configurations
 - TypeScript improvements for better type safety in device handling
 
+## 🔍 Infrastructure Analysis Tools
+
+New command-line tools for analyzing and documenting Sonos system configuration.
+
+### analyze-infrastructure.sh
+Generates comprehensive reports about your Sonos system infrastructure:
+
+```bash
+./analyze-infrastructure.sh [home-name] [api-url]
+```
+
+#### Reports Generated:
+1. **infrastructure-analysis.md** - Complete system overview including:
+   - Device inventory with model details
+   - Zone/group configurations  
+   - Network topology and subnet distribution
+   - Current playback states
+   - Stereo pair configurations
+   - Raw device JSON data
+
+2. **device-matrix.md** - Feature compatibility matrix showing:
+   - Supported features by model (Line-In, AirPlay, Voice, Portable)
+   - Accurate voice assistant support based on model
+   - Room-by-room capability breakdown
+   - Group membership status
+
+### Example Usage:
+```bash
+# Analyze local system
+./analyze-infrastructure.sh my-home
+
+# Analyze remote system
+./analyze-infrastructure.sh office-system http://192.168.1.100:5005
+```
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates

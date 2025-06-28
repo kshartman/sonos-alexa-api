@@ -146,21 +146,6 @@ DEBUG_CATEGORIES= npm start
 CREATE_DEFAULT_PRESETS=true npm start
 ```
 
-### Debug Categories
-
-Control log verbosity with DEBUG_CATEGORIES:
-- `api` - API request/response logging (enabled by default)
-- `discovery` - Device discovery details  
-- `soap` - SOAP request/response XML (verbose)
-- `topology` - UPnP topology events
-- `favorites` - Favorite resolution details
-- `presets` - Preset loading and conversion (can be verbose)
-- `upnp` - Raw UPnP event details
-- `sse` - Server-Sent Events for webhooks
-- `all` - Enable all categories
-
-**Note**: The `presets` category can generate hundreds of log lines during startup. It's recommended to enable it only when debugging preset issues.
-
 ### settings.json (Alternative)
 
 For complex configurations, you can use `settings.json`:
@@ -265,66 +250,9 @@ npm run build
 
 ## Deployment
 
-### Docker Compose
+### Docker Deployment
 
-```bash
-# Copy and configure the environment file
-cp .env.example .env
-# Edit .env to set your preferences
-
-# Start the container
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-```
-
-#### Environment Variables
-
-The Docker container supports configuration via `.env` file:
-
-```bash
-# API server port
-PORT=5005
-
-# REQUIRED for Docker: Host IP for TTS URLs
-# Sonos devices need this IP to download TTS audio files
-TTS_HOST_IP=192.168.1.100   # Your Docker host's IP address
-
-# External preset directory (optional)
-HOST_PRESET_PATH=/path/to/your/presets
-
-# Logging configuration
-LOG_LEVEL=info              # error, warn, info, debug
-LOGGER=pino                 # winston or pino (winston for dev, pino for prod)
-DEBUG_LEVEL=debug           # error, warn, info, debug, trace
-DEBUG_CATEGORIES=api,soap   # soap, topology, discovery, favorites, presets, upnp, api, sse
-```
-
-**Important**: The `TTS_HOST_IP` must be set to an IP address that your Sonos devices can reach. This is typically your Docker host's IP on your local network (not `localhost` or `127.0.0.1`).
-
-#### Custom docker-compose.yml
-
-```yaml
-services:
-  sonos-http-api:
-    build: .
-    container_name: sonos-http-api
-    network_mode: host
-    restart: unless-stopped
-    environment:
-      - TTS_HOST_IP=${TTS_HOST_IP}  # REQUIRED: Set in .env file
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DEBUG_CATEGORIES=${DEBUG_CATEGORIES:-}
-    volumes:
-      - ./settings.json:/app/settings.json:ro
-      - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "20m"
-        max-file: "10"
-```
+For detailed Docker deployment instructions, environment variables, and configuration options, see [DOCKER.md](DOCKER.md).
 
 ### Security
 

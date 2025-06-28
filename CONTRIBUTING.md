@@ -138,7 +138,7 @@ curl http://localhost:5005/debug/level/debug
 
 View logs:
 ```bash
-docker logs -f sonos-http-api
+docker logs -f sonos-alexa-api
 # or
 npm run dev
 ```

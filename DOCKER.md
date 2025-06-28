@@ -2,6 +2,8 @@
 
 The Sonos Alexa API is available as a public Docker image with multi-architecture support (amd64, arm64, arm/v7).
 
+**Docker Hub**: [`kshartman/sonos-alexa-api`](https://hub.docker.com/r/kshartman/sonos-alexa-api)
+
 ## Quick Start
 
 ```bash
@@ -78,6 +80,8 @@ All configuration can be done via environment variables:
 All caches (TTS, music library) are stored inside the container and recreated as needed. Logs go to stdout/stderr for Docker log management.
 
 ## Docker Compose Example
+
+A complete example is available at [`docker-compose.example.yml`](https://github.com/kshartman/sonos-alexa-api/blob/main/docker-compose.example.yml).
 
 ```yaml
 version: '3.8'

@@ -30,26 +30,24 @@ Typical response times:
 ### Docker (Recommended)
 
 ```bash
-# Using pre-built image
+# Quick start with Docker
 docker run -d \
   --name sonos-api \
   --network host \
-  -v $(pwd)/presets:/app/presets \
-  -v $(pwd)/data:/app/data \
   -e DEFAULT_ROOM="Living Room" \
-  -e LOG_LEVEL=info \
   kshartman/sonos-alexa-api:latest
 
-# Using docker-compose
+# Or using Docker Compose (recommended)
+curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml
+mv docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml with your settings
 docker-compose up -d
 
 # View logs
 docker logs -f sonos-api
 ```
 
-Images available at:
-- Docker Hub: `kshartman/sonos-alexa-api`
-- GitHub Container Registry: `ghcr.io/kshartman/sonos-alexa-api`
+**Docker Hub**: [`kshartman/sonos-alexa-api`](https://hub.docker.com/r/kshartman/sonos-alexa-api)
 
 See [DOCKER.md](DOCKER.md) for detailed Docker usage and configuration.
 

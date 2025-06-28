@@ -1,0 +1,40 @@
+# Example Docker Compose configuration for Sonos Alexa API
+# Using pre-built image from Docker Hub
+
+services:
+  sonos-api:
+    image: kshartman/sonos-alexa-api:latest
+    container_name: sonos-api
+    network_mode: host
+    environment:
+      # Required: Set your default room
+      - DEFAULT_ROOM=Living Room
+      
+      # Optional: Configure logging
+      - LOG_LEVEL=info
+      
+      # Optional: TTS settings
+      - TTS_PROVIDER=google
+      # - VOICERSS_KEY=your_api_key_here
+      
+      # Optional: Authentication
+      # - AUTH_USERNAME=admin
+      # - AUTH_PASSWORD=your_password_here
+      
+      # Optional: Music service credentials
+      # - PANDORA_USERNAME=your_email
+      # - PANDORA_PASSWORD=your_password
+    
+    volumes:
+      # Optional: Mount presets directory for custom presets
+      - ./presets:/app/presets:ro
+    
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -1,7 +1,9 @@
 # Multi-stage build for minimal image size
 FROM node:22-alpine AS builder
 
-# Build argument for version
+# Build arguments for metadata
+ARG BUILD_DATE
+ARG VCS_REF
 ARG VERSION=latest
 
 WORKDIR /app
@@ -25,6 +27,8 @@ RUN npm run save-version
 FROM node:22-alpine
 
 # Build arguments
+ARG BUILD_DATE
+ARG VCS_REF
 ARG VERSION=latest
 ARG PORT=5005
 
@@ -66,12 +70,18 @@ RUN find ./presets-tmp -name "*.json" -type f -exec cp {} ./presets/ \; 2>/dev/n
 RUN mkdir -p /app/data /app/logs /app/tts-cache /app/music-library-cache && \
     chown -R nodejs:nodejs /app/data /app/logs /app/tts-cache /app/music-library-cache
 
-# Add labels for better image metadata
-LABEL org.opencontainers.image.source="https://git.bogometer.com/shartman/sonos-alexa-api"
-LABEL org.opencontainers.image.description="Modern Sonos HTTP API for Alexa integration"
+# Add OCI labels for better image metadata
+LABEL org.opencontainers.image.created=$BUILD_DATE
+LABEL org.opencontainers.image.url="https://github.com/kshartman/sonos-alexa-api"
+LABEL org.opencontainers.image.source="https://github.com/kshartman/sonos-alexa-api"
+LABEL org.opencontainers.image.documentation="https://github.com/kshartman/sonos-alexa-api/blob/main/README.md"
 LABEL org.opencontainers.image.version=$VERSION
-LABEL org.opencontainers.image.authors="Shane Hartman <shartman@nx.bogometer.com>, Claude (Anthropic)"
+LABEL org.opencontainers.image.revision=$VCS_REF
+LABEL org.opencontainers.image.vendor="Shane Hartman"
 LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="Sonos Alexa API"
+LABEL org.opencontainers.image.description="Modern TypeScript Sonos HTTP API for Alexa integration with minimal dependencies"
+LABEL org.opencontainers.image.authors="Shane Hartman, Claude (Anthropic)"
 
 # Switch to non-root user
 USER nodejs

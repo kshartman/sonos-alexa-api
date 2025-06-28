@@ -30,26 +30,28 @@ Typical response times:
 ### Docker (Recommended)
 
 ```bash
-# Build the image
-docker build -t sonos-http-api .
-
-# Run with environment variables
+# Using pre-built image
 docker run -d \
-  --name sonos-http-api \
+  --name sonos-api \
   --network host \
-  -e PORT=5005 \
-  -e DEFAULT_ROOM=LivingRoom \
-  -v ./presets:/app/presets \
-  sonos-http-api:latest
+  -v $(pwd)/presets:/app/presets \
+  -v $(pwd)/data:/app/data \
+  -e DEFAULT_ROOM="Living Room" \
+  -e LOG_LEVEL=info \
+  kshartman/sonos-alexa-api:latest
 
-# Or use an env file
-docker run -d \
-  --name sonos-http-api \
-  --network host \
-  --env-file .env \
-  -v ./presets:/app/presets \
-  sonos-http-api:latest
+# Using docker-compose
+docker-compose up -d
+
+# View logs
+docker logs -f sonos-api
 ```
+
+Images available at:
+- Docker Hub: `kshartman/sonos-alexa-api`
+- GitHub Container Registry: `ghcr.io/kshartman/sonos-alexa-api`
+
+See [DOCKER.md](DOCKER.md) for detailed Docker usage and configuration.
 
 ### Local Development
 

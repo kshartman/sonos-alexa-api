@@ -69,16 +69,20 @@ config.local.json
 settings-*.json
 config-*.json
 setup-local.sh
+setup-local-enhanced.sh
 set-version.sh
 tag-version.sh
 test-remote.sh
 build-docker.sh
+docker-build.sh
 run-docker.sh
 push-to-github.sh
 .github-exclude
 docker-compose.public.yml
+docker-compose.override.yml
 API.md
 CONTRIBUTING.md
+DOCKER.md
 LICENSE
 .npmignore
 

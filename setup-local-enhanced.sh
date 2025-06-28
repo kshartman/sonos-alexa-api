@@ -87,22 +87,14 @@ else
 fi
 echo ""
 
-# Settings file
-if [ -f ../private/settings-${SETTINGS_HOST}.json ]; then
+# Remove settings.json if it exists (using env vars instead)
+if [ -f settings.json ]; then
+    echo "✓ Removing settings.json (using environment variables instead)"
     rm -f settings.json
-    cp ../private/settings-${SETTINGS_HOST}.json settings.json
-    rm -f settings-${SETTINGS_HOST}.json 2>/dev/null || true
-    ln -s ../private/settings-${SETTINGS_HOST}.json .
-    echo "✓ Copied settings-${SETTINGS_HOST}.json"
-else
-    echo "! No settings-${SETTINGS_HOST}.json found, using defaults"
-    rm -f settings.json
-    if [ -f settings.default.json ]; then
-        cp settings.default.json settings.json
-    else
-        echo "{}" > settings.json
-    fi
 fi
+
+# Clean up any settings symlinks
+rm -f settings-${SETTINGS_HOST}.json 2>/dev/null || true
 
 # Environment file - try enhanced version first, fall back to regular
 if [ -f ../private/.env-${SETTINGS_HOST}-enhanced ]; then
@@ -192,20 +184,7 @@ if [ "$SETTINGS_HOST" = "mbpro4" ]; then
                 fi
             fi
             
-            # Update settings.json
-            if [ -f settings.json ]; then
-                if command -v jq >/dev/null 2>&1; then
-                    # Use jq if available
-                    jq '.defaultRoom = "ShanesOfficeSpeakers"' settings.json > settings.json.tmp && mv settings.json.tmp settings.json
-                else
-                    # Fallback to sed
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' 's/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/"defaultRoom": "ShanesOfficeSpeakers"/' settings.json
-                    else
-                        sed -i 's/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/"defaultRoom": "ShanesOfficeSpeakers"/' settings.json
-                    fi
-                fi
-            fi
+# Settings.json removed - using env vars only
         elif ip_in_subnet "$CURRENT_IP" "192.168.11.0/24"; then
             # Worf network - use OfficeSpeakers
             echo "✓ Setting DEFAULT_ROOM=OfficeSpeakers for worf network"
@@ -226,20 +205,7 @@ if [ "$SETTINGS_HOST" = "mbpro4" ]; then
                 fi
             fi
             
-            # Update settings.json
-            if [ -f settings.json ]; then
-                if command -v jq >/dev/null 2>&1; then
-                    # Use jq if available
-                    jq '.defaultRoom = "OfficeSpeakers"' settings.json > settings.json.tmp && mv settings.json.tmp settings.json
-                else
-                    # Fallback to sed
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' 's/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/"defaultRoom": "OfficeSpeakers"/' settings.json
-                    else
-                        sed -i 's/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/"defaultRoom": "OfficeSpeakers"/' settings.json
-                    fi
-                fi
-            fi
+# Settings.json removed - using env vars only
         else
             # Other network - remove DEFAULT_ROOM
             echo "✓ Removing DEFAULT_ROOM for unknown network"
@@ -253,22 +219,7 @@ if [ "$SETTINGS_HOST" = "mbpro4" ]; then
                 fi
             fi
             
-            # Remove from settings.json
-            if [ -f settings.json ]; then
-                if command -v jq >/dev/null 2>&1; then
-                    # Use jq if available - remove the defaultRoom key
-                    jq 'del(.defaultRoom)' settings.json > settings.json.tmp && mv settings.json.tmp settings.json
-                else
-                    # Fallback to sed - remove the line (may leave trailing comma)
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' '/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*",*/d' settings.json
-                        sed -i '' '/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/d' settings.json
-                    else
-                        sed -i '/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*",*/d' settings.json
-                        sed -i '/"defaultRoom"[[:space:]]*:[[:space:]]*"[^"]*"/d' settings.json
-                    fi
-                fi
-            fi
+# Settings.json removed - using env vars only
         fi
     fi
 fi
@@ -332,7 +283,7 @@ fi
 
 echo ""
 echo "Setup complete!"
-echo "- Settings/env: ${SETTINGS_HOST}"
+echo "- Environment: ${SETTINGS_HOST}"
 if [ "$CREATE_DEFAULT_PRESETS" = true ]; then
     echo "- Presets: AUTO-GENERATED"
 else

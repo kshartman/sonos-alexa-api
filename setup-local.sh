@@ -21,16 +21,14 @@ fi
 
 echo Copying files to build ${BUILDFOR}...
 
-if [ -f ../private/settings-${BUILDFOR}.json ]; then
-    echo cp ../private/settings-${BUILDFOR}.json settings.json
-    rm settings.json
-    cp ../private/settings-${BUILDFOR}.json settings.json
-    rm settings-${BUILDFOR}.json
-    ln -s ../private/settings-${BUILDFOR}.json .
-else
-    echo error: no such settings ../private/settings-${BUILDFOR}.json
-    exit 1
+# Remove settings.json if it exists (using env vars instead)
+if [ -f settings.json ]; then
+    echo "Removing settings.json (using environment variables instead)"
+    rm -f settings.json
 fi
+
+# Clean up any settings symlinks
+rm -f settings-${BUILDFOR}.json 2>/dev/null || true
 
 if [ -f ../private/.env-${BUILDFOR} ]; then
     echo cp ../private/.env-${BUILDFOR} .env

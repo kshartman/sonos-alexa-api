@@ -350,6 +350,38 @@ test/
 - Updated `clean` script to also remove logs directory
 - Tests now run with LOG_LEVEL=error by default (use --debug flag for verbose output)
 
+## Docker Release Process
+When ready to publish a new Docker image:
+
+1. **Update version** in package.json
+2. **Update release notes** in releases/
+3. **Test thoroughly** with local Docker build
+4. **Build and tag**:
+   ```bash
+   ./docker-build.sh
+   ```
+5. **Test the image locally**:
+   ```bash
+   docker run -d --name sonos-test --network host sonos-alexa-api:latest
+   docker logs -f sonos-test
+   # Test some API calls
+   docker stop sonos-test && docker rm sonos-test
+   ```
+6. **Login to Docker Hub**:
+   ```bash
+   docker login
+   ```
+7. **Push to Docker Hub**:
+   ```bash
+   docker push kshartman/sonos-alexa-api:v1.2.0
+   docker push kshartman/sonos-alexa-api:latest
+   ```
+8. **Tag the git commit**:
+   ```bash
+   git tag v1.2.0
+   git push origin v1.2.0
+   ```
+
 ## Notes for Next Session
 - Unit tests would be valuable for reliability
 - Docker health check endpoint exists at /health

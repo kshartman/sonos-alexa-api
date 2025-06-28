@@ -289,6 +289,21 @@ async function start(): Promise<void> {
     // Start discovery first
     await discovery.start();
     
+    // Show detected IP for TTS after discovery starts
+    const ttsHostIp = process.env.TTS_HOST_IP;
+    if (!ttsHostIp) {
+      // Wait a moment for discovery to find devices
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const detectedIp = discovery.getLocalIP();
+      logger.always(`🎤 TTS IP: ${detectedIp || 'Unable to detect'} (auto-detected)`);
+      if (!detectedIp) {
+        logger.warn('Could not detect local IP - TTS may not work correctly');
+        logger.info('Set TTS_HOST_IP environment variable to fix this');
+      }
+    } else {
+      logger.always(`🎤 TTS IP: ${ttsHostIp} (configured)`);
+    }
+    
     // Wait a bit for device discovery, then load presets
     setTimeout(async () => {
       debugManager.debug('presets', 'Loading presets with favorite resolution...');

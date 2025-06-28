@@ -11,12 +11,11 @@ docker run -d \
   --network host \
   kshartman/sonos-alexa-api:latest
 
-# With configuration
+# With configuration and presets
 docker run -d \
   --name sonos-api \
   --network host \
-  -v $(pwd)/presets:/app/presets \
-  -v $(pwd)/data:/app/data \
+  -v $(pwd)/presets:/app/presets:ro \
   -e DEFAULT_ROOM="Living Room" \
   -e LOG_LEVEL=info \
   kshartman/sonos-alexa-api:latest
@@ -72,14 +71,11 @@ All configuration can be done via environment variables:
 
 ## Volume Mounts
 
-### Required Volumes
-- `/app/presets` - Preset JSON files
-- `/app/data` - Persistent data (default settings, caches)
-
 ### Optional Volumes
-- `/app/logs` - Log files (if not using stdout)
-- `/app/tts-cache` - TTS audio file cache
-- `/app/music-library-cache` - Music library index cache
+- `/app/presets` - Preset JSON files (read-only)
+- `/app/data` - Persistent defaults (only if you want to save default room/service across restarts)
+
+All caches (TTS, music library) are stored inside the container and recreated as needed. Logs go to stdout/stderr for Docker log management.
 
 ## Docker Compose Example
 
@@ -103,10 +99,9 @@ services:
       - TTS_PROVIDER=google
       - CREATE_DEFAULT_PRESETS=true
     volumes:
-      - ./presets:/app/presets
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./tts-cache:/app/tts-cache
+      - ./presets:/app/presets:ro
+      # Optional: persist default room/service across restarts
+      # - ./data:/app/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:5005/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s

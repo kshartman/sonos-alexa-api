@@ -53,17 +53,8 @@ services:
       # Preset files (read-only by default)
       - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
       
-      # Persistent data (settings, caches)
-      - ${DATA_PATH:-./data}:/app/data
-      
-      # Log files (optional)
-      - ${LOG_PATH:-./logs}:/app/logs
-      
-      # TTS cache (optional)
-      - ${TTS_CACHE_PATH:-./tts-cache}:/app/tts-cache
-      
-      # Music library cache (optional)
-      - ${MUSIC_CACHE_PATH:-./music-library-cache}:/app/music-library-cache
+      # Optional persistent data (uncomment if you want to persist defaults)
+      # - ${DATA_PATH:-./data}:/app/data
       
       # Optional: Mount custom settings.json (env vars take precedence)
       # - ./settings.json:/app/settings.json:ro

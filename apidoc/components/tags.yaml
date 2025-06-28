@@ -1,8 +1,0 @@
-- name: System
-  description: System-wide endpoints for health, zones, and configuration
-- name: Room
-  description: Room-specific control endpoints including playback, volume, and content
-- name: Global
-  description: Global control endpoints that affect all rooms or use defaults
-- name: Debug
-  description: Debug and monitoring endpoints for troubleshooting

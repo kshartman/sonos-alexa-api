@@ -2,8 +2,8 @@
 docker-compose.yml
 CLAUDE.md
 settings-*.json
-build-docker.sh
-run-docker.sh
+docker-build.sh
+docker-run.sh
 push-to-github.sh
 set-version.sh
 setup-local.sh

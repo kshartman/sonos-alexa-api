@@ -120,7 +120,7 @@ else
     cd "$ORIG_DIR/$TEMP_DIR/filtered"
     echo "   Total files: $(git ls-files | wc -l)"
     echo "   Excluded files verified removed:"
-    for pattern in CLAUDE.md .claude/ build-docker.sh run-docker.sh push-to-github.sh docker-compose.yml .github-exclude; do
+    for pattern in CLAUDE.md .claude/ docker-build.sh docker-run.sh push-to-github.sh docker-compose.yml .github-exclude; do
         if git ls-files | grep -q "$pattern"; then
             echo "   ❌ $pattern - STILL IN REPO!"
         else

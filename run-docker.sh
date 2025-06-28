@@ -41,19 +41,40 @@ for arg in "$@"; do
     fi
 done
 
-# Check if container is already running
-if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+# Check if either the custom name or compose default name exists
+check_container() {
+    local name=$1
+    if docker ps --format '{{.Names}}' | grep -q "^${name}$"; then
+        echo "running"
+    elif docker ps -a --format '{{.Names}}' | grep -q "^${name}$"; then
+        echo "stopped"
+    else
+        echo "none"
+    fi
+}
+
+# Check both possible container names
+CONTAINER_STATUS=$(check_container "${CONTAINER_NAME}")
+COMPOSE_STATUS=$(check_container "sonos-alexa-api")
+
+# Handle existing containers
+if [ "$CONTAINER_STATUS" = "running" ] || [ "$COMPOSE_STATUS" = "running" ]; then
+    EXISTING_NAME="${CONTAINER_NAME}"
+    if [ "$COMPOSE_STATUS" = "running" ]; then
+        EXISTING_NAME="sonos-alexa-api"
+    fi
+    
     echo ""
-    echo "Container '${CONTAINER_NAME}' is already running."
+    echo "Container '${EXISTING_NAME}' is already running."
     
     if [ "$RESTART" = true ]; then
         echo ""
         read -p "Do you want to restart it? (y/N) " -n 1 -r
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "Restarting container..."
-            docker stop "${CONTAINER_NAME}"
-            docker rm "${CONTAINER_NAME}" 2>/dev/null || true
+            echo "Stopping container..."
+            docker stop "${EXISTING_NAME}"
+            docker rm "${EXISTING_NAME}" 2>/dev/null || true
             echo ""
         else
             echo "Aborted."
@@ -62,18 +83,18 @@ if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     else
         echo "To restart it, run:"
         echo "  ./run-docker.sh ${CONTAINER_NAME} --restart"
-        echo "  # or"
-        echo "  docker stop ${CONTAINER_NAME} && docker rm ${CONTAINER_NAME}"
-        echo "  ./run-docker.sh ${CONTAINER_NAME}"
         exit 1
     fi
 fi
 
-# Check if container exists but is stopped
-if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo ""
+# Clean up any stopped containers
+if [ "$CONTAINER_STATUS" = "stopped" ]; then
     echo "Removing stopped container '${CONTAINER_NAME}'..."
     docker rm "${CONTAINER_NAME}"
+fi
+if [ "$COMPOSE_STATUS" = "stopped" ]; then
+    echo "Removing stopped container 'sonos-alexa-api'..."
+    docker rm "sonos-alexa-api"
 fi
 
 # Run the container
@@ -85,14 +106,21 @@ if [ -f docker-compose.yml ]; then
     # Use docker-compose if available
     if docker compose version &>/dev/null 2>&1; then
         echo "Using: docker compose"
-        # Override container name in compose
-        COMPOSE_PROJECT_NAME="${CONTAINER_NAME}" docker compose up -d
+        docker compose up -d
+        COMPOSE_CONTAINER="sonos-alexa-api"
     elif command -v docker-compose &>/dev/null; then
         echo "Using: docker-compose"
-        COMPOSE_PROJECT_NAME="${CONTAINER_NAME}" docker-compose up -d
+        docker-compose up -d
+        COMPOSE_CONTAINER="sonos-alexa-api"
     else
         echo "Error: docker-compose.yml exists but neither 'docker compose' nor 'docker-compose' found"
         exit 1
+    fi
+    
+    # If using a custom container name, rename it
+    if [ "${CONTAINER_NAME}" != "sonos-api" ] && [ "${CONTAINER_NAME}" != "sonos-alexa-api" ]; then
+        echo "Renaming container to: ${CONTAINER_NAME}"
+        docker rename "${COMPOSE_CONTAINER}" "${CONTAINER_NAME}" 2>/dev/null || true
     fi
 else
     # Direct docker run

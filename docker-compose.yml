@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sonos-api:
     image: kshartman/sonos-alexa-api:latest

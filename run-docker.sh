@@ -1,54 +1,50 @@
 #!/bin/bash
 set -e
 
-if (( $# >= 1 )); then
-   BUILDFOR=$1
+# Container name - can be overridden with first argument
+CONTAINER_NAME="${1:-sonos-api}"
+
+echo "Running Sonos Alexa API container: $CONTAINER_NAME"
+
+# Check for .env file
+if [ -f .env ]; then
+    echo "Using environment file: .env"
+    # Source it to get PORT for display
+    set -a
+    source .env
+    set +a
 else
-    BUILDFOR=$(echo "${HOSTNAME%%.*}" | tr '[:upper:]' '[:lower:]')
+    echo "No .env file found - using default settings"
 fi
 
-echo "Running Sonos Alexa API for: $BUILDFOR"
+# Use PORT from environment or default
+PORT="${PORT:-5005}"
+echo "Port: $PORT"
 
-# Determine which settings file to read
-if [ -f settings-${BUILDFOR}.json ]; then
-    SETTINGS_FILE="settings-${BUILDFOR}.json"
-    echo "Using settings file: $SETTINGS_FILE"
-elif [ -f settings.json ]; then
-    SETTINGS_FILE="settings.json"
-    echo "Using settings file: $SETTINGS_FILE"
+# Get version from local package.json if available
+if [ -f package.json ]; then
+    version=$(node -p "require('./package.json').version" 2>/dev/null || echo "latest")
 else
-    echo "Warning: No settings file found (settings-${BUILDFOR}.json or settings.json)"
-    echo "Using default port 5005"
-    port=5005
+    version="latest"
 fi
-
-# Extract port from settings file if it exists
-if [ -n "$SETTINGS_FILE" ] && [ -f "$SETTINGS_FILE" ]; then
-    port=$(node -p "try { require('./$SETTINGS_FILE').port || 5005 } catch(e) { 5005 }" 2>/dev/null || echo "5005")
-else
-    port=5005
-fi
-
-echo "Port: $port"
-
-# Get version
-version=$(npm run version:simple --silent 2>/dev/null || echo "1.0.0")
 echo "Version: $version"
 
-# Export as environment variables for docker-compose
+# Export for docker-compose
 export VERSION=$version
-export PORT=$port
 
 # Check for --restart flag
 RESTART=false
-if [[ "$1" == "--restart" ]] || [[ "$2" == "--restart" ]]; then
-    RESTART=true
-fi
+for arg in "$@"; do
+    if [[ "$arg" == "--restart" ]]; then
+        RESTART=true
+        break
+    fi
+done
 
 # Check if container is already running
-if docker ps --format '{{.Names}}' | grep -q '^sonosd$'; then
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo ""
-    echo "Container 'sonosd' is already running."
+    echo "Container '${CONTAINER_NAME}' is already running."
     
     if [ "$RESTART" = true ]; then
         echo ""
@@ -56,8 +52,8 @@ if docker ps --format '{{.Names}}' | grep -q '^sonosd$'; then
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo "Restarting container..."
-            docker stop sonosd
-            docker rm sonosd 2>/dev/null || true
+            docker stop "${CONTAINER_NAME}"
+            docker rm "${CONTAINER_NAME}" 2>/dev/null || true
             echo ""
         else
             echo "Aborted."
@@ -65,60 +61,88 @@ if docker ps --format '{{.Names}}' | grep -q '^sonosd$'; then
         fi
     else
         echo "To restart it, run:"
-        echo "  ./run-docker.sh --restart"
+        echo "  ./run-docker.sh ${CONTAINER_NAME} --restart"
         echo "  # or"
-        echo "  docker stop sonosd && docker rm sonosd"
-        echo "  ./run-docker.sh $BUILDFOR"
+        echo "  docker stop ${CONTAINER_NAME} && docker rm ${CONTAINER_NAME}"
+        echo "  ./run-docker.sh ${CONTAINER_NAME}"
         exit 1
     fi
 fi
 
 # Check if container exists but is stopped
-if docker ps -a --format '{{.Names}}' | grep -q '^sonosd$'; then
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo ""
-    echo "Removing stopped container 'sonosd'..."
-    docker rm sonosd
+    echo "Removing stopped container '${CONTAINER_NAME}'..."
+    docker rm "${CONTAINER_NAME}"
 fi
 
 # Run the container
 echo ""
 echo "Starting container..."
 
-# Check which docker compose command is available
-if docker compose version &>/dev/null 2>&1; then
-    echo "Using: docker compose"
-    PORT=$port VERSION=$version docker compose up -d
-elif command -v docker-compose &>/dev/null; then
-    echo "Using: docker-compose"
-    PORT=$port VERSION=$version docker-compose up -d
+# Determine if we're using docker-compose or direct docker run
+if [ -f docker-compose.yml ]; then
+    # Use docker-compose if available
+    if docker compose version &>/dev/null 2>&1; then
+        echo "Using: docker compose"
+        # Override container name in compose
+        COMPOSE_PROJECT_NAME="${CONTAINER_NAME}" docker compose up -d
+    elif command -v docker-compose &>/dev/null; then
+        echo "Using: docker-compose"
+        COMPOSE_PROJECT_NAME="${CONTAINER_NAME}" docker-compose up -d
+    else
+        echo "Error: docker-compose.yml exists but neither 'docker compose' nor 'docker-compose' found"
+        exit 1
+    fi
 else
-    echo "Error: Neither 'docker compose' nor 'docker-compose' found"
-    exit 1
+    # Direct docker run
+    echo "Using: docker run"
+    
+    # Build docker run command
+    DOCKER_CMD="docker run -d --name ${CONTAINER_NAME} --network host"
+    
+    # Add env file if it exists
+    if [ -f .env ]; then
+        DOCKER_CMD="${DOCKER_CMD} --env-file .env"
+    fi
+    
+    # Add volume mounts if paths exist
+    if [ -n "${HOST_PRESET_PATH}" ] && [ -d "${HOST_PRESET_PATH}" ]; then
+        DOCKER_CMD="${DOCKER_CMD} -v ${HOST_PRESET_PATH}:/app/presets:ro"
+    fi
+    
+    # Add other volumes
+    DOCKER_CMD="${DOCKER_CMD} -v $(pwd)/data:/app/data"
+    DOCKER_CMD="${DOCKER_CMD} -v $(pwd)/logs:/app/logs"
+    
+    # Use the image
+    DOCKER_CMD="${DOCKER_CMD} kshartman/sonos-alexa-api:${version}"
+    
+    echo "Running: ${DOCKER_CMD}"
+    eval "${DOCKER_CMD}"
 fi
 
 # Wait a moment for container to start
 sleep 2
 
 # Check if container is running
-if docker ps --format '{{.Names}}' | grep -q '^sonosd$'; then
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo ""
     echo "Container started successfully!"
     echo ""
-    echo "Sonos Alexa API is running on port $port"
+    echo "Sonos Alexa API is running on port ${PORT}"
     echo ""
     echo "To view logs:"
-    echo "  docker logs -f sonosd"
+    echo "  docker logs -f ${CONTAINER_NAME}"
     echo ""
     echo "To stop:"
-    echo "  docker compose down"
-    echo "  # or"
-    echo "  docker stop sonosd"
+    echo "  docker stop ${CONTAINER_NAME}"
     echo ""
     echo "To check health:"
-    echo "  curl http://localhost:$port/health"
+    echo "  curl http://localhost:${PORT}/health"
 else
     echo ""
     echo "Error: Container failed to start"
-    echo "Check logs with: docker logs sonosd"
+    echo "Check logs with: docker logs ${CONTAINER_NAME}"
     exit 1
 fi

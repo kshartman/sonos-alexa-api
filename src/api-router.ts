@@ -3,6 +3,8 @@ import logger from './utils/logger.js';
 import { getClientIp, isIpTrusted } from './utils/network-utils.js';
 import { getErrorMessage, getErrorStatus, errorMessageIncludes } from './utils/error-helper.js';
 import type { SonosDiscovery } from './discovery.js';
+import type { SonosDevice } from './sonos-device.js';
+import type { ZoneGroup } from './topology-manager.js';
 import type { PresetLoader } from './preset-loader.js';
 import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
@@ -97,6 +99,9 @@ export class ApiRouter {
   private registerRoutes(): void {
     // System routes
     this.routes.set('GET /zones', this.getZones.bind(this));
+    this.routes.set('GET /devices', this.getDevices.bind(this));
+    this.routes.set('GET /devices/id/{id}', this.getDeviceById.bind(this));
+    this.routes.set('GET /devices/room/{room}', this.getDevicesByRoom.bind(this));
     this.routes.set('GET /state', this.getState.bind(this));
     this.routes.set('GET /health', this.getHealth.bind(this));
     this.routes.set('GET /presets', this.getPresets.bind(this));
@@ -423,6 +428,159 @@ export class ApiRouter {
         uptime: process.uptime()
       }
     };
+  }
+
+  private parseStereoRole(device: SonosDevice, channelMapSet?: string): { role: string; groupId: string } | undefined {
+    if (!channelMapSet) return undefined;
+    
+    // Format: "UUID1:LF,LF;UUID2:RF,RF" or with subwoofer "UUID1:LF,LF;UUID2:RF,RF;UUID3:SW,SW"
+    // Parse each UUID:role pair
+    const pairs = channelMapSet.split(';');
+    for (const pair of pairs) {
+      const [uuid, roles] = pair.split(':');
+      if (!uuid || !roles) continue;
+      // Check if this device's UUID matches (handle with/without uuid: prefix)
+      const deviceUuid = device.id.replace('uuid:', '');
+      const pairUuid = uuid.replace('uuid:', '');
+      if (pairUuid === deviceUuid || `RINCON_${pairUuid}` === deviceUuid) {
+        // Determine the role based on channel mapping
+        const roleUpper = roles ? roles.toUpperCase() : '';
+        
+        // Main stereo pair roles
+        if (roleUpper.includes('LF')) {
+          return { role: 'left', groupId: `${device.roomName}:stereopair` };
+        } else if (roleUpper.includes('RF')) {
+          return { role: 'right', groupId: `${device.roomName}:stereopair` };
+        }
+        // Surround sound roles
+        else if (roleUpper.includes('LR')) {
+          return { role: 'surround-left', groupId: `${device.roomName}:surround` };
+        } else if (roleUpper.includes('RR')) {
+          return { role: 'surround-right', groupId: `${device.roomName}:surround` };
+        }
+        // Center/Soundbar
+        else if (roleUpper.includes('C') && !roleUpper.includes('RC')) {
+          return { role: 'center', groupId: `${device.roomName}:surround` };
+        }
+        // Subwoofer variations
+        else if (roleUpper.includes('SW') || roleUpper.includes('SUB') || roleUpper.includes('LFE')) {
+          return { role: 'subwoofer', groupId: `${device.roomName}:surround` };
+        }
+        // Height/Atmos speakers
+        else if (roleUpper.includes('H')) {
+          return { role: 'height', groupId: `${device.roomName}:surround` };
+        }
+        // Mix-down (rare)
+        else if (roleUpper.includes('MX')) {
+          return { role: 'mix', groupId: `${device.roomName}:surround` };
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private async getDevices(): Promise<ApiResponse> {
+    const devices = Array.from(this.discovery.devices.values());
+    const topology = this.discovery.topologyManager.getZones();
+    
+    const deviceInfo = devices.map(device => {
+      // Find the zone this device belongs to
+      const zone = topology.find((z: ZoneGroup) => z.members.some((m: SonosDevice) => m.id === device.id));
+      const memberDetails = zone?.memberDetails?.find((m: { uuid: string; roomName: string; channelMapSet?: string }) => 
+        m.uuid === device.id || m.uuid === device.id.replace('uuid:', '')
+      );
+      
+      // Parse stereo pair info from channelMapSet
+      const pairedInfo = this.parseStereoRole(device, memberDetails?.channelMapSet);
+      
+      return {
+        room: device.roomName,
+        name: device.roomName,
+        id: device.id,
+        model: device.modelName,
+        ip: device.ip,
+        ...(pairedInfo && { paired: pairedInfo })
+      };
+    });
+    
+    return { status: 200, body: deviceInfo };
+  }
+
+  private async getDeviceById({ id }: RouteParams): Promise<ApiResponse> {
+    if (!id) {
+      return { status: 400, body: { status: 'error', error: 'Device ID is required' } };
+    }
+    
+    // Try with and without uuid: prefix
+    let device = this.discovery.devices.get(id);
+    if (!device && !id.startsWith('uuid:')) {
+      device = this.discovery.devices.get(`uuid:${id}`);
+    }
+    if (!device && id.startsWith('uuid:')) {
+      device = this.discovery.devices.get(id.replace('uuid:', ''));
+    }
+    
+    if (!device) {
+      return { status: 404, body: { status: 'error', error: 'Device not found' } };
+    }
+    
+    // Get topology info for this device
+    const topology = this.discovery.topologyManager.getZones();
+    const zone = topology.find((z: ZoneGroup) => z.members.some((m: SonosDevice) => m.id === device.id));
+    const memberDetails = zone?.memberDetails?.find(m => 
+      m.uuid === device.id || m.uuid === device.id.replace('uuid:', '')
+    );
+    
+    // Parse stereo pair info
+    const pairedInfo = this.parseStereoRole(device, memberDetails?.channelMapSet);
+    
+    return {
+      status: 200,
+      body: {
+        room: device.roomName,
+        name: device.roomName,
+        id: device.id,
+        model: device.modelName,
+        ip: device.ip,
+        ...(pairedInfo && { paired: pairedInfo })
+      }
+    };
+  }
+
+  private async getDevicesByRoom({ room }: RouteParams): Promise<ApiResponse> {
+    if (!room) {
+      return { status: 400, body: { status: 'error', error: 'Room name is required' } };
+    }
+    
+    const devices = Array.from(this.discovery.devices.values()).filter(
+      device => device.roomName.toLowerCase() === room.toLowerCase()
+    );
+    
+    if (devices.length === 0) {
+      return { status: 404, body: { status: 'error', error: 'Room not found' } };
+    }
+    
+    const topology = this.discovery.topologyManager.getZones();
+    
+    const deviceInfo = devices.map(device => {
+      const zone = topology.find((z: ZoneGroup) => z.members.some((m: SonosDevice) => m.id === device.id));
+      const memberDetails = zone?.memberDetails?.find((m: { uuid: string; roomName: string; channelMapSet?: string }) => 
+        m.uuid === device.id || m.uuid === device.id.replace('uuid:', '')
+      );
+      
+      const pairedInfo = this.parseStereoRole(device, memberDetails?.channelMapSet);
+      
+      return {
+        room: device.roomName,
+        name: device.roomName,
+        id: device.id,
+        model: device.modelName,
+        ip: device.ip,
+        ...(pairedInfo && { paired: pairedInfo })
+      };
+    });
+    
+    return { status: 200, body: deviceInfo };
   }
 
   private async getPresets(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {

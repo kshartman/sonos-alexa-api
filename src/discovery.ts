@@ -143,49 +143,64 @@ export class SonosDiscovery extends EventEmitter {
       const deviceInfo = await this.fetchDeviceInfo(location);
       const deviceId = deviceInfo.device.UDN;
       
+      let device: SonosDevice;
+      
       if (!this.devices.has(deviceId)) {
-        const device = new SonosDevice(deviceInfo, location);
+        device = new SonosDevice(deviceInfo, location);
         this.devices.set(deviceId, device);
         
         // Extract IP from location URL
         const locationUrl = new URL(location);
         logger.info(`Created device ${device.roomName} from SSDP discovery - IP: ${locationUrl.hostname}, UUID: ${device.id}`);
         debugManager.info('discovery', `Discovered Sonos device: ${device.roomName} (${device.modelName})`);
-        
-        // Update topology manager with current device map
-        this.topologyManager.setDeviceMap(this.devices);
-        
-        // Subscribe to topology events on every device (except portable devices)
-        if (!this.topologyDevices.has(device.id)) {
-          const modelLower = device.modelName.toLowerCase();
-          if (modelLower.includes('roam') || modelLower.includes('move')) {
-            logger.info(`${device.roomName} (${device.modelName}) cannot be used for topology - portable devices lack required services`);
-          } else {
-            // Get initial topology state from the first device
-            if (this.topologyDevices.size === 0) {
-              await this.requestTopologyState(device);
-            }
-            
-            // Subscribe to topology changes on this device
-            await this.subscribeToTopology(device);
-            this.topologyDevices.add(device.id);
+      } else {
+        // Device already exists (probably from topology), update its model info
+        device = this.devices.get(deviceId)!;
+        if (device.modelName === 'Unknown') {
+          // Create a new device with updated model information
+          const updatedDevice = new SonosDevice(deviceInfo, location);
+          // Copy over the existing state
+          updatedDevice.state = device.state;
+          // Replace the device in our map
+          this.devices.set(deviceId, updatedDevice);
+          device = updatedDevice;
+          debugManager.info('discovery', `Updated device info for ${device.roomName}: model=${deviceInfo.device.modelName}`);
+        }
+      }
+      
+      // Update topology manager with current device map
+      this.topologyManager.setDeviceMap(this.devices);
+      
+      // Subscribe to topology events on every device (except portable devices)
+      if (!this.topologyDevices.has(device.id)) {
+        const modelLower = device.modelName.toLowerCase();
+        if (modelLower.includes('roam') || modelLower.includes('move')) {
+          logger.info(`${device.roomName} (${device.modelName}) cannot be used for topology - portable devices lack required services`);
+        } else {
+          // Get initial topology state from the first device
+          if (this.topologyDevices.size === 0) {
+            await this.requestTopologyState(device);
           }
+          
+          // Subscribe to topology changes on this device
+          await this.subscribeToTopology(device);
+          this.topologyDevices.add(device.id);
         }
-        
-        this.emit('device-found', device);
-        
-        // Start monitoring device
-        device.on('state-change', (state: SonosState, previousState?: Partial<SonosState>) => {
-          this.emit('device-state-change', device, state, previousState);
-        });
-        
-        // Subscribe to all UPnP services for this device
-        try {
-          await device.subscribe();
-          debugManager.info('discovery', `${device.roomName}: Subscribed to UPnP events`);
-        } catch (error) {
-          logger.error(`${device.roomName}: Failed to subscribe to UPnP events:`, error);
-        }
+      }
+      
+      this.emit('device-found', device);
+      
+      // Start monitoring device
+      device.on('state-change', (state: SonosState, previousState?: Partial<SonosState>) => {
+        this.emit('device-state-change', device, state, previousState);
+      });
+      
+      // Subscribe to all UPnP services for this device
+      try {
+        await device.subscribe();
+        debugManager.info('discovery', `${device.roomName}: Subscribed to UPnP events`);
+      } catch (error) {
+        logger.error(`${device.roomName}: Failed to subscribe to UPnP events:`, error);
       }
     } catch (error) {
       debugManager.error('discovery', 'Error processing device:', error);

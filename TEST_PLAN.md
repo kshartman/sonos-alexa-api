@@ -81,10 +81,11 @@ Integration tests dynamically adapt to your Sonos system:
    - Group volume control
    - Mute/unmute operations
 
-### Integration Tests (8 test files, 82 test cases)
+### Integration Tests (8 test files, 87 test cases)
 
-1. **Core Infrastructure** (`01-infrastructure-tests.ts`) - 10 tests
+1. **Core Infrastructure** (`01-infrastructure-tests.ts`) - 15 tests
    - Health check and device discovery
+   - Device information endpoints (/devices, /devices/id, /devices/room)
    - Event manager and SSE connections
    - State tracking and history
    - Concurrent request handling
@@ -327,8 +328,8 @@ Current test suite status (v1.2.0):
 | Test Type | Files | Test Cases | Status |
 |-----------|-------|------------|--------|
 | **Unit Tests** | 5 | 64 | ✅ All passing |
-| **Integration Tests** | 8 | 82 | ✅ All passing |
-| **Total** | **13** | **146** | ✅ **100% passing** |
+| **Integration Tests** | 8 | 87 | ✅ All passing |
+| **Total** | **13** | **151** | ✅ **100% passing** |
 
 ### Test Distribution by Category
 
@@ -338,7 +339,7 @@ Current test suite status (v1.2.0):
 | Volume Control | 16 | 9 | 25 |
 | Group Management | 18 | 10 | 28 |
 | Advanced Features | - | 16 | 16 |
-| Infrastructure | - | 10 | 10 |
+| Infrastructure | - | 15 | 15 |
 | Playback Modes | - | 14 | 14 |
 | TTS | - | 7 | 7 |
 | SOAP/Utilities | 7 | - | 7 |

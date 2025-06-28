@@ -16,6 +16,9 @@ const endpointPatterns = [
   // System endpoints
   '/health',
   '/zones',
+  '/devices',
+  '/devices/id/{deviceId}',
+  '/devices/room/{roomName}',
   '/state',
   '/presets',
   '/events',

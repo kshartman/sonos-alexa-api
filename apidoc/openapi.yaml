@@ -88,6 +88,92 @@ paths:
                 items:
                   $ref: '#/components/schemas/Zone'
                   
+  /devices:
+    get:
+      tags:
+        - System
+      summary: List all devices
+      description: Returns all devices with model information and stereo/surround pairing status
+      responses:
+        '200':
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeviceInfo'
+                  
+  /devices/id/{deviceId}:
+    get:
+      tags:
+        - System
+      summary: Get device by ID
+      description: Returns specific device by ID (with or without uuid: prefix)
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          description: Device ID (UUID)
+          schema:
+            type: string
+            example: RINCON_F0F6C1AF852C01400
+      responses:
+        '200':
+          description: Device information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceInfo'
+        '400':
+          description: Device ID is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+  /devices/room/{roomName}:
+    get:
+      tags:
+        - System
+      summary: Get devices by room
+      description: Returns all devices in a specific room (useful for stereo pairs)
+      parameters:
+        - name: roomName
+          in: path
+          required: true
+          description: Room name
+          schema:
+            type: string
+            example: BedroomSpeakers
+      responses:
+        '200':
+          description: List of devices in the room
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeviceInfo'
+        '400':
+          description: Room name is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Room not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                  
   /state:
     get:
       tags:
@@ -2159,6 +2245,43 @@ components:
           items:
             type: string
             example: Kitchen
+            
+    DeviceInfo:
+      type: object
+      properties:
+        room:
+          type: string
+          description: Room name for this device
+          example: BedroomSpeakers
+        name:
+          type: string
+          description: Device name (same as room name)
+          example: BedroomSpeakers
+        id:
+          type: string
+          description: Device UUID
+          example: uuid:RINCON_F0F6C1AF852C01400
+        model:
+          type: string
+          description: Device model name
+          example: Sonos Era 100
+        ip:
+          type: string
+          description: Device IP address
+          example: 192.168.4.76
+        paired:
+          type: object
+          description: Stereo/surround pairing information (if paired)
+          properties:
+            role:
+              type: string
+              description: Speaker role in the configuration
+              enum: [left, right, center, surround-left, surround-right, subwoofer, height, mix]
+              example: left
+            groupId:
+              type: string
+              description: Pairing group identifier
+              example: BedroomSpeakers:stereopair
             
     DeviceState:
       type: object

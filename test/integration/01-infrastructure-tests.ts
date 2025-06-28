@@ -61,6 +61,89 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
       assert(firstState.state.hasOwnProperty('volume'), 'Should have volume');
       assert(firstState.state.hasOwnProperty('mute'), 'Should have mute');
     });
+    
+    it('should list all devices', async () => {
+      const response = await fetch(`${defaultConfig.apiUrl}/devices`);
+      assert.strictEqual(response.status, 200);
+      
+      const devices = await response.json();
+      assert(Array.isArray(devices), 'Devices should be an array');
+      assert(devices.length > 0, 'Should have at least one device');
+      
+      // Verify device structure
+      const firstDevice = devices[0];
+      assert(firstDevice.room, 'Device should have room name');
+      assert(firstDevice.name, 'Device should have name');
+      assert(firstDevice.id, 'Device should have id');
+      assert(firstDevice.model, 'Device should have model');
+      assert(firstDevice.ip, 'Device should have IP address');
+      
+      // Check if any devices have pairing info
+      const pairedDevices = devices.filter((d: any) => d.paired);
+      if (pairedDevices.length > 0) {
+        const pairedDevice = pairedDevices[0];
+        assert(pairedDevice.paired.role, 'Paired device should have role');
+        assert(pairedDevice.paired.groupId, 'Paired device should have groupId');
+      }
+    });
+    
+    it('should get device by ID', async () => {
+      // First get all devices to find a valid ID
+      const devicesResponse = await fetch(`${defaultConfig.apiUrl}/devices`);
+      const devices = await devicesResponse.json();
+      assert(devices.length > 0, 'Need at least one device for this test');
+      
+      const testDevice = devices[0];
+      const deviceId = testDevice.id.replace('uuid:', '');
+      
+      // Test with ID (without uuid: prefix)
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/${deviceId}`);
+      assert.strictEqual(response.status, 200);
+      
+      const device = await response.json();
+      assert.strictEqual(device.id, testDevice.id);
+      assert.strictEqual(device.room, testDevice.room);
+      assert.strictEqual(device.model, testDevice.model);
+    });
+    
+    it('should handle invalid device ID', async () => {
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/INVALID_ID`);
+      assert.strictEqual(response.status, 404);
+      
+      const error = await response.json();
+      assert.strictEqual(error.status, 'error');
+      assert(error.error.includes('not found'));
+    });
+    
+    it('should get devices by room', async () => {
+      // First get a valid room name
+      const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
+      const zones = await zonesResponse.json();
+      assert(zones.length > 0, 'Need at least one zone for this test');
+      
+      const testRoom = zones[0].members[0].roomName;
+      
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/room/${encodeURIComponent(testRoom)}`);
+      assert.strictEqual(response.status, 200);
+      
+      const devices = await response.json();
+      assert(Array.isArray(devices), 'Should return array of devices');
+      assert(devices.length > 0, 'Should have at least one device in room');
+      
+      // All devices should be from the requested room
+      devices.forEach((device: any) => {
+        assert.strictEqual(device.room, testRoom);
+      });
+    });
+    
+    it('should handle invalid room name', async () => {
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/room/InvalidRoomName`);
+      assert.strictEqual(response.status, 404);
+      
+      const error = await response.json();
+      assert.strictEqual(error.status, 'error');
+      assert(error.error.includes('not found'));
+    });
   });
   
   describe('Event Manager', () => {

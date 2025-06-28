@@ -34,6 +34,39 @@ GET /health
 ```
 Returns server health status and device count.
 
+### Get Device Information
+```
+GET /devices
+```
+Returns all devices with model information and pairing status.
+
+```
+GET /devices/id/{deviceId}
+```
+Returns specific device by ID (with or without uuid: prefix).
+
+```
+GET /devices/room/{roomName}
+```
+Returns all devices in a specific room (useful for stereo pairs).
+
+Example response:
+```json
+[
+  {
+    "room": "BedroomSpeakers",
+    "name": "BedroomSpeakers",
+    "id": "uuid:RINCON_F0F6C1AF852C01400",
+    "model": "Sonos Era 100",
+    "ip": "192.168.4.76",
+    "paired": {
+      "role": "left",
+      "groupId": "BedroomSpeakers:stereopair"
+    }
+  }
+]
+```
+
 ### Get Settings
 ```
 GET /settings

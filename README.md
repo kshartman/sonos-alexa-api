@@ -60,16 +60,31 @@ npm start
 
 ## Configuration
 
-The API can be configured via environment variables, settings.json, or both. Environment variables take precedence.
+The API can be configured through multiple sources with the following precedence:
+1. Default values
+2. `settings.json` file
+3. Environment variables (highest priority)
 
 ### Environment Variables (Recommended)
 
-Copy `example.env` to `.env` and customize. Key variables:
+The `npm start` command now loads `.env` files automatically using dotenv:
 
+```bash
+# Copy example and customize
+cp example.env .env
+# Edit .env with your settings
+```
+
+Key environment variables:
 ```bash
 # Server
 PORT=5005
-HOST=0.0.0.0
+HOST=0.0.0.0                     # Display name only - server always listens on 0.0.0.0
+TTS_HOST_IP=192.168.1.100        # Your server's IP for TTS (auto-detected if not set)
+
+# Logging & Debug
+LOG_LEVEL=info                    # error, warn, info, debug, trace
+DEBUG_CATEGORIES=api,discovery    # api,discovery,soap,topology,favorites,presets,upnp,sse,all
 
 # Authentication (optional)
 AUTH_USERNAME=admin
@@ -79,6 +94,7 @@ AUTH_TRUSTED_NETWORKS=192.168.1.0/24
 # Defaults
 DEFAULT_ROOM=LivingRoom
 DEFAULT_SERVICE=apple
+CREATE_DEFAULT_PRESETS=false      # Auto-generate presets from favorites
 
 # TTS
 TTS_PROVIDER=google
@@ -86,6 +102,64 @@ TTS_LANG=en-US
 ```
 
 See `example.env` for all available options.
+
+### Command Line Overrides
+
+Environment variables can be overridden on the command line:
+
+```bash
+# Override specific settings
+DEBUG_CATEGORIES=api,discovery npm start
+
+# Enable all debug categories (verbose)
+DEBUG_CATEGORIES=all npm start
+
+# Disable all debug categories for fastest startup
+DEBUG_CATEGORIES= npm start
+
+# Enable preset generation temporarily
+CREATE_DEFAULT_PRESETS=true npm start
+```
+
+### Debug Categories
+
+Control log verbosity with DEBUG_CATEGORIES:
+- `api` - API request/response logging (enabled by default)
+- `discovery` - Device discovery details  
+- `soap` - SOAP request/response XML (verbose)
+- `topology` - UPnP topology events
+- `favorites` - Favorite resolution details
+- `presets` - Preset loading and conversion (can be verbose)
+- `upnp` - Raw UPnP event details
+- `sse` - Server-Sent Events for webhooks
+- `all` - Enable all categories
+
+**Note**: The `presets` category can generate hundreds of log lines during startup. It's recommended to enable it only when debugging preset issues.
+
+# Enable all debug categories (verbose)
+DEBUG_CATEGORIES=all npm start
+
+# Disable all debug categories for fastest startup
+DEBUG_CATEGORIES= npm start
+
+# Enable preset generation temporarily
+CREATE_DEFAULT_PRESETS=true npm start
+```
+
+### Debug Categories
+
+Control log verbosity with DEBUG_CATEGORIES:
+- `api` - API request/response logging (enabled by default)
+- `discovery` - Device discovery details  
+- `soap` - SOAP request/response XML (verbose)
+- `topology` - UPnP topology events
+- `favorites` - Favorite resolution details
+- `presets` - Preset loading and conversion (can be verbose)
+- `upnp` - Raw UPnP event details
+- `sse` - Server-Sent Events for webhooks
+- `all` - Enable all categories
+
+**Note**: The `presets` category can generate hundreds of log lines during startup. It's recommended to enable it only when debugging preset issues.
 
 ### settings.json (Alternative)
 
@@ -176,7 +250,7 @@ Contributions are welcome! Please read our [Contributing Guidelines](./CONTRIBUT
 # Install dependencies
 npm install
 
-# Run in development mode
+# Run in development mode (forces LOG_LEVEL=debug, DEBUG_CATEGORIES=all)
 npm run dev
 
 # Run tests
@@ -213,15 +287,21 @@ The Docker container supports configuration via `.env` file:
 # API server port
 PORT=5005
 
+# REQUIRED for Docker: Host IP for TTS URLs
+# Sonos devices need this IP to download TTS audio files
+TTS_HOST_IP=192.168.1.100   # Your Docker host's IP address
+
 # External preset directory (optional)
 HOST_PRESET_PATH=/path/to/your/presets
 
 # Logging configuration
 LOG_LEVEL=info              # error, warn, info, debug
-LOG_FORMAT=json             # json or simple
-DEBUG_LEVEL=debug           # error, warn, info, debug, wall
+LOGGER=pino                 # winston or pino (winston for dev, pino for prod)
+DEBUG_LEVEL=debug           # error, warn, info, debug, trace
 DEBUG_CATEGORIES=api,soap   # soap, topology, discovery, favorites, presets, upnp, api, sse
 ```
+
+**Important**: The `TTS_HOST_IP` must be set to an IP address that your Sonos devices can reach. This is typically your Docker host's IP on your local network (not `localhost` or `127.0.0.1`).
 
 #### Custom docker-compose.yml
 
@@ -233,6 +313,7 @@ services:
     network_mode: host
     restart: unless-stopped
     environment:
+      - TTS_HOST_IP=${TTS_HOST_IP}  # REQUIRED: Set in .env file
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - DEBUG_CATEGORIES=${DEBUG_CATEGORIES:-}
     volumes:

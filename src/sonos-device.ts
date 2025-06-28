@@ -3,7 +3,10 @@ import { XMLParser } from 'fast-xml-parser';
 import logger from './utils/logger.js';
 import { soapRequest } from './utils/soap.js';
 import { EventManager } from './utils/event-manager.js';
+import { errorMessageIncludes } from './utils/error-helper.js';
 import type { DeviceInfo, SonosState, SonosTrack, SonosService, Preset, BrowseResult, BrowseItem } from './types/sonos.js';
+import type { PresetWithLegacy } from './utils/preset-converter.js';
+import type { SonosDiscovery } from './discovery.js';
 
 const SERVICES: Record<string, SonosService> = {
   AVTransport: {
@@ -32,6 +35,14 @@ const SERVICES: Record<string, SonosService> = {
     eventSubURL: '/MediaServer/ContentDirectory/Event'
   }
 };
+
+interface DiscoveredService {
+  serviceType: string;
+  serviceId: string;
+  controlURL: string;
+  eventSubURL: string;
+  SCPDURL: string;
+}
 
 export class SonosDevice extends EventEmitter {
   public readonly id: string;
@@ -74,21 +85,21 @@ export class SonosDevice extends EventEmitter {
   }
 
   async subscribe(): Promise<void> {
-    const discovery = (global as any).discovery;
-    if (!discovery || !discovery.subscriber) {
-      throw new Error(`${this.roomName}: No UPnP subscriber available - cannot use events`);
+    const discovery = global.discovery;
+    if (!discovery) {
+      throw new Error(`${this.roomName}: No discovery instance available`);
     }
 
     try {
       // Check if this device is part of a stereo pair or group
       // If so, we should subscribe to the coordinator instead
       const coordinator = discovery.getCoordinator ? discovery.getCoordinator(this.id) : null;
-      let targetDevice = this; // eslint-disable-line @typescript-eslint/no-this-alias
+      const targetDevice = this; // eslint-disable-line @typescript-eslint/no-this-alias
       let targetBaseUrl = this.baseUrl;
       
       if (coordinator && coordinator.id !== this.id) {
         logger.info(`${this.roomName}: This device is part of a stereo pair/group. Using coordinator ${coordinator.roomName} for subscriptions.`);
-        targetDevice = coordinator;
+        // targetDevice = coordinator;
         targetBaseUrl = coordinator.baseUrl;
       }
       
@@ -121,7 +132,7 @@ export class SonosDevice extends EventEmitter {
               ? service.eventSubURL
               : `/${service.eventSubURL}`;
             // Subscribe using this device's ID but the coordinator's URL
-            await discovery.subscriber.subscribe(targetBaseUrl, eventUrl, this.id);
+            await discovery.subscribeToDevice(targetBaseUrl, eventUrl, this.id);
             logger.info(`${this.roomName}: Successfully subscribed to ${serviceName} at ${eventUrl} via ${targetDevice.roomName}`);
             subscribedCount++;
           } catch (err) {
@@ -154,7 +165,7 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
-  async discoverServices(): Promise<any[]> {
+  async discoverServices(): Promise<DiscoveredService[]> {
     const deviceDescUrl = `${this.baseUrl}/xml/device_description.xml`;
     
     const response = await fetch(deviceDescUrl);
@@ -165,17 +176,18 @@ export class SonosDevice extends EventEmitter {
     const xml = await response.text();
     const parsed = this.xmlParser.parse(xml);
     
-    const services: any[] = [];
+    const discoveredServices: DiscoveredService[] = [];
     
     // Helper function to extract services from a device
-    const extractServices = (device: any) => {
-      if (device?.serviceList?.service) {
-        const serviceList = Array.isArray(device.serviceList.service) 
-          ? device.serviceList.service 
-          : [device.serviceList.service];
+    const extractServices = (device: unknown) => {
+      if (device && typeof device === 'object' && 'serviceList' in device && 
+          device.serviceList && typeof device.serviceList === 'object' && 'service' in device.serviceList) {
+        const deviceWithService = device as { serviceList: { service: unknown } };
+        const serviceData = deviceWithService.serviceList.service;
+        const serviceList = Array.isArray(serviceData) ? serviceData : [serviceData];
         
         for (const service of serviceList) {
-          services.push({
+          discoveredServices.push({
             serviceType: service.serviceType || '',
             serviceId: service.serviceId || '',
             controlURL: service.controlURL || '',
@@ -203,13 +215,13 @@ export class SonosDevice extends EventEmitter {
       }
     }
     
-    return services;
+    return discoveredServices;
   }
 
   unsubscribe(): void {
     // TODO: Properly unsubscribe from UPnP events
-    const discovery = (global as any).discovery;
-    if (discovery && discovery.subscriber) {
+    const discovery = global.discovery;
+    if (discovery) {
       // We need to track which services we subscribed to
       logger.debug(`${this.roomName}: Unsubscribing from UPnP events`);
     }
@@ -249,8 +261,7 @@ export class SonosDevice extends EventEmitter {
       };
 
       // Check for state changes (excluding coordinator for comparison)
-      const oldStateForComparison = { ...this.state };
-      delete (oldStateForComparison as any).coordinator;
+      const { coordinator: _coordinator, ...oldStateForComparison } = this.state;
       
       if (JSON.stringify(newState) !== JSON.stringify(oldStateForComparison)) {
         const previousPlaybackState = this.state.playbackState;
@@ -290,14 +301,24 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
-  private parseTrackInfo(positionInfo: any): SonosTrack | null {
+  private parseTrackInfo(positionInfo: Record<string, unknown>): SonosTrack | null {
     if (!positionInfo.TrackMetaData || positionInfo.TrackMetaData === 'NOT_IMPLEMENTED') {
       logger.debug(`${this.roomName}: No track metadata available (TrackMetaData: ${positionInfo.TrackMetaData})`);
       return null;
     }
 
     try {
-      const metadata = this.xmlParser.parse(positionInfo.TrackMetaData);
+      // SOAP returns {} for empty strings, so convert to string
+      const trackMetaDataStr = typeof positionInfo.TrackMetaData === 'string' 
+        ? positionInfo.TrackMetaData 
+        : '';
+        
+      if (!trackMetaDataStr) {
+        logger.debug(`${this.roomName}: No track metadata available`);
+        return null;
+      }
+      
+      const metadata = this.xmlParser.parse(trackMetaDataStr);
       logger.debug(`${this.roomName}: Parsed metadata:`, JSON.stringify(metadata, null, 2).substring(0, 500) + '...');
       
       const item = metadata['DIDL-Lite']?.item;
@@ -311,10 +332,13 @@ export class SonosDevice extends EventEmitter {
       let type = 'track';
       let stationName = '';
       
-      if (positionInfo.TrackURI) {
-        if (positionInfo.TrackURI.includes('x-sonosapi-radio:') || 
-            positionInfo.TrackURI.includes('x-sonosapi-stream:') ||
-            positionInfo.TrackURI.includes('x-rincon-mp3radio:')) {
+      // SOAP returns {} for empty strings
+      const trackUri = typeof positionInfo.TrackURI === 'string' ? positionInfo.TrackURI : '';
+      
+      if (trackUri) {
+        if (trackUri.includes('x-sonosapi-radio:') || 
+            trackUri.includes('x-sonosapi-stream:') ||
+            trackUri.includes('x-rincon-mp3radio:')) {
           type = 'radio';
           // Extract station name from StreamContent if available
           if (item['r:streamContent']) {
@@ -323,18 +347,21 @@ export class SonosDevice extends EventEmitter {
             // Sometimes radio stations put station name in title
             stationName = item['dc:title'];
           }
-        } else if (positionInfo.TrackURI.includes('x-rincon-stream:')) {
+        } else if (trackUri.includes('x-rincon-stream:')) {
           type = 'line_in';
         }
       }
       
       // Convert duration to seconds
       let durationSeconds = 0;
-      if (positionInfo.TrackDuration && positionInfo.TrackDuration !== 'NOT_IMPLEMENTED') {
-        const durationParts = positionInfo.TrackDuration.split(':');
-        durationSeconds = parseInt(durationParts[0]) * 3600 + 
-                         parseInt(durationParts[1]) * 60 + 
-                         parseInt(durationParts[2]);
+      const trackDuration = typeof positionInfo.TrackDuration === 'string' ? positionInfo.TrackDuration : '';
+      if (trackDuration && trackDuration !== 'NOT_IMPLEMENTED') {
+        const durationParts = trackDuration.split(':');
+        if (durationParts.length === 3) {
+          durationSeconds = parseInt(durationParts[0]!, 10) * 3600 + 
+                           parseInt(durationParts[1]!, 10) * 60 + 
+                           parseInt(durationParts[2]!, 10);
+        }
       }
       
       const track: SonosTrack = {
@@ -343,8 +370,8 @@ export class SonosDevice extends EventEmitter {
         album: item['upnp:album'] || '',
         albumArtUri: item['upnp:albumArtURI'] || '',
         duration: durationSeconds,
-        uri: positionInfo.TrackURI || '',
-        trackUri: positionInfo.TrackURI || '',  // Legacy compatibility
+        uri: trackUri,
+        trackUri: trackUri,  // Legacy compatibility
         type: type as 'track' | 'radio' | 'line_in',
         stationName
       };
@@ -357,7 +384,8 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
-  async soap(service: string, action: string, body: Record<string, any> = {}): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async soap(service: string, action: string, body: Record<string, unknown> = {}): Promise<any> { // ANY IS CORRECT: SOAP responses vary by service/action
     const serviceInfo = SERVICES[service];
     if (!serviceInfo) {
       throw new Error(`Unknown service: ${service}`);
@@ -439,6 +467,8 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // ANY IS CORRECT: These methods return varying SOAP response structures
   async getTransportInfo(): Promise<any> {
     return this.soap('AVTransport', 'GetTransportInfo', {
       InstanceID: 0
@@ -462,6 +492,7 @@ export class SonosDevice extends EventEmitter {
       InstanceID: 0
     });
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   // RenderingControl actions
   async setVolume(level: number): Promise<void> {
@@ -473,12 +504,14 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  async getVolume(): Promise<any> {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  async getVolume(): Promise<any> { // ANY IS CORRECT: SOAP returns dynamic XML response structure
     return this.soap('RenderingControl', 'GetVolume', {
       InstanceID: 0,
       Channel: 'Master'
     });
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   async setMute(mute: boolean): Promise<void> {
     await this.soap('RenderingControl', 'SetMute', {
@@ -488,12 +521,14 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  async getMute(): Promise<any> {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  async getMute(): Promise<any> { // ANY IS CORRECT: SOAP returns dynamic XML response structure
     return this.soap('RenderingControl', 'GetMute', {
       InstanceID: 0,
       Channel: 'Master'
     });
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   // Group management - these will be overridden by discovery system
   getCoordinator(): SonosDevice {
@@ -521,7 +556,7 @@ export class SonosDevice extends EventEmitter {
   }
 
   // Utility methods
-  async playUri(uri: string, metadata = '', discovery?: any): Promise<void> {
+  async playUri(uri: string, metadata = '', discovery?: SonosDiscovery): Promise<void> {
     // Handle x-rincon-playlist: URIs for music library playlists
     // These need special handling - we browse the playlist and add its contents to the queue
     if (uri.startsWith('x-rincon-playlist:')) {
@@ -696,13 +731,30 @@ export class SonosDevice extends EventEmitter {
     logger.debug(`${this.roomName}: setting AVTransport URI`);
     await this.setAVTransportURI(playUri, playMetadata);
     
+    // For HTTP URLs (like TTS), wait a bit for the device to load the content
+    if (playUri.startsWith('http://') || playUri.startsWith('https://')) {
+      logger.debug(`${this.roomName}: waiting for HTTP content to load`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
     logger.debug(`${this.roomName}: starting playback`);
-    await this.play();
+    try {
+      await this.play();
+    } catch (error) {
+      // If play fails with error 701, it might be because the content hasn't loaded yet
+      if (errorMessageIncludes(error, '701')) {
+        logger.debug(`${this.roomName}: play failed with 701, waiting and retrying`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await this.play();
+      } else {
+        throw error;
+      }
+    }
   }
 
-  async playPreset(preset: Preset, discovery?: any): Promise<void> {
+  async playPreset(preset: Preset | PresetWithLegacy, discovery?: SonosDiscovery): Promise<void> {
     // Handle legacy preset features if available
-    const legacyData = (preset as any)._legacy;
+    const legacyData = '_legacy' in preset ? preset._legacy : undefined;
     
     // Handle pauseOthers if discovery system is available
     if (legacyData?.pauseOthers && discovery) {
@@ -742,7 +794,7 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
-  private async pauseOtherZones(discovery: any): Promise<void> {
+  private async pauseOtherZones(discovery: SonosDiscovery): Promise<void> {
     try {
       const allDevices = discovery.getAllDevices();
       const pausePromises = allDevices
@@ -763,6 +815,7 @@ export class SonosDevice extends EventEmitter {
   }
 
   // Queue manipulation methods
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async addURIToQueue(uri: string, metadata = '', enqueueAsNext = false, desiredFirstTrackNumberEnqueued = 0): Promise<any> {
     logger.debug(`${this.roomName}: adding URI to queue - uri=${uri.substring(0, 50)}..., enqueueAsNext=${enqueueAsNext}`);
     
@@ -857,10 +910,30 @@ export class SonosDevice extends EventEmitter {
     logger.debug(`${this.roomName}: setting group volume to ${level}`);
     const clampedLevel = Math.max(0, Math.min(100, level));
     
-    await this.soap('GroupRenderingControl', 'SetGroupVolume', {
-      InstanceID: 0,
-      DesiredVolume: clampedLevel
-    });
+    try {
+      await this.soap('GroupRenderingControl', 'SetGroupVolume', {
+        InstanceID: 0,
+        DesiredVolume: clampedLevel
+      });
+    } catch (_error) {
+      // If GroupRenderingControl is not supported, we need to be smarter
+      logger.warn(`${this.roomName}: GroupRenderingControl not supported, checking coordinator`);
+      
+      // Check if we're the coordinator
+      const discovery = global.discovery;
+      if (discovery && !discovery.isCoordinator(this.id)) {
+        // We're not the coordinator, find who is and delegate
+        const coordinator = discovery.getCoordinator(this.id);
+        if (coordinator && coordinator.id !== this.id) {
+          logger.info(`${this.roomName}: Delegating group volume to coordinator ${coordinator.roomName}`);
+          return coordinator.setGroupVolume(level);
+        }
+      }
+      
+      // We are the coordinator or can't find one, use regular volume
+      logger.info(`${this.roomName}: Using regular volume as fallback`);
+      await this.setVolume(clampedLevel);
+    }
   }
 
   async playLineIn(sourceDevice: SonosDevice): Promise<void> {
@@ -945,11 +1018,13 @@ export class SonosDevice extends EventEmitter {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async getQueue(limit = 100, offset = 0): Promise<any> {
     // Get queue from ContentDirectory - Q:0 is the queue ID
     const result = await this.browse('Q:0', offset, limit);
     
     // Transform the items to match legacy format
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queueItems = result.items.map((item: any, index) => {
       // Since BrowseItem is a simplified type, we access the raw data
       return {

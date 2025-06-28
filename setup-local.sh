@@ -55,3 +55,27 @@ if [ -d ../presets/presets-${BUILDFOR} ]; then
     echo error: no such presets ../presets/presets-${BUILDFOR}/
     exit 1
 fi
+
+# Update test/.env with DEFAULT_ROOM from main .env
+if [ -f .env ] && [ -f test/.env ]; then
+    # Extract DEFAULT_ROOM from main .env
+    DEFAULT_ROOM=$(grep "^DEFAULT_ROOM=" .env | cut -d'=' -f2)
+    
+    if [ -n "$DEFAULT_ROOM" ]; then
+        echo "Updating test/.env with TEST_ROOM=${DEFAULT_ROOM}"
+        
+        # Update or add TEST_ROOM in test/.env
+        if grep -q "^TEST_ROOM=" test/.env; then
+            # Update existing TEST_ROOM line
+            sed -i.bak "s/^TEST_ROOM=.*/TEST_ROOM=${DEFAULT_ROOM}/" test/.env
+            rm test/.env.bak
+        else
+            # Add TEST_ROOM line
+            echo "TEST_ROOM=${DEFAULT_ROOM}" >> test/.env
+        fi
+    else
+        echo "No DEFAULT_ROOM found in .env, leaving test/.env unchanged"
+    fi
+else
+    echo "Skipping test/.env update (missing .env or test/.env)"
+fi

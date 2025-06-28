@@ -1,6 +1,7 @@
 import dgram from 'dgram';
 import { EventEmitter } from 'events';
 import http from 'http';
+import os from 'os';
 import { XMLParser } from 'fast-xml-parser';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
@@ -20,7 +21,8 @@ export declare interface SonosDiscovery {
   on(event: 'device-state-change', listener: (device: SonosDevice, state: SonosState, previousState?: Partial<SonosState>) => void): this;
   on(event: 'topology-change', listener: (zones: ZoneGroup[]) => void): this;
   on(event: 'content-update', listener: (deviceId: string, containerUpdateIDs: string) => void): this;
-  on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: any; currentTrack: any; timestamp: number }) => void): this;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: any; currentTrack: any; timestamp: number }) => void): this; // ANY IS CORRECT: tracks may be null or SonosTrack type
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
@@ -248,6 +250,55 @@ export class SonosDiscovery extends EventEmitter {
 
   getAllDevices(): SonosDevice[] {
     return Array.from(this.devices.values());
+  }
+
+  getLocalIP(): string | undefined {
+    // Get the first non-localhost IP address from any discovered device's perspective
+    // This ensures we get an IP that's reachable from the Sonos network
+    const firstDevice = this.getAllDevices()[0];
+    if (!firstDevice) {
+      return undefined;
+    }
+    
+    try {
+      // Try to determine our IP by seeing which interface can reach the Sonos device
+      const interfaces = os.networkInterfaces();
+      const deviceIP = firstDevice.ip;
+      const deviceSubnet = deviceIP.substring(0, deviceIP.lastIndexOf('.'));
+      
+      for (const name of Object.keys(interfaces)) {
+        const addrs = interfaces[name];
+        if (!addrs) continue;
+        
+        for (const addr of addrs) {
+          if (addr.family === 'IPv4' && !addr.internal) {
+            // Check if this IP is on the same subnet as the Sonos device
+            const addrSubnet = addr.address.substring(0, addr.address.lastIndexOf('.'));
+            if (addrSubnet === deviceSubnet) {
+              debugManager.debug('discovery', `Found local IP ${addr.address} on same subnet as Sonos devices`);
+              return addr.address;
+            }
+          }
+        }
+      }
+      
+      // Fallback: return any non-localhost IPv4 address
+      for (const name of Object.keys(interfaces)) {
+        const addrs = interfaces[name];
+        if (!addrs) continue;
+        
+        for (const addr of addrs) {
+          if (addr.family === 'IPv4' && !addr.internal) {
+            debugManager.debug('discovery', `Using fallback local IP ${addr.address}`);
+            return addr.address;
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error getting local IP:', error);
+    }
+    
+    return undefined;
   }
 
   // Topology-related methods
@@ -492,7 +543,7 @@ export class SonosDiscovery extends EventEmitter {
           // Look for volume changes
           if (instance.Volume) {
             const volumes = Array.isArray(instance.Volume) ? instance.Volume : [instance.Volume];
-            const masterVolume = volumes.find((v: any) => v['@_channel'] === 'Master');
+            const masterVolume = volumes.find((v: { '@_channel': string; '@_val': string }) => v['@_channel'] === 'Master');
             
             if (masterVolume) {
               const newVolume = parseInt(masterVolume['@_val'], 10);
@@ -508,7 +559,7 @@ export class SonosDiscovery extends EventEmitter {
           // Look for mute changes
           if (instance.Mute) {
             const mutes = Array.isArray(instance.Mute) ? instance.Mute : [instance.Mute];
-            const masterMute = mutes.find((m: any) => m['@_channel'] === 'Master');
+            const masterMute = mutes.find((m: { '@_channel': string; '@_val': string }) => m['@_channel'] === 'Master');
             
             if (masterMute) {
               const newMute = masterMute['@_val'] === '1';
@@ -553,5 +604,15 @@ export class SonosDiscovery extends EventEmitter {
       logger.error(`Error parsing UPnP event from ${deviceName}/${service}:`, error);
       debugManager.debug('upnp', `Failed event body: ${body}`);
     }
+  }
+  
+  /**
+   * Subscribe to UPnP events for a device
+   */
+  async subscribeToDevice(baseUrl: string, eventUrl: string, deviceId: string): Promise<void> {
+    if (!this.subscriber) {
+      throw new Error('UPnP subscriber not initialized');
+    }
+    await this.subscriber.subscribe(baseUrl, eventUrl, deviceId);
   }
 }

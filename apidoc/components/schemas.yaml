@@ -248,3 +248,54 @@ schemas:
       query:
         type: string
         example: Abbey Road
+        
+  PresetDetailed:
+    type: object
+    properties:
+      roomName:
+        type: string
+        description: Target room name
+        example: LivingRoom
+      uri:
+        type: string
+        description: URI to play (favorite, playlist, or direct URI)
+        example: x-sonosapi-radio:ST%3aexample
+      playMode:
+        type: object
+        properties:
+          repeat:
+            type: string
+            enum: ["none", "all", "one"]
+          shuffle:
+            type: boolean
+          crossfade:
+            type: boolean
+      volume:
+        type: integer
+        minimum: 0
+        maximum: 100
+        description: Volume level to set
+      pauseOthers:
+        type: boolean
+        description: Whether to pause other rooms
+      sleep:
+        type: integer
+        description: Sleep timer in seconds
+      members:
+        type: array
+        description: Additional rooms to group
+        items:
+          type: string
+      favorite:
+        type: string
+        description: Favorite name to play
+      playlist:
+        type: string
+        description: Playlist name to play
+      _originalFavorite:
+        type: string
+        description: Original favorite name before resolution
+      _loadedFrom:
+        type: string
+        enum: ["config", "file"]
+        description: Source of the preset

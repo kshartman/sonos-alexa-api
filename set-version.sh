@@ -82,9 +82,9 @@ pkg.version = '$new_version';
 require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\\n');
 "
 
-# Run save-version to update version.ts
+# Run version:save to update version.ts
 echo "Updating version.ts..."
-npm run save-version
+npm run version:save
 
 echo "Version updated successfully!"
 echo "New version: $new_version"

@@ -38,7 +38,7 @@ async function checkSonosData() {
       }
       
       // Try detailed
-      const favDetailedResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites?detailed=true`);
+      const favDetailedResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites/detailed`);
       console.log(`  Favorites (detailed) status: ${favDetailedResponse.status}`);
       
       if (favDetailedResponse.ok) {

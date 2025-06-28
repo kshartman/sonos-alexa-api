@@ -1,0 +1,42 @@
+get:
+  summary: Set debug log level
+  description: Sets the debug log level for the API
+  operationId: setDebugLevel
+  tags:
+    - Debug
+  parameters:
+    - name: level
+      in: path
+      required: true
+      description: The log level to set
+      schema:
+        type: string
+        enum: ['error', 'warn', 'info', 'debug', 'trace']
+        description: |
+          - error: Only errors
+          - warn: Errors and warnings
+          - info: Normal operation (default)
+          - debug: Detailed debugging
+          - trace: Everything including massive XML responses (most verbose)
+          
+          Note: 'wall' is deprecated, use 'trace' instead
+  responses:
+    '200':
+      description: Log level updated successfully
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              level:
+                type: string
+                example: debug
+    '400':
+      description: Invalid log level
+      content:
+        application/json:
+          schema:
+            $ref: '../../components/schemas.yaml#/schemas/ErrorResponse'

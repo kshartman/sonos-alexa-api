@@ -1,0 +1,25 @@
+get:
+  tags:
+    - Content
+  summary: Get favourite names (British spelling)
+  description: Returns a list of favourite names for the specified room (British spelling variant)
+  operationId: getFavourites
+  parameters:
+    - $ref: '#/components/parameters/room'
+  responses:
+    '200':
+      description: List of favourite names
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: string
+            example:
+              - "Jazz Radio"
+              - "Morning Playlist"
+              - "NPR News"
+              - "Chill Vibes"
+              - "80s Hits"
+    '404':
+      $ref: '#/components/responses/RoomNotFound'

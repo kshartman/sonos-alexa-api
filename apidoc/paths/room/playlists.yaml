@@ -1,0 +1,25 @@
+get:
+  tags:
+    - Content
+  summary: Get playlist names
+  description: Returns a list of playlist names from the music library
+  operationId: getPlaylists
+  parameters:
+    - $ref: '#/components/parameters/room'
+  responses:
+    '200':
+      description: List of playlist names
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: string
+            example:
+              - "Summer Hits"
+              - "Workout Mix"
+              - "Dinner Party"
+              - "Road Trip"
+              - "Focus Music"
+    '404':
+      $ref: '#/components/responses/RoomNotFound'

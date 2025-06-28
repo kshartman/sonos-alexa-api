@@ -1,4 +1,5 @@
 import http, { ServerResponse } from 'http';
+import os from 'os';
 import { SonosDiscovery } from './discovery.js';
 import { ApiRouter } from './api-router.js';
 import { PresetLoader } from './preset-loader.js';
@@ -8,6 +9,7 @@ import { DefaultRoomManager } from './utils/default-room-manager.js';
 import { TTSService } from './services/tts-service.js';
 import { applicationVersion } from './version.js';
 import { loadConfiguration } from './utils/config-loader.js';
+import { PresetGenerator } from './utils/preset-generator.js';
 import type { Config, StateChangeEvent } from './types/sonos.js';
 
 // Load configuration from multiple sources
@@ -18,13 +20,18 @@ const config: Config = loadConfiguration();
 // Initialize components
 const discovery = new SonosDiscovery();
 // Make discovery globally available for devices to access subscriber
-(global as any).discovery = discovery;
+declare global {
+  // eslint-disable-next-line no-var
+  var discovery: SonosDiscovery | undefined;
+}
+global.discovery = discovery;
 
 // Create the router first (we'll need it for the callback)
 const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', config.defaultRoom || '', config.defaultMusicService || 'library');
 const ttsService = new TTSService(config);
 
 // Create a temporary router variable that will be initialized later
+// eslint-disable-next-line prefer-const
 let router: ApiRouter;
 
 // Create preset loader with callback to update startup info
@@ -72,7 +79,7 @@ discovery.on('device-state-change', (device, state, previousState) => {
     // Skip invalid URLs
     try {
       new URL(webhook.url);
-    } catch (err) {
+    } catch (_err) {
       return;
     }
     
@@ -84,7 +91,12 @@ discovery.on('device-state-change', (device, state, previousState) => {
       },
       body: JSON.stringify(event)
     }).catch(err => {
-      const errorMsg = (err as any).cause?.code || (err as Error).message;
+      let errorMsg = 'Unknown error';
+      if (err instanceof Error) {
+        // Check for Node.js system errors with cause
+        const cause = (err as Error & { cause?: { code?: string } }).cause;
+        errorMsg = cause?.code || err.message;
+      }
       logger.error(`Webhook error for ${webhook.url}:`, errorMsg);
     });
   });
@@ -119,7 +131,7 @@ discovery.on('content-update', (deviceId, containerUpdateIDs) => {
     try {
       client.write(sseData);
       return true;
-    } catch (err) {
+    } catch (_err) {
       return false;
     }
   });
@@ -143,7 +155,7 @@ discovery.on('topology-change', (_zones) => {
     try {
       client.write(sseData);
       return true;
-    } catch (err) {
+    } catch (_err) {
       return false;
     }
   });
@@ -164,7 +176,7 @@ discovery.on('track-change', (trackEvent) => {
     try {
       client.write(sseData);
       return true;
-    } catch (err) {
+    } catch (_err) {
       return false;
     }
   });
@@ -262,6 +274,12 @@ process.on('SIGINT', shutdown);
 // Start server
 async function start(): Promise<void> {
   try {
+    // Always show startup message regardless of log level
+    const hostname = os.hostname();
+    logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
+    logger.always(`🖥️  Host: ${hostname}`);
+    logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
+    
     // Load default room settings
     await defaultRoomManager.load();
     
@@ -275,6 +293,25 @@ async function start(): Promise<void> {
     setTimeout(async () => {
       debugManager.debug('presets', 'Loading presets with favorite resolution...');
       await presetLoader.init();
+      
+      // Get all loaded presets for tracking
+      const allLoadedPresets = { ...config.presets, ...presetLoader.getAllPresets() };
+      
+      // Generate default presets if enabled
+      const defaultRoom = defaultRoomManager.getRoom();
+      logger.info(`CREATE_DEFAULT_PRESETS: ${config.createDefaultPresets}, Default Room: ${defaultRoom}`);
+      if (config.createDefaultPresets && defaultRoom) {
+        const devices = discovery.getAllDevices();
+        const device = devices.find(d => d.roomName === defaultRoom) || devices[0];
+        if (device) {
+          const generator = new PresetGenerator(allLoadedPresets);
+          await generator.generateDefaultPresets(device, defaultRoom);
+          
+          // Reload presets to include generated ones
+          await presetLoader.init();
+        }
+      }
+      
       const totalPresets = Object.keys(config.presets).length + Object.keys(presetLoader.getAllPresets()).length;
       
       // Startup status summary
@@ -282,6 +319,14 @@ async function start(): Promise<void> {
       const zones = discovery.getZones();
       const hasTopologyData = zones.length > 0;
       
+      // Always show minimal summary
+      logger.always(`🔊 Discovered ${devices.length} Sonos device${devices.length !== 1 ? 's' : ''}`);
+      if (devices.length > 0) {
+        const deviceNames = devices.map(d => d.roomName).sort().join(', ');
+        logger.always(`   Rooms: ${deviceNames}`);
+      }
+      
+      // Show detailed summary only if log level allows
       logger.info('═══════════════════════════════════════');
       logger.info(`🎵 Sonos Alexa API Version ${applicationVersion.version}`);
       logger.info('═══════════════════════════════════════');
@@ -347,10 +392,11 @@ async function start(): Promise<void> {
       });
     }, 2000); // Wait 2 seconds for initial device discovery
     
-    // Start HTTP server
-    const listenAddress = config.listenAddress || '0.0.0.0';
-    server.listen(config.port, listenAddress, () => {
-      debugManager.debug('api', `HTTP server started on ${listenAddress}:${config.port}`);
+    // Start HTTP server - always listen on all interfaces
+    server.listen(config.port, '0.0.0.0', () => {
+      // Always show this message regardless of log level
+      logger.always(`✅ Server ready at http://0.0.0.0:${config.port}`);
+      debugManager.debug('api', 'HTTP server started on all interfaces');
     });
     
     server.on('error', (err: NodeJS.ErrnoException) => {

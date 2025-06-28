@@ -1,0 +1,52 @@
+get:
+  tags:
+    - Content
+  summary: Get playlists with full details
+  description: Returns all playlists for the specified room with complete metadata
+  operationId: getPlaylistsDetailed
+  parameters:
+    - $ref: '#/components/parameters/room'
+  responses:
+    '200':
+      description: List of playlists with full details
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                  description: Unique identifier for the playlist
+                parentId:
+                  type: string
+                  description: Parent container ID
+                title:
+                  type: string
+                  description: Display name of the playlist
+                itemType:
+                  type: string
+                  enum: [container, item]
+                  description: Type of the item
+                uri:
+                  type: string
+                  description: Sonos URI for the playlist
+                metadata:
+                  type: string
+                  description: DIDL-Lite metadata for the playlist
+            example:
+              - id: "SQ:123"
+                parentId: "SQ:"
+                title: "Summer Hits"
+                itemType: "container"
+                uri: "x-rincon-playlist:RINCON_..."
+                metadata: "<DIDL-Lite>...</DIDL-Lite>"
+              - id: "SQ:456"
+                parentId: "SQ:"
+                title: "Workout Mix"
+                itemType: "container"
+                uri: "x-rincon-playlist:RINCON_..."
+                metadata: "<DIDL-Lite>...</DIDL-Lite>"
+    '404':
+      $ref: '#/components/responses/RoomNotFound'

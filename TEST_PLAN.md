@@ -207,14 +207,11 @@ Unit tests are perfect for:
 4. **Device Availability**: Ensure devices are not actively being controlled by other apps
 
 ```bash
-# Run all integration tests (recommended)
-npm run test:integration
-
-# Run safe subset (infrastructure, playback, volume, quick groups)
+# Run all tests (unit + integration)
 npm test
 
-# Run full test suite (may interrupt active playback)
-npm run test:full
+# Run only integration tests
+npm run test:integration
 
 # Run specific test categories
 npm test -- integration/01-infrastructure-tests.ts

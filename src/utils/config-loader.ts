@@ -31,7 +31,7 @@ function parseArrayEnv(value: string | undefined): string[] | undefined {
  * Parse boolean environment variable
  */
 function parseBooleanEnv(value: string | undefined): boolean | undefined {
-  if (!value) return undefined;
+  if (value === undefined || value === '') return undefined;
   return value.toLowerCase() === 'true' || value === '1';
 }
 
@@ -51,10 +51,10 @@ export function loadConfiguration(): Config {
     const settings = JSON.parse(settingsFile);
     
     // Deep merge settings into config
-    config = deepMerge(config, settings);
+    config = deepMerge(config as unknown as Record<string, unknown>, settings) as unknown as Config;
     
     logger.info('Loaded settings from settings.json');
-  } catch (error) {
+  } catch (_error) {
     // settings.json is optional
     logger.debug('No settings.json found, using defaults');
   }
@@ -163,6 +163,9 @@ export function loadConfiguration(): Config {
   if (process.env.CACHE_DIR) {
     config.cacheDir = process.env.CACHE_DIR;
   }
+  if (process.env.CREATE_DEFAULT_PRESETS !== undefined) {
+    config.createDefaultPresets = parseBooleanEnv(process.env.CREATE_DEFAULT_PRESETS);
+  }
   
   // Log which config sources were used
   const configSources = ['defaults'];
@@ -194,7 +197,8 @@ function getEnvironmentOverrides(): string[] {
     'PANDORA_USERNAME', 'PANDORA_PASSWORD',
     'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN',
     'WEBHOOKS_VOLUME_URL', 'WEBHOOKS_TRANSPORT_URL', 'WEBHOOKS_TOPOLOGY_URL',
-    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT', 'CACHE_DIR'
+    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT', 'CACHE_DIR',
+    'CREATE_DEFAULT_PRESETS'
   ];
   
   for (const envVar of envVars) {
@@ -209,7 +213,7 @@ function getEnvironmentOverrides(): string[] {
 /**
  * Deep merge two objects
  */
-function deepMerge(target: any, source: any): any {
+function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const output = { ...target };
   
   if (isObject(target) && isObject(source)) {
@@ -218,7 +222,7 @@ function deepMerge(target: any, source: any): any {
         if (!(key in target)) {
           Object.assign(output, { [key]: source[key] });
         } else {
-          output[key] = deepMerge(target[key], source[key]);
+          output[key] = deepMerge(target[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
         }
       } else {
         Object.assign(output, { [key]: source[key] });
@@ -232,6 +236,6 @@ function deepMerge(target: any, source: any): any {
 /**
  * Check if value is an object
  */
-function isObject(item: any): boolean {
-  return item && typeof item === 'object' && !Array.isArray(item);
+function isObject(item: unknown): item is Record<string, unknown> {
+  return item !== null && typeof item === 'object' && !Array.isArray(item);
 }

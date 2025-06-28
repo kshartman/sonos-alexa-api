@@ -14,7 +14,7 @@ async function debugContentLoading() {
     
     // Test 1: Check favorites endpoint
     console.log('\n--- Test 1: Checking favorites endpoint ---');
-    const favResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorites?detailed=true`);
+    const favResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/favorites/detailed`);
     console.log(`Favorites response status: ${favResponse.status}`);
     
     if (favResponse.ok) {
@@ -54,7 +54,7 @@ async function debugContentLoading() {
     
     // Test 2: Check playlists endpoint
     console.log('\n--- Test 2: Checking playlists endpoint ---');
-    const playlistResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlists?detailed=true`);
+    const playlistResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playlists/detailed`);
     console.log(`Playlists response status: ${playlistResponse.status}`);
     
     if (playlistResponse.ok) {

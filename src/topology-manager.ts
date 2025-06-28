@@ -16,6 +16,13 @@ export interface TopologyChangeEvent {
   timestamp: number;
 }
 
+// Type for XML-parsed zone group member
+interface ZoneGroupMemberXML {
+  '@_UUID': string;
+  '@_ZoneName': string;
+  '@_ChannelMapSet'?: string;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface TopologyManager {
   on(event: 'topology-change', listener: (event: TopologyChangeEvent) => void): this;
@@ -49,7 +56,7 @@ export class TopologyManager extends EventEmitter {
       const device = this.deviceMap.get(deviceId);
       const deviceName = device ? device.roomName : 'unknown';
       debugManager.info('topology', `Processing topology event from ${deviceName} (${deviceId}), body length: ${body.length}`);
-      debugManager.wall('upnp', `Topology event body: ${body}`);
+      debugManager.trace('upnp', `Topology event body: ${body}`);
       
       // Parse the UPnP event XML or JSON
       let parsed;
@@ -60,7 +67,7 @@ export class TopologyManager extends EventEmitter {
         // It's XML from real UPnP events
         parsed = this.xmlParser.parse(body);
       }
-      debugManager.wall('upnp', 'UPnP event parsed structure:', JSON.stringify(parsed, null, 2));
+      debugManager.trace('upnp', 'UPnP event parsed structure:', JSON.stringify(parsed, null, 2));
       
       const propertySet = parsed['e:propertyset'];
       
@@ -81,7 +88,7 @@ export class TopologyManager extends EventEmitter {
       debugManager.debug('topology', `Processing ${properties.length} properties`);
       
       for (const property of properties) {
-        debugManager.wall('upnp', 'Property content:', JSON.stringify(property, null, 2));
+        debugManager.trace('upnp', 'Property content:', JSON.stringify(property, null, 2));
         if (property.ZoneGroupState) {
           debugManager.debug('topology', 'Found ZoneGroupState property, processing...');
           this.processZoneGroupState(property.ZoneGroupState);
@@ -94,11 +101,11 @@ export class TopologyManager extends EventEmitter {
     }
   }
 
-  private processZoneGroupState(zoneGroupStateData: any): void {
+  private processZoneGroupState(zoneGroupStateData: unknown): void {
     try {
       debugManager.debug('topology', 'Processing ZoneGroupState data');
       debugManager.debug('upnp', 'ZoneGroupState data type:', typeof zoneGroupStateData);
-      debugManager.wall('upnp', 'ZoneGroupState data:', JSON.stringify(zoneGroupStateData, null, 2));
+      debugManager.trace('upnp', 'ZoneGroupState data:', JSON.stringify(zoneGroupStateData, null, 2));
       
       // If it's a string, parse it. If it's already an object, use it directly
       let parsed;
@@ -124,7 +131,7 @@ export class TopologyManager extends EventEmitter {
       }
 
       const zoneGroups = zoneGroupState.ZoneGroups.ZoneGroup;
-      debugManager.wall('upnp', 'Found ZoneGroups:', JSON.stringify(zoneGroups, null, 2));
+      debugManager.trace('upnp', 'Found ZoneGroups:', JSON.stringify(zoneGroups, null, 2));
       
       const groups = Array.isArray(zoneGroups) ? zoneGroups : [zoneGroups];
       debugManager.debug('topology', `Processing ${groups.length} zone groups`);
@@ -161,7 +168,7 @@ export class TopologyManager extends EventEmitter {
           }
           if (device) {
             // Update device's coordinator reference
-            (device.state as any).coordinator = coordinator;
+            device.state.coordinator = coordinator;
             return true;
           }
           return false;
@@ -179,7 +186,7 @@ export class TopologyManager extends EventEmitter {
         }
 
         // Update coordinator's state
-        (coordinator.state as any).coordinator = coordinator;
+        coordinator.state.coordinator = coordinator;
 
         const zone: ZoneGroup = {
           id: groupId,
@@ -206,7 +213,7 @@ export class TopologyManager extends EventEmitter {
     }
   }
 
-  private parseZoneGroupMembers(zoneGroupMembers: any): Array<{uuid: string, roomName: string, channelMapSet?: string}> {
+  private parseZoneGroupMembers(zoneGroupMembers: ZoneGroupMemberXML | ZoneGroupMemberXML[] | undefined): Array<{uuid: string, roomName: string, channelMapSet?: string}> {
     if (!zoneGroupMembers) {
       return [];
     }

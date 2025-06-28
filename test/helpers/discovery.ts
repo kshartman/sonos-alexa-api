@@ -5,20 +5,22 @@ import { SystemTopology, Zone, defaultConfig } from './test-config.js';
  */
 export async function discoverSystem(): Promise<SystemTopology> {
   try {
-    // Enable debug logging for tests
-    try {
-      // Set log level to debug
-      await fetch(`${defaultConfig.apiUrl}/loglevel/debug`);
-      
-      // Enable specific debug categories
-      const categories = ['topology', 'upnp', 'discovery', 'api', 'soap'];
-      for (const category of categories) {
-        await fetch(`${defaultConfig.apiUrl}/debug/category/${category}/true`);
+    // Only enable debug logging if TEST_DEBUG environment variable is set
+    if (process.env.TEST_DEBUG === 'true') {
+      try {
+        // Set log level to debug
+        await fetch(`${defaultConfig.apiUrl}/loglevel/debug`);
+        
+        // Enable specific debug categories
+        const categories = ['topology', 'upnp', 'discovery', 'api', 'soap'];
+        for (const category of categories) {
+          await fetch(`${defaultConfig.apiUrl}/debug/category/${category}/true`);
+        }
+        
+        console.log('📝 Debug logging enabled for tests');
+      } catch (error) {
+        console.log('⚠️  Could not enable debug logging:', error);
       }
-      
-      console.log('📝 Debug logging enabled for tests');
-    } catch (error) {
-      console.log('⚠️  Could not enable debug logging:', error);
     }
     
     // Get zones
@@ -136,6 +138,54 @@ async function discoverMusicServices(testRoom: string): Promise<string[]> {
 }
 
 /**
+ * Make a room safe for testing by ungrouping and stopping playback
+ */
+async function makeRoomSafe(room: string): Promise<void> {
+  try {
+    // Check if room is in a group
+    const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
+    if (zonesResponse.ok) {
+      const zones = await zonesResponse.json() as Zone[];
+      const roomZone = zones.find(z => z.members.some(m => m.roomName === room));
+      
+      if (roomZone && roomZone.members.length > 1) {
+        // Check if it's just a stereo pair
+        const uniqueRoomNames = new Set(roomZone.members.map(m => m.roomName));
+        const isJustStereoPair = uniqueRoomNames.size === 1 && roomZone.members.length === 2;
+        
+        if (!isJustStereoPair) {
+          console.log(`   Ungrouping ${room} from its current group...`);
+          const leaveResponse = await fetch(`${defaultConfig.apiUrl}/${room}/leave`);
+          if (leaveResponse.ok) {
+            console.log(`   ✓ ${room} left its group`);
+            // Wait for ungrouping to complete
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+    }
+    
+    // Stop playback if playing
+    const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+    if (stateResponse.ok) {
+      const state = await stateResponse.json();
+      if (state.playbackState === 'PLAYING') {
+        console.log(`   Stopping playback on ${room}...`);
+        const stopResponse = await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
+        if (stopResponse.ok) {
+          console.log(`   ✓ Stopped playback on ${room}`);
+          // Wait for stop to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+  } catch (error) {
+    console.log(`   ⚠️  Error making ${room} safe:`, error);
+    // Continue anyway - tests may still work
+  }
+}
+
+/**
  * Check if a room has content available (favorites, playlists, or music search)
  */
 async function checkRoomHasContent(room: string): Promise<boolean> {
@@ -175,6 +225,37 @@ async function checkRoomHasContent(room: string): Promise<boolean> {
  * Get a safe test room (prefer non-grouped, non-playing room with content available)
  */
 export async function getSafeTestRoom(topology: SystemTopology): Promise<string> {
+  // Check if TEST_ROOM environment variable is set and not empty
+  if (process.env.TEST_ROOM && process.env.TEST_ROOM.trim()) {
+    const configuredRoom = process.env.TEST_ROOM.trim();
+    
+    // Verify the room exists in the topology
+    if (topology.rooms.includes(configuredRoom)) {
+      console.log(`✅ Using configured test room: ${configuredRoom} (from TEST_ROOM env)`);
+      await makeRoomSafe(configuredRoom);
+      return configuredRoom;
+    } else {
+      console.log(`⚠️  Configured TEST_ROOM '${configuredRoom}' not found in topology, falling back to auto-selection`);
+    }
+  }
+  
+  // If TEST_ROOM is empty or not set, check for DEFAULT_ROOM from the API
+  if (!process.env.TEST_ROOM || !process.env.TEST_ROOM.trim()) {
+    try {
+      const defaultsResponse = await fetch(`${defaultConfig.apiUrl}/default`);
+      if (defaultsResponse.ok) {
+        const defaults = await defaultsResponse.json();
+        if (defaults.room && topology.rooms.includes(defaults.room)) {
+          console.log(`✅ Using default room from API: ${defaults.room}`);
+          await makeRoomSafe(defaults.room);
+          return defaults.room;
+        }
+      }
+    } catch (error) {
+      console.log('⚠️  Could not fetch default room from API');
+    }
+  }
+  
   // Try to find a standalone room that's not playing and is a coordinator with content
   for (const zone of topology.zones) {
     // Check if this is a standalone zone (single device or stereo pair)

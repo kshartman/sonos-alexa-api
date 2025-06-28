@@ -1,5 +1,15 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 import { ApiRouter } from '../src/api-router.js';
+import { readdir, readFile } from 'fs/promises';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const showDetailed = args.includes('--detailed');
 
 // Extract all endpoint patterns from the router
 const endpointPatterns = [
@@ -214,16 +224,18 @@ const coveredEndpoints = [
   '/{room}/queue/detailed',
 ];
 
-// Calculate coverage
-const totalEndpoints = endpointPatterns.length;
-const coveredCount = coveredEndpoints.length;
-const uncoveredEndpoints = endpointPatterns.filter(ep => !coveredEndpoints.includes(ep));
-const coverage = Math.round((coveredCount / totalEndpoints) * 100);
+// Main async function
+async function checkCoverage() {
+  // Calculate coverage
+  const totalEndpoints = endpointPatterns.length;
+  const coveredCount = coveredEndpoints.length;
+  const uncoveredEndpoints = endpointPatterns.filter(ep => !coveredEndpoints.includes(ep));
+  const coverage = Math.round((coveredCount / totalEndpoints) * 100);
 
-console.log('📊 API Endpoint Test Coverage Report\n');
-console.log(`Total endpoints: ${totalEndpoints}`);
-console.log(`Covered endpoints: ${coveredCount}`);
-console.log(`Coverage: ${coverage}%\n`);
+  console.log('📊 API Endpoint Test Coverage Report\n');
+  console.log(`Total endpoints: ${totalEndpoints}`);
+  console.log(`Covered endpoints: ${coveredCount}`);
+  console.log(`Coverage: ${coverage}%\n`);
 
 if (uncoveredEndpoints.length > 0) {
   console.log('❌ Uncovered endpoints:');
@@ -267,26 +279,111 @@ if (coverage < threshold) {
   console.log(`\n✅ Coverage ${coverage}% meets threshold of ${threshold}%`);
 }
 
+// Helper function to extract test cases from a file
+async function extractTestCases(filePath: string): Promise<{ describes: string[], tests: string[] }> {
+  const describes: string[] = [];
+  const tests: string[] = [];
+  
+  try {
+    const content = await readFile(join(__dirname, filePath), 'utf-8');
+    
+    // Extract describe blocks
+    const describeMatches = content.matchAll(/describe\s*\(\s*['"`]([^'"`]+)['"`]/g);
+    for (const match of describeMatches) {
+      describes.push(match[1]);
+    }
+    
+    // Extract test/it blocks
+    const testMatches = content.matchAll(/(?:test|it)\s*\(\s*['"`]([^'"`]+)['"`]/g);
+    for (const match of testMatches) {
+      tests.push(match[1]);
+    }
+  } catch (error) {
+    // Error reading file
+  }
+  
+  return { describes, tests };
+}
+
 // List test files and what they cover
 console.log('\n📁 Test file coverage breakdown:');
-console.log('\nUnit tests:');
-console.log('   - volume-tests.ts: Volume controls, mute/unmute');
-console.log('   - playback-tests.ts: Basic playback controls');
-console.log('   - group-tests.ts: Group formation logic');
-console.log('   - linein-tests.ts: Line-in functionality');
-console.log('   - soap-tests.ts: SOAP message formatting');
 
-console.log('\nIntegration tests:');
-console.log('   - 01-infrastructure-tests.ts: System endpoints, discovery');
-console.log('   - 02-playback-tests.ts: Playback controls with real devices');
-console.log('   - 03-volume-tests.ts: Volume, mute, group volume');
-console.log('   - 04-content-apple.ts: Apple Music search');
-console.log('   - 04-content-defaults.ts: Default room/service music search');
-console.log('   - 04-content-generic.ts: Generic music search');
-console.log('   - 04-content-library.ts: Music library search and indexing');
-console.log('   - 04-content-pandora.ts: Pandora playback and feedback');
-console.log('   - 05-group-tests-quick.ts: Basic group management');
-console.log('   - 06-playback-modes-tests.ts: Repeat, shuffle, crossfade, sleep');
-console.log('   - 07-advanced-tests.ts: Presets, settings, line-in');
-console.log('   - 08-tts-tests.ts: Text-to-speech announcements');
-console.log('   - 09-group-tests.ts: Advanced group management');
+if (showDetailed) {
+  // Show detailed test cases
+  console.log('\n🔍 DETAILED TEST CASE LISTING:');
+  
+  const testFiles = [
+    { type: 'Unit', files: [
+      'unit/volume-tests.ts',
+      'unit/playback-tests.ts',
+      'unit/group-tests.ts',
+      'unit/linein-tests.ts',
+      'unit/soap-tests.ts'
+    ]},
+    { type: 'Integration', files: [
+      'integration/01-infrastructure-tests.ts',
+      'integration/02-playback-tests.ts',
+      'integration/03-volume-tests.ts',
+      'integration/04-content-apple.ts',
+      'integration/04-content-defaults.ts',
+      'integration/04-content-generic.ts',
+      'integration/04-content-library.ts',
+      'integration/04-content-pandora.ts',
+      'integration/05-group-tests-quick.ts',
+      'integration/06-playback-modes-tests.ts',
+      'integration/07-advanced-tests.ts',
+      'integration/08-tts-tests.ts',
+      'integration/09-group-tests.ts',
+      'integration/adaptive-tests.ts'
+    ]}
+  ];
+  
+  let totalTestCount = 0;
+  
+  for (const { type, files } of testFiles) {
+    console.log(`\n${type} Tests:`);
+    for (const file of files) {
+      const { describes, tests } = await extractTestCases(file);
+      if (tests.length > 0) {
+        console.log(`\n  📄 ${file}`);
+        console.log(`     Suites: ${describes.join(' > ')}`);
+        console.log(`     Test cases (${tests.length}):`);
+        tests.forEach((test, i) => {
+          console.log(`       ${i + 1}. ${test}`);
+        });
+        totalTestCount += tests.length;
+      }
+    }
+  }
+  
+  console.log(`\n📊 Total test cases: ${totalTestCount}`);
+} else {
+  // Show summary
+  console.log('\nUnit tests:');
+  console.log('   - volume-tests.ts: Volume controls, mute/unmute');
+  console.log('   - playback-tests.ts: Basic playback controls');
+  console.log('   - group-tests.ts: Group formation logic');
+  console.log('   - linein-tests.ts: Line-in functionality');
+  console.log('   - soap-tests.ts: SOAP message formatting');
+
+  console.log('\nIntegration tests:');
+  console.log('   - 01-infrastructure-tests.ts: System endpoints, discovery');
+  console.log('   - 02-playback-tests.ts: Playback controls with real devices');
+  console.log('   - 03-volume-tests.ts: Volume, mute, group volume');
+  console.log('   - 04-content-apple.ts: Apple Music search');
+  console.log('   - 04-content-defaults.ts: Default room/service music search');
+  console.log('   - 04-content-generic.ts: Generic music search');
+  console.log('   - 04-content-library.ts: Music library search and indexing');
+  console.log('   - 04-content-pandora.ts: Pandora playback and feedback');
+  console.log('   - 05-group-tests-quick.ts: Basic group management');
+  console.log('   - 06-playback-modes-tests.ts: Repeat, shuffle, crossfade, sleep');
+  console.log('   - 07-advanced-tests.ts: Presets, settings, line-in');
+  console.log('   - 08-tts-tests.ts: Text-to-speech announcements');
+  console.log('   - 09-group-tests.ts: Advanced group management');
+  
+  console.log('\n💡 Use --detailed to see every test case');
+}
+}
+
+// Run the coverage check
+checkCoverage().catch(console.error);

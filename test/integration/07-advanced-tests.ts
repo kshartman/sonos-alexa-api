@@ -217,18 +217,38 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
       // Verify it was added to queue
       const queueResponse = await fetch(`${defaultConfig.apiUrl}/${room}/queue`);
       const queue = await queueResponse.json();
-      assert(queue.items.length > 0, 'Queue should have items after loading Beatles song');
+      assert(queue.length > 0, 'Queue should have items after loading Beatles song');
     });
     
     it('should get current queue', async () => {
+      // Test simplified queue (returns array with only basic properties)
       const response = await fetch(`${defaultConfig.apiUrl}/${room}/queue`);
       assert.strictEqual(response.status, 200);
       
       const queue = await response.json();
-      assert(queue.items !== undefined, 'Queue should have items array');
-      assert(typeof queue.startIndex === 'number', 'Queue should have startIndex');
-      assert(typeof queue.numberReturned === 'number', 'Queue should have numberReturned');
-      assert(typeof queue.totalMatches === 'number', 'Queue should have totalMatches');
+      assert(Array.isArray(queue), 'Queue should be an array');
+      if (queue.length > 0) {
+        // Verify simplified format
+        const item = queue[0];
+        assert(item.hasOwnProperty('title'), 'Queue item should have title');
+        assert(item.hasOwnProperty('artist'), 'Queue item should have artist');
+        assert(item.hasOwnProperty('album'), 'Queue item should have album');
+        assert(item.hasOwnProperty('albumArtUri'), 'Queue item should have albumArtUri');
+        assert(!item.hasOwnProperty('uri'), 'Simplified queue should not have uri');
+      }
+      
+      // Test detailed queue (returns array with all properties)
+      const detailedResponse = await fetch(`${defaultConfig.apiUrl}/${room}/queue/detailed`);
+      assert.strictEqual(detailedResponse.status, 200);
+      
+      const detailedQueue = await detailedResponse.json();
+      assert(Array.isArray(detailedQueue), 'Detailed queue should be an array');
+      if (detailedQueue.length > 0) {
+        // Verify detailed format includes additional properties
+        const item = detailedQueue[0];
+        assert(item.hasOwnProperty('uri'), 'Detailed queue item should have uri');
+        assert(item.hasOwnProperty('metadata'), 'Detailed queue item should have metadata');
+      }
     });
   });
   

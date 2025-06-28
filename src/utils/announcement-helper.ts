@@ -20,27 +20,42 @@ export async function playAnnouncement(
   duration: number,
   discovery: SonosDiscovery
 ): Promise<void> {
-  // First, get the current transport info BEFORE any changes
+  // First, get the current transport info AND volume BEFORE any changes
   let transportInfo;
   let positionInfo;
+  let currentVolume;
   try {
-    transportInfo = await device.getTransportInfo();
-    positionInfo = await device.getPositionInfo();
+    // Get all current state in parallel
+    const [transport, position, volumeResult] = await Promise.all([
+      device.getTransportInfo(),
+      device.getPositionInfo(),
+      device.getVolume()
+    ]);
+    
+    transportInfo = transport;
+    positionInfo = position;
+    currentVolume = volumeResult.CurrentVolume;
     
     logger.debug(`Transport info for ${device.roomName}:`, {
       CurrentURI: transportInfo.CurrentURI,
       CurrentTransportState: transportInfo.CurrentTransportState,
-      CurrentURIMetaData: transportInfo.CurrentURIMetaData?.substring(0, 100)
+      CurrentURIMetaData: transportInfo.CurrentURIMetaData?.substring(0, 100),
+      CurrentVolume: currentVolume
     });
   } catch (error) {
-    logger.error('Error getting transport info:', error);
+    logger.error('Error getting device info:', error);
+    // Fallback to state if direct query fails
+    currentVolume = device.state.volume;
   }
 
   // Save current state
   const state = device.state;
   const backup: BackupState = {
-    volume: state.volume,
-    playbackState: state.playbackState,
+    volume: currentVolume || state.volume, // Use fetched volume, fallback to state
+    // Use transport info for accurate playback state
+    playbackState: transportInfo?.CurrentTransportState === 'PAUSED_PLAYBACK' ? 'PAUSED_PLAYBACK' :
+      transportInfo?.CurrentTransportState === 'PLAYING' ? 'PLAYING' : 
+        'STOPPED',
     wasCoordinator: device.isCoordinator()
   };
 
@@ -75,11 +90,11 @@ export async function playAnnouncement(
     backup.groupUri = `x-rincon:${zone.coordinator}`;
   }
 
-  logger.debug(`Backup state for ${device.roomName}:`, backup);
+  logger.info(`Backup state for ${device.roomName}: volume=${backup.volume}, state=${backup.playbackState}, uri=${backup.uri?.substring(0, 50) || 'none'}`);
 
   try {
     // Set announce volume
-    logger.info(`Setting announce volume to ${announceVolume} for ${device.roomName}`);
+    logger.info(`Setting announce volume to ${announceVolume} for ${device.roomName} (was ${backup.volume})`);
     await device.setVolume(announceVolume);
     
     // Play announcement
@@ -97,6 +112,12 @@ export async function playAnnouncement(
     logger.info(`Announcement completed successfully on ${device.roomName}`);
   } catch (error) {
     logger.error('Error during announcement:', error);
+    logger.error('Announcement error details:', {
+      roomName: device.roomName,
+      ttsUrl,
+      announceVolume,
+      error: error instanceof Error ? error.message : String(error)
+    });
     // Try to restore state even if announcement failed
     try {
       await restorePlaybackState(device, backup);
@@ -194,6 +215,29 @@ async function restorePlaybackState(
           }
         } catch (playError) {
           logger.error('Error resuming playback:', playError);
+        }
+      } else if (backup.playbackState === 'PAUSED_PLAYBACK') {
+        logger.info('Restoring paused state');
+        // For paused state, we need to ensure it stays paused
+        // The setAVTransportURI might have already put it in the right state
+        // but let's check and pause if needed
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const currentState = await device.getTransportInfo();
+          if (currentState.CurrentTransportState === 'STOPPED') {
+            // When stopped after restoring content, we need to play then pause
+            // to get to PAUSED_PLAYBACK state
+            logger.info('Device is stopped, playing then pausing to restore paused state');
+            await device.play();
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await device.pause();
+          } else if (currentState.CurrentTransportState === 'PLAYING') {
+            logger.info('Pausing playback to restore paused state');
+            await device.pause();
+          }
+          // Else already paused, nothing to do
+        } catch (pauseError) {
+          logger.error('Error restoring paused state:', pauseError);
         }
       } else {
         logger.info(`Not resuming - previous state was ${backup.playbackState}`);

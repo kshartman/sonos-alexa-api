@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 import logger from './logger.js';
 import type { SonosDevice } from '../sonos-device.js';
+import type { ZoneGroup } from '../topology-manager.js';
+import type { SonosTrack } from '../types/sonos.js';
 
 export interface StateChangeEvent {
   deviceId: string;
@@ -19,7 +21,7 @@ export interface VolumeChangeEvent {
 }
 
 export interface GroupChangeEvent {
-  zones: any[];
+  zones: ZoneGroup[];
   timestamp: number;
 }
 
@@ -38,15 +40,15 @@ export interface ContentUpdateEvent {
 }
 
 export interface TopologyChangeEvent {
-  zones: any[];
+  zones: ZoneGroup[];
   timestamp: number;
 }
 
 export interface TrackChangeEvent {
   deviceId: string;
   roomName: string;
-  previousTrack: any;
-  currentTrack: any;
+  previousTrack: SonosTrack | null;
+  currentTrack: SonosTrack | null;
   timestamp: number;
 }
 
@@ -164,7 +166,7 @@ export class EventManager extends EventEmitter {
   }
   
   // Wait for group formation
-  async waitForGroupChange(timeout = 5000): Promise<any[] | null> {
+  async waitForGroupChange(timeout = 5000): Promise<ZoneGroup[] | null> {
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('group-change', groupHandler);
@@ -228,7 +230,7 @@ export class EventManager extends EventEmitter {
   }
   
   // Wait for topology change
-  async waitForTopologyChange(timeout = 5000): Promise<any[] | null> {
+  async waitForTopologyChange(timeout = 5000): Promise<ZoneGroup[] | null> {
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('topology-change', topologyHandler);

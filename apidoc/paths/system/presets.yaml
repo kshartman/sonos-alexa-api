@@ -1,89 +1,24 @@
 get:
   tags:
     - System
-  summary: Get all presets
+  summary: Get preset names
   description: |
-    Returns all available presets from both configuration and preset files.
-    Use the 'detailed' query parameter to get full preset objects with metadata.
+    Returns a list of all available preset names from both configuration 
+    and preset files. Use /presets/detailed to get full preset objects.
   operationId: getPresets
-  parameters:
-    - name: detailed
-      in: query
-      description: Return detailed preset information including metadata
-      required: false
-      schema:
-        type: boolean
-        default: false
   responses:
     '200':
-      description: List of presets
+      description: List of preset names
       content:
         application/json:
           schema:
-            oneOf:
-              - type: array
-                description: Simple list of preset names (when detailed=false)
-                items:
-                  type: string
-                example:
-                  - "jazz_favorites"
-                  - "morning_music"
-                  - "party_mode"
-              - type: object
-                description: Detailed preset objects (when detailed=true)
-                additionalProperties:
-                  type: object
-                  properties:
-                    roomName:
-                      type: string
-                      description: Target room name
-                    uri:
-                      type: string
-                      description: URI to play (favorite, playlist, or direct URI)
-                    playMode:
-                      type: object
-                      properties:
-                        repeat:
-                          type: string
-                          enum: ["none", "all", "one"]
-                        shuffle:
-                          type: boolean
-                        crossfade:
-                          type: boolean
-                    volume:
-                      type: integer
-                      minimum: 0
-                      maximum: 100
-                    pauseOthers:
-                      type: boolean
-                      description: Whether to pause other rooms
-                    sleep:
-                      type: integer
-                      description: Sleep timer in seconds
-                    members:
-                      type: array
-                      description: Additional rooms to group
-                      items:
-                        type: string
-                    favorite:
-                      type: string
-                      description: Favorite name to play
-                    playlist:
-                      type: string
-                      description: Playlist name to play
-                    _originalFavorite:
-                      type: string
-                      description: Original favorite name before resolution
-                    _loadedFrom:
-                      type: string
-                      enum: ["config", "file"]
-                      description: Source of the preset
-                example:
-                  jazz_favorites:
-                    roomName: "LivingRoom"
-                    favorite: "Jazz Radio"
-                    uri: "x-sonosapi-radio:ST%3aexample"
-                    volume: 25
-                    pauseOthers: true
-                    _originalFavorite: "Jazz Radio"
-                    _loadedFrom: "file"
+            type: array
+            description: Simple list of preset names
+            items:
+              type: string
+            example:
+              - "jazz_favorites"
+              - "morning_music"
+              - "party_mode"
+              - "dinner_time"
+              - "bedtime_music"

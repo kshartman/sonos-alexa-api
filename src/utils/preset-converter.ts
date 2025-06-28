@@ -1,18 +1,39 @@
 import logger from './logger.js';
+import { debugManager } from './debug-manager.js';
 import type { Preset, LegacyPreset } from '../types/sonos.js';
 
-export function isLegacyPreset(preset: any): preset is LegacyPreset {
-  return (
-    typeof preset === 'object' &&
-    preset !== null &&
-    Array.isArray(preset.players) &&
-    preset.players.length > 0 &&
-    typeof preset.players[0]?.roomName === 'string'
-  );
+// Type for converted preset with legacy data attached
+export type PresetWithLegacy = Preset & {
+  _legacy?: {
+    players: LegacyPreset['players'];
+    state?: LegacyPreset['state'];
+    playMode?: LegacyPreset['playMode'];
+    pauseOthers?: LegacyPreset['pauseOthers'];
+    sleep?: LegacyPreset['sleep'];
+  };
+};
+
+export function isLegacyPreset(preset: unknown): preset is LegacyPreset {
+  if (typeof preset !== 'object' || preset === null) {
+    return false;
+  }
+  
+  const obj = preset as Record<string, unknown>;
+  
+  if (!('players' in obj) || !Array.isArray(obj.players) || obj.players.length === 0) {
+    return false;
+  }
+  
+  const firstPlayer = obj.players[0];
+  if (typeof firstPlayer !== 'object' || firstPlayer === null) {
+    return false;
+  }
+  
+  return 'roomName' in firstPlayer && typeof (firstPlayer as Record<string, unknown>).roomName === 'string';
 }
 
-export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): Preset {
-  logger.debug(`Converting legacy preset: ${presetName}`);
+export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): PresetWithLegacy {
+  debugManager.debug('presets', `Converting legacy preset: ${presetName}`);
 
   // For the new simple format, we'll create a basic preset
   // The coordinator will be the first player in the list
@@ -39,7 +60,7 @@ export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): P
     logger.warn(`Legacy preset ${presetName} has no favorite or uri - creating placeholder`);
   }
 
-  const converted: Preset = {
+  const converted: PresetWithLegacy = {
     uri,
     metadata: metadata || '',
     volume: coordinator.volume,
@@ -51,9 +72,9 @@ export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): P
       pauseOthers: legacy.pauseOthers,
       sleep: legacy.sleep
     }
-  } as Preset & { _legacy?: any };
+  };
 
-  logger.debug(`Converted legacy preset ${presetName}:`, {
+  debugManager.debug('presets', `Converted legacy preset ${presetName}:`, {
     originalPlayers: legacy.players.length,
     coordinator: coordinator.roomName,
     hasPlayMode: !!legacy.playMode,
@@ -64,11 +85,18 @@ export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): P
   return converted;
 }
 
-export function tryConvertPreset(data: any, presetName: string): Preset {
+export function tryConvertPreset(data: unknown, presetName: string): Preset | PresetWithLegacy {
+  // First ensure data is an object
+  if (!data || typeof data !== 'object') {
+    throw new Error(`Preset ${presetName} is not an object`);
+  }
+  
+  const presetData = data as Record<string, unknown>;
+  
   // Check if it's already in the new format
-  if (typeof data.uri === 'string') {
-    logger.debug(`Preset ${presetName} is already in new format`);
-    return data as Preset;
+  if (typeof presetData.uri === 'string') {
+    debugManager.debug('presets', `Preset ${presetName} is already in new format`);
+    return presetData as unknown as Preset;
   }
 
   // Check if it's in legacy format

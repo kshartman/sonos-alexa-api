@@ -47,7 +47,7 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 ### 7. **Debug System**
 - Categorized debug logging
 - Runtime enable/disable via API
-- Log levels: error, warn, info, debug, wall
+- Log levels: error, warn, info, debug, trace
 - Categories: soap, topology, discovery, favorites, presets, upnp, api
 
 ### 8. **Security & Authentication**

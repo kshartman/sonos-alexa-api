@@ -26,6 +26,8 @@ pids
 settings.json
 config.json
 settings-*.json
+!settings.default.json
+!settings.example.json
 
 # Preset files (user-specific)
 /presets/*
@@ -50,6 +52,8 @@ settings-*.json
 .env.development.local
 .env.test.local
 .env.production.local
+!example.env
+!.env.example
 
 # IDE and editor files
 .vscode/

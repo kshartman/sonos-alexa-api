@@ -98,21 +98,22 @@ GET /{room}/add/{otherRoom}     # Add another room to this group
 
 ### Favorites
 ```
-GET /{room}/favorites            # List favorites
-GET /{room}/favorites?detailed=true  # Detailed favorite info
+GET /{room}/favorites            # List favorite titles only
+GET /{room}/favorites/detailed   # List favorites with full details
 GET /{room}/favorite/{name}      # Play favorite by name
 ```
 
 ### Playlists
 ```
-GET /{room}/playlists            # List playlists
-GET /{room}/playlists?detailed=true  # Detailed playlist info
+GET /{room}/playlists            # List playlist titles only
+GET /{room}/playlists/detailed   # List playlists with full details
 GET /{room}/playlist/{name}      # Play playlist by name
 ```
 
 ### Presets
 ```
-GET /presets                     # List all presets
+GET /presets                     # List preset names only
+GET /presets/detailed            # List presets with full details
 GET /{room}/preset/{preset}      # Play preset in room
 GET /preset/{preset}             # Play preset in default room
 ```

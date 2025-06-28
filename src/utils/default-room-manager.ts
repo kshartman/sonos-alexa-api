@@ -26,7 +26,7 @@ export class DefaultRoomManager {
       const data = await fs.readFile(this.configPath, 'utf-8');
       this.settings = JSON.parse(data);
       logger.info('Loaded default settings:', this.settings);
-    } catch (error) {
+    } catch (_error) {
       // File doesn't exist or is invalid, use defaults
       this.settings = {
         room: this.defaultRoom,

@@ -5,9 +5,13 @@ import { dirname, join } from 'path';
 import { startServer, stopServer, isServerRunning, waitForServer } from './helpers/server-manager.js';
 import { DebugSettingsManager } from './helpers/debug-settings-manager.js';
 import { defaultConfig } from './helpers/test-config.js';
+import * as dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load test environment variables
+dotenv.config({ path: join(__dirname, '.env') });
 
 console.log('🧪 Sonos API Test Suite\n');
 
@@ -15,6 +19,7 @@ console.log('🧪 Sonos API Test Suite\n');
 const args = process.argv.slice(2);
 const mockOnly = args.includes('--mock-only');
 const noServer = args.includes('--no-server') || process.env.NO_SERVER === 'true';
+const enableDebug = args.includes('--debug');
 
 // Extract grep pattern if provided
 let grepPattern: string | undefined;
@@ -37,6 +42,12 @@ const testMode = mockOnly ? 'mock-only' : 'integration';
 // Set environment variables
 process.env.TEST_MODE = testMode;
 process.env.MOCK_ONLY = mockOnly ? 'true' : 'false';
+process.env.TEST_DEBUG = enableDebug ? 'true' : 'false';
+
+// Set log level for test process (affects EventBridge and other helpers that use the logger)
+if (!enableDebug && !process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL = 'error';  // Only show errors during tests unless debug is enabled
+}
 
 // Get the actual API URL that will be used
 const apiUrl = process.env.TEST_API_URL || process.env.API_BASE_URL || 'http://localhost:5005';
@@ -49,6 +60,7 @@ console.log(`   Mock only: ${mockOnly}`);
 console.log(`   API URL: ${apiUrl}`);
 console.log(`   Remote API: ${isRemoteApi}`);
 console.log(`   Auto-start server: ${shouldAutoStart}`);
+console.log(`   Debug mode: ${enableDebug ? 'enabled' : 'disabled'}`);
 console.log(`   Pattern: ${pattern}`);
 if (grepPattern) {
   console.log(`   Grep: ${grepPattern}`);
@@ -80,8 +92,9 @@ async function runTests() {
       console.log(`🌐 Using remote API at ${apiUrl}\n`);
     }
       
-      // Save current debug settings and enable debug mode
-      console.log('🔧 Configuring debug settings for tests...');
+    // Only enable debug mode if --debug flag is passed
+    if (enableDebug && !mockOnly && !noServer) {
+      console.log('🔧 Enabling debug mode for tests...');
       await debugManager.save();
       await debugManager.enableDebugMode();
       console.log('');
@@ -111,8 +124,8 @@ async function runTests() {
     });
 
     testProcess.on('close', async (code) => {
-      // Restore debug settings
-      if (!mockOnly && !noServer) {
+      // Restore debug settings if we enabled them
+      if (enableDebug && !mockOnly && !noServer) {
         console.log('\n🔧 Restoring debug settings...');
         await debugManager.restore();
       }

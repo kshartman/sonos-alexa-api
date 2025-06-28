@@ -156,6 +156,9 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const topologyChanged = await topologyPromise;
       assert(topologyChanged, 'Should receive topology change event');
       
+      // Give a bit more time for topology to fully stabilize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Verify rooms are separate
       const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
       const zones = await zonesResponse.json();
@@ -199,6 +202,9 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       // Wait for topology change event
       const topologyChanged = await topologyPromise;
       assert(topologyChanged, 'Should receive topology change event');
+      
+      // Give a bit more time for topology to fully stabilize
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Verify 3-room group
       const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);

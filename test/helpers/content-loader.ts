@@ -34,7 +34,7 @@ export async function loadTestContent(room: string): Promise<boolean> {
 async function loadFromFavorites(room: string): Promise<boolean> {
   console.log('   Trying favorites...');
   
-  const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites?detailed=true`);
+  const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites/detailed`);
   if (!favoritesResponse.ok) {
     console.log('   Failed to get favorites list');
     return false;
@@ -144,7 +144,7 @@ async function loadFromMusicSearch(room: string): Promise<boolean> {
 async function loadFromPlaylists(room: string): Promise<boolean> {
   console.log('   Trying playlists...');
   
-  const playlistsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/playlists?detailed=true`);
+  const playlistsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/playlists/detailed`);
   if (!playlistsResponse.ok) {
     console.log('   Failed to get playlists');
     return false;

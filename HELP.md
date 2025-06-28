@@ -233,7 +233,25 @@ Case-insensitive matching is supported - "Jazz Radio" matches "jazz radio".
 ### Preset Issues
 - First player in the list becomes coordinator - order matters!
 - Invalid room names cause the preset to be skipped
-- Use `/presets?detailed=true` to see full preset configuration
+- Use `/presets/detailed` to see full preset configuration
+
+### Slow Startup with Many Presets
+If startup shows hundreds of preset conversion logs:
+```bash
+# Option 1: Use default debug categories (recommended)
+npm start  # Uses .env settings (api,discovery by default)
+
+# Option 2: Disable preset debug logs explicitly
+DEBUG_CATEGORIES=api,discovery npm start
+
+# Option 3: Disable all debug categories
+DEBUG_CATEGORIES= npm start
+```
+
+The `presets` debug category can generate hundreds of log lines during startup. Enable it only when debugging preset issues:
+```bash
+DEBUG_CATEGORIES=presets npm start
+```
 
 ## Debug Mode
 
@@ -267,7 +285,7 @@ GET /debug/category/soap/true    # Enable specific category
 - **warn**: Errors and warnings  
 - **info**: Normal operation (default)
 - **debug**: Detailed debugging
-- **wall**: Everything including XML (very verbose)
+- **trace**: Everything including XML (very verbose)
 
 ## Content Analysis Tool
 

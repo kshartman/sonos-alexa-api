@@ -22,11 +22,20 @@ npm run test:unit
 # Run only integration tests
 npm run test:integration
 
-# Run tests in full mode (may interrupt playback)
-npm run test:full
-
 # Check test coverage
 npm run test:coverage
+
+# Check test coverage with all test cases listed
+npm run test:coverage -- --detailed
+
+# Run tests with debug logging enabled (slower, verbose output)
+npm test -- --debug
+
+# List available test files
+npm run test:list
+
+# List all test cases (detailed)
+npm run test:list:detailed
 ```
 
 ### Specific Test Suites
@@ -43,6 +52,13 @@ npm run test:groups      # Group management tests
 - **Non-destructive mode** (default): Saves and restores device state, safe to run anytime
 - **Full mode**: Complete API coverage but may interrupt current playback
 - **Mock-only mode**: Runs only unit tests, no Sonos system required
+
+### Command Line Options
+
+- `--mock-only`: Run only unit tests (no Sonos required)
+- `--debug`: Enable debug logging (all categories, debug level) - slower but verbose
+- `--grep <pattern>`: Filter tests by name/suite pattern
+- `--no-server`: Don't auto-start the API server
 
 ## How It Works
 

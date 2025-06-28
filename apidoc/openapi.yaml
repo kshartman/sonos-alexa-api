@@ -18,6 +18,8 @@ paths:
     $ref: './paths/system/state.yaml'
   /presets:
     $ref: './paths/system/presets.yaml'
+  /presets/detailed:
+    $ref: './paths/system/presets-detailed.yaml'
   /events:
     $ref: './paths/system/events.yaml'
   /settings:
@@ -78,26 +80,36 @@ paths:
   # Favorites and playlists
   /{room}/favorites:
     $ref: './paths/room/favorites.yaml'
+  /{room}/favorites/detailed:
+    $ref: './paths/room/favorites-detailed.yaml'
   /{room}/favourites:
     $ref: './paths/room/favourites.yaml'
+  /{room}/favourites/detailed:
+    $ref: './paths/room/favourites-detailed.yaml'
   /{room}/favorite/{name}:
     $ref: './paths/room/favorite-play.yaml'
   /{room}/favourite/{name}:
     $ref: './paths/room/favourite-play.yaml'
   /{room}/playlists:
     $ref: './paths/room/playlists.yaml'
+  /{room}/playlists/detailed:
+    $ref: './paths/room/playlists-detailed.yaml'
   /{room}/playlist/{name}:
     $ref: './paths/room/playlist-play.yaml'
     
   # Queue management
   /{room}/queue:
     $ref: './paths/room/queue.yaml'
-  /{room}/queue/{limit}:
-    $ref: './paths/room/queue-limit.yaml'
-  /{room}/queue/{limit}/{offset}:
-    $ref: './paths/room/queue-offset.yaml'
   /{room}/queue/detailed:
     $ref: './paths/room/queue-detailed.yaml'
+  /{room}/queue/{limit}:
+    $ref: './paths/room/queue-limit.yaml'
+  /{room}/queue/{limit}/detailed:
+    $ref: './paths/room/queue-limit-detailed.yaml'
+  /{room}/queue/{limit}/{offset}:
+    $ref: './paths/room/queue-offset.yaml'
+  /{room}/queue/{limit}/{offset}/detailed:
+    $ref: './paths/room/queue-offset-detailed.yaml'
   /{room}/clearqueue:
     $ref: './paths/room/clearqueue.yaml'
     

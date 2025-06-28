@@ -18,7 +18,8 @@ export class TTSService {
     this.config = config;
     this.cacheDir = path.join(config.dataDir || './data', 'tts-cache');
     // Allow config override for cache max age
-    this.maxAge = (config as any).ttsCacheMaxAge || this.maxAge;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.maxAge = (config as any).ttsCacheMaxAge || this.maxAge; // ANY IS CORRECT: Config type doesn't include ttsCacheMaxAge but it may be present
   }
 
   async init(): Promise<void> {
@@ -48,7 +49,15 @@ export class TTSService {
       logger.debug(`TTS cache hit for: ${text}`);
       return cacheFile;
     } catch {
+      logger.debug(`TTS cache miss for: ${text}, will generate new file`);
       // Not in cache, generate it
+    }
+
+    // Ensure cache directory exists
+    try {
+      await fs.mkdir(this.cacheDir, { recursive: true });
+    } catch (err) {
+      logger.error('Failed to create TTS cache directory:', err);
     }
 
     // Try configured TTS providers in order
@@ -69,12 +78,26 @@ export class TTSService {
     
     // Download using curl (cross-platform)
     try {
-      await execAsync(`curl -s -o "${outputFile}" "${url}" -H "User-Agent: Mozilla/5.0"`);
+      const { stderr } = await execAsync(`curl -s -o "${outputFile}" "${url}" -H "User-Agent: Mozilla/5.0"`);
+      if (stderr) {
+        logger.error('Google TTS curl error:', stderr);
+      }
+      
+      // Verify file was created and has content
+      try {
+        const stats = await fs.stat(outputFile);
+        if (stats.size === 0) {
+          throw new Error('Generated TTS file is empty');
+        }
+      } catch (statError) {
+        throw new Error(`TTS file was not created: ${statError}`);
+      }
+      
       logger.debug(`Google TTS generated: ${outputFile}`);
       return outputFile;
     } catch (error) {
       logger.error('Google TTS generation failed:', error);
-      throw new Error('TTS generation failed');
+      throw new Error(`TTS generation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -120,17 +143,29 @@ export class TTSService {
       
       // Convert AIFF to MP3 using ffmpeg or afconvert
       try {
-        // Try afconvert first (built into macOS)
-        await execAsync(`afconvert -f mp4f -d aac "${tempFile}" "${outputFile}"`);
+        // Try ffmpeg first (creates actual MP3)
+        await execAsync(`ffmpeg -i "${tempFile}" -acodec mp3 -ab 128k "${outputFile}" -y`);
+        logger.debug('Converted AIFF to MP3 using ffmpeg');
       } catch {
-        // If afconvert fails, try ffmpeg if available
+        // If ffmpeg not available, try afconvert to create MP3 format
         try {
-          await execAsync(`ffmpeg -i "${tempFile}" -acodec mp3 -ab 128k "${outputFile}" -y`);
+          // Use MP3 format with afconvert (requires macOS 10.15+)
+          await execAsync(`afconvert -f mp3 -d mp3 "${tempFile}" "${outputFile}"`);
+          logger.debug('Converted AIFF to MP3 using afconvert');
         } catch {
-          // If both fail, just use Google TTS instead
-          await fs.unlink(tempFile).catch(() => {}); // Clean up temp file
-          logger.warn('Neither afconvert nor ffmpeg available, falling back to Google TTS');
-          return this.generateGoogleTTS(text, 'en', outputFile);
+          // If MP3 not supported, try M4A which Sonos also supports
+          try {
+            const m4aFile = outputFile.replace('.mp3', '.m4a');
+            await execAsync(`afconvert -f m4af -d aac "${tempFile}" "${m4aFile}"`);
+            // Rename to .mp3 for consistency (Sonos will still play it)
+            await fs.rename(m4aFile, outputFile);
+            logger.debug('Converted AIFF to M4A using afconvert (will serve as MP3)');
+          } catch {
+            // If all conversion fails, use Google TTS instead
+            await fs.unlink(tempFile).catch(() => {}); // Clean up temp file
+            logger.warn('Audio conversion failed, falling back to Google TTS');
+            return this.generateGoogleTTS(text, 'en', outputFile);
+          }
         }
       }
       
@@ -164,7 +199,7 @@ export class TTSService {
     try {
       const data = await fs.readFile(filePath);
       return data;
-    } catch (error) {
+    } catch (_error) {
       logger.error(`TTS file not found: ${filename}`);
       return null;
     }

@@ -36,9 +36,11 @@ export class MusicLibraryCache {
   private cacheFile: string;
   private libraryService: MusicLibraryService;
   private reindexTimer?: NodeJS.Timeout;
-  private onStatsUpdate?: (stats: any) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private onStatsUpdate?: (stats: any) => void; // ANY IS CORRECT: stats object contains dynamic properties
 
-  constructor(deviceIP: string, cacheDir: string = './cache', onStatsUpdate?: (stats: any) => void) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(deviceIP: string, cacheDir: string = './cache', onStatsUpdate?: (stats: any) => void) { // ANY IS CORRECT: stats object contains dynamic properties
     this.libraryService = new MusicLibraryService(deviceIP);
     this.cacheFile = path.join(cacheDir, 'music-library.json');
     this.onStatsUpdate = onStatsUpdate;
@@ -66,7 +68,7 @@ export class MusicLibraryCache {
         logger.info('Cache is stale, starting background refresh...');
         this.startBackgroundIndex();
       }
-    } catch (error) {
+    } catch (_error) {
       logger.info('No cache found, starting initial index...');
       await this.startBackgroundIndex();
     }

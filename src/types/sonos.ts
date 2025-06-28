@@ -15,7 +15,8 @@ export interface SonosState {
   volume: number;
   mute: boolean;
   currentTrack: SonosTrack | null;
-  coordinator?: any; // Will be SonosDevice but avoiding circular reference
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  coordinator?: any; // MUST BE ANY: SonosDevice would create circular dependency between types/sonos.ts and sonos-device.ts
 }
 
 export interface DeviceInfo {
@@ -84,7 +85,6 @@ export interface Config {
   dataDir?: string;
   // From settings.json
   host?: string;
-  listenAddress?: string;
   auth?: {
     username: string;
     password: string;
@@ -122,9 +122,11 @@ export interface Config {
   discoveryTimeout?: number;
   httpTimeout?: number;
   cacheDir?: string;
+  createDefaultPresets?: boolean;
 }
 
-export interface ApiResponse<T = any> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface ApiResponse<T = any> { // ANY IS CORRECT: Generic default for flexible API responses
   status: number;
   body: T;
 }

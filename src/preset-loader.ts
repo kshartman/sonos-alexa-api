@@ -3,9 +3,29 @@ import { watch as watchFs } from 'fs';
 import { join } from 'path';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
-import { tryConvertPreset } from './utils/preset-converter.js';
+import { tryConvertPreset, type PresetWithLegacy } from './utils/preset-converter.js';
 import type { PresetCollection, Preset } from './types/sonos.js';
 import type { SonosDiscovery } from './discovery.js';
+
+interface PresetStats {
+  totalFiles: number;
+  validPresets: number;
+  failedResolution: number;
+  invalidFormat: number;
+  parseErrors: number;
+  legacyConverted: number;
+  invalidRooms: number;
+}
+
+interface PresetLoadResult {
+  stats: PresetStats;
+  validPresets: string[];
+  failedPresets: string[];
+  invalidPresets: string[];
+  parseErrors: string[];
+  invalidRooms: string[];
+  allPresets: PresetCollection;
+}
 
 export class PresetLoader {
   private presetDir: string;
@@ -13,9 +33,9 @@ export class PresetLoader {
   private watchTimeout?: NodeJS.Timeout;
   private watcher?: ReturnType<typeof watchFs>;
   private discovery?: SonosDiscovery;
-  private onStatsUpdate?: (stats: any) => void;
+  private onStatsUpdate?: (stats: PresetLoadResult) => void;
 
-  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: any) => void) {
+  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void) {
     this.presetDir = presetDir;
     this.discovery = discovery;
     this.onStatsUpdate = onStatsUpdate;
@@ -231,7 +251,7 @@ export class PresetLoader {
     return { ...this.presets };
   }
 
-  private validateAndFilterRooms(preset: Preset & { _legacy?: any }, presetName: string): { 
+  private validateAndFilterRooms(preset: PresetWithLegacy, presetName: string): { 
     hasInvalidRooms: boolean; 
     invalidRooms?: string[]; 
     message?: string 
@@ -248,7 +268,7 @@ export class PresetLoader {
     
     const availableRooms = this.discovery.getAllDevices().map(d => d.roomName.toLowerCase());
     const invalidRooms: string[] = [];
-    const validPlayers: any[] = [];
+    const validPlayers: Array<{ roomName: string; volume: number }> = [];
     
     for (const player of preset._legacy.players) {
       if (player.roomName) {

@@ -24,7 +24,7 @@ async function checkFrontRoom() {
     
     // Check favorites on coordinator vs member
     console.log('\n--- Checking favorites ---');
-    const favResponse = await fetch(`${defaultConfig.apiUrl}/FrontRoomSpeakers/favorites?detailed=true`);
+    const favResponse = await fetch(`${defaultConfig.apiUrl}/FrontRoomSpeakers/favorites/detailed`);
     console.log(`FrontRoomSpeakers favorites status: ${favResponse.status}`);
     
     if (favResponse.ok) {
@@ -38,7 +38,7 @@ async function checkFrontRoom() {
     // Try the coordinator directly
     if (frontRoomZone && frontRoomZone.coordinator !== 'FrontRoomSpeakers') {
       console.log(`\nTrying coordinator (${frontRoomZone.coordinator}) instead:`);
-      const coordFavResponse = await fetch(`${defaultConfig.apiUrl}/${frontRoomZone.coordinator}/favorites?detailed=true`);
+      const coordFavResponse = await fetch(`${defaultConfig.apiUrl}/${frontRoomZone.coordinator}/favorites/detailed`);
       console.log(`Coordinator favorites status: ${coordFavResponse.status}`);
       
       if (coordFavResponse.ok) {

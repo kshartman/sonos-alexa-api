@@ -73,7 +73,7 @@ export class FavoritesManager {
     return found || null;
   }
 
-  private async parseFavoritesResponse(response: any): Promise<SonosFavorite[]> {
+  private async parseFavoritesResponse(response: { Result?: string }): Promise<SonosFavorite[]> {
     const favorites: SonosFavorite[] = [];
     
     try {

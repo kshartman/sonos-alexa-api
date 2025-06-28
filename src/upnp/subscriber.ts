@@ -125,7 +125,7 @@ export class UPnPSubscriber {
   private async performSubscribe(subscription: Subscription, isRenewal = false): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = new URL(subscription.url);
-      const headers: any = {
+      const headers: Record<string, string> = {
         'TIMEOUT': `Second-${subscription.timeout}`,
         'USER-AGENT': 'Node.js UPnP/1.0 sonos-alexa-api'
       };

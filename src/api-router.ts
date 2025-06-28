@@ -1,6 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import logger from './utils/logger.js';
 import { getClientIp, isIpTrusted } from './utils/network-utils.js';
+import { getErrorMessage, getErrorStatus, errorMessageIncludes } from './utils/error-helper.js';
 import type { SonosDiscovery } from './discovery.js';
 import type { PresetLoader } from './preset-loader.js';
 import type { DefaultRoomManager } from './utils/default-room-manager.js';
@@ -8,7 +9,7 @@ import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
 import { AccountService } from './services/account-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
-import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse } from './types/sonos.js';
+import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams) => Promise<ApiResponse>;
@@ -23,7 +24,8 @@ export class ApiRouter {
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
   private routes = new Map<string, RouteHandler>();
-  private startupInfo: any = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private startupInfo: any = { // ANY IS CORRECT: startup info contains dynamic properties added at runtime
     timestamp: new Date().toISOString(),
     presets: {},
     musicLibrary: {},
@@ -50,7 +52,8 @@ export class ApiRouter {
       if (zones.body && Array.isArray(zones.body) && zones.body.length > 0) {
         const firstZone = zones.body[0];
         if (firstZone.members && firstZone.members.length > 0) {
-          const coordinator = firstZone.members.find((m: any) => m.isCoordinator) || firstZone.members[0];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const coordinator = firstZone.members.find((m: any) => m.isCoordinator) || firstZone.members[0]; // ANY IS CORRECT: member type comes from dynamic zone response
           const device = this.discovery.getDevice(coordinator.roomName);
           if (device) {
             logger.info('Initializing music library cache...');
@@ -79,7 +82,8 @@ export class ApiRouter {
     }
   }
 
-  getMusicLibraryCacheStatus(): { isIndexing: boolean; progress: number; metadata: any } | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getMusicLibraryCacheStatus(): { isIndexing: boolean; progress: number; metadata: any } | null { // ANY IS CORRECT: CacheMetadata type not exported from music-library-cache
     if (!this.musicLibraryCache) {
       return null;
     }
@@ -96,6 +100,7 @@ export class ApiRouter {
     this.routes.set('GET /state', this.getState.bind(this));
     this.routes.set('GET /health', this.getHealth.bind(this));
     this.routes.set('GET /presets', this.getPresets.bind(this));
+    this.routes.set('GET /presets/detailed', this.getPresets.bind(this));
 
     // Room-specific routes
     this.routes.set('GET /{room}/state', this.getRoomState.bind(this));
@@ -123,12 +128,15 @@ export class ApiRouter {
 
     // Favorites routes
     this.routes.set('GET /{room}/favorites', this.getFavorites.bind(this));
+    this.routes.set('GET /{room}/favorites/detailed', this.getFavorites.bind(this));
     this.routes.set('GET /{room}/favourites', this.getFavorites.bind(this)); // British spelling
+    this.routes.set('GET /{room}/favourites/detailed', this.getFavorites.bind(this)); // British spelling
     this.routes.set('GET /{room}/favorite/{name}', this.playFavorite.bind(this));
     this.routes.set('GET /{room}/favourite/{name}', this.playFavorite.bind(this)); // British spelling
 
     // Playlists routes
     this.routes.set('GET /{room}/playlists', this.getPlaylists.bind(this));
+    this.routes.set('GET /{room}/playlists/detailed', this.getPlaylists.bind(this));
     this.routes.set('GET /{room}/playlist/{name}', this.playPlaylist.bind(this));
 
     // Apple Music routes
@@ -155,9 +163,11 @@ export class ApiRouter {
     
     // Queue management routes
     this.routes.set('GET /{room}/queue', this.getQueue.bind(this));
+    this.routes.set('GET /{room}/queue/detailed', this.getQueue.bind(this));
     this.routes.set('GET /{room}/queue/{limit}', this.getQueue.bind(this));
+    this.routes.set('GET /{room}/queue/{limit}/detailed', this.getQueue.bind(this));
     this.routes.set('GET /{room}/queue/{limit}/{offset}', this.getQueue.bind(this));
-    this.routes.set('GET /{room}/queue/detailed', this.getQueueDetailed.bind(this));
+    this.routes.set('GET /{room}/queue/{limit}/{offset}/detailed', this.getQueue.bind(this));
     this.routes.set('GET /{room}/clearqueue', this.clearQueue.bind(this));
     
     // Playback control routes
@@ -282,16 +292,15 @@ export class ApiRouter {
       res.end(JSON.stringify(result.body || { status: 'success' }));
     } catch (error) {
       debugManager.error('api', 'Request error:', error);
-      const errorObj = error as any;
-      res.statusCode = errorObj.status || 500;
+      res.statusCode = getErrorStatus(error) || 500;
       
       const errorResponse: ErrorResponse = {
         status: 'error',
-        error: errorObj.message || 'Internal server error'
+        error: getErrorMessage(error) || 'Internal server error'
       };
       
-      if (process.env.NODE_ENV === 'development' && errorObj.stack) {
-        errorResponse.stack = errorObj.stack;
+      if (process.env.NODE_ENV === 'development' && error instanceof Error && error.stack) {
+        errorResponse.stack = error.stack;
       }
       
       res.end(JSON.stringify(errorResponse));
@@ -416,15 +425,15 @@ export class ApiRouter {
     };
   }
 
-  private async getPresets(_params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+  private async getPresets(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
     const configPresets = this.config.presets || {};
     const folderPresets = this.presetLoader ? this.presetLoader.getAllPresets() : {};
     const allPresets = { ...configPresets, ...folderPresets };
     
-    // Check if detailed parameter is in the URL
-    const detailed = queryParams?.get('detailed') === 'true';
+    // Check if this is a detailed request (path contains 'detailed')
+    const isDetailed = params.detailed === 'detailed';
     
-    if (detailed) {
+    if (isDetailed) {
       // Return full preset objects with metadata
       return {
         status: 200,
@@ -468,7 +477,7 @@ export class ApiRouter {
       try {
         const crossfadeMode = await coordinator.getCrossfadeMode();
         crossfade = crossfadeMode.CrossfadeMode === '1' || crossfadeMode.CrossfadeMode === 1;
-      } catch (e) {
+      } catch (_e) {
         // Some devices might not support crossfade
         logger.debug(`Crossfade not supported for ${room}`);
       }
@@ -591,7 +600,13 @@ export class ApiRouter {
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
-    if (coordinator.state.playbackState === 'PLAYING') {
+    // Get fresh transport info to ensure we have the current state
+    const transportInfo = await coordinator.getTransportInfo();
+    const currentState = transportInfo.CurrentTransportState;
+    
+    logger.debug(`PlayPause: current state is ${currentState}`);
+    
+    if (currentState === 'PLAYING') {
       await coordinator.pause();
     } else {
       await coordinator.play();
@@ -811,9 +826,9 @@ export class ApiRouter {
       await device.becomeCoordinatorOfStandaloneGroup();
       debugManager.debug('api', `${room} left group successfully`);
       return { status: 200, body: { status: 'success' } };
-    } catch (error: any) {
+    } catch (error) {
       // Check if this is because the device is already the coordinator
-      if (error.message && (error.message.includes('1023') || error.message.includes('701'))) {
+      if (errorMessageIncludes(error, '1023') || errorMessageIncludes(error, '701')) {
         throw { 
           status: 400, 
           message: `Cannot ungroup '${room}': It appears to be the group coordinator. Other members must leave first.` 
@@ -839,7 +854,8 @@ export class ApiRouter {
               await primaryDevice.becomeCoordinatorOfStandaloneGroup();
               debugManager.debug('api', `${room} left group successfully via primary device ${primaryDevice.id}`);
               return { status: 200, body: { status: 'success' } };
-            } catch (e: any) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } catch (e: any) { // ANY IS CORRECT: need to access e.message property
               debugManager.debug('api', `Primary device ${primaryDevice.id} also failed: ${e.message}`);
             }
           }
@@ -857,7 +873,8 @@ export class ApiRouter {
                 await memberDevice.becomeCoordinatorOfStandaloneGroup();
                 debugManager.debug('api', `${room} left group successfully via device ${member.id}`);
                 return { status: 200, body: { status: 'success' } };
-              } catch (e: any) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              } catch (e: any) { // ANY IS CORRECT: need to access e.message property
                 // Continue trying other devices
                 debugManager.debug('api', `Device ${member.id} also failed: ${e.message}`);
               }
@@ -892,8 +909,8 @@ export class ApiRouter {
   }
 
   // Favorites endpoints
-  private async getFavorites(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
-    const { room } = params;
+  private async getFavorites(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
+    const { room, detailed } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
@@ -902,10 +919,10 @@ export class ApiRouter {
     
     const favorites = await favoritesManager.getFavorites(device);
     
-    // Check if detailed parameter is in the URL
-    const detailed = queryParams?.get('detailed') === 'true';
+    // Check if this is a detailed request (path contains 'detailed')
+    const isDetailed = detailed === 'detailed';
     
-    if (detailed) {
+    if (isDetailed) {
       return { status: 200, body: favorites };
     } else {
       // Return just the titles
@@ -938,8 +955,8 @@ export class ApiRouter {
   }
 
   // Playlists endpoints
-  private async getPlaylists(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
-    const { room } = params;
+  private async getPlaylists(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
+    const { room, detailed } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
@@ -947,14 +964,14 @@ export class ApiRouter {
     // Browse for playlists using ContentDirectory
     const playlists = await device.browse('SQ:', 0, 100);
     
-    // Check if detailed parameter is in the URL
-    const detailed = queryParams?.get('detailed') === 'true';
+    // Check if this is a detailed request (path contains 'detailed')
+    const isDetailed = detailed === 'detailed';
     
-    if (detailed) {
+    if (isDetailed) {
       return { status: 200, body: playlists.items };
     } else {
       // Return just the titles
-      return { status: 200, body: playlists.items.map((p: any) => p.title) };
+      return { status: 200, body: playlists.items.map((p: BrowseItem) => p.title) };
     }
   }
 
@@ -968,7 +985,7 @@ export class ApiRouter {
     const playlists = await device.browse('SQ:', 0, 100);
     
     // Find playlist by name (case-insensitive)
-    const playlist = playlists.items.find((p: any) => 
+    const playlist = playlists.items.find((p: BrowseItem) => 
       p.title.toLowerCase() === name.toLowerCase()
     );
     
@@ -1097,7 +1114,7 @@ export class ApiRouter {
   private async setDebugLevel({ level }: RouteParams): Promise<ApiResponse> {
     if (!level) throw { status: 400, message: 'Level parameter is required' };
     
-    const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'wall'];
+    const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace'];
     if (!validLevels.includes(level as LogLevel)) {
       throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
     }
@@ -1159,7 +1176,8 @@ export class ApiRouter {
     };
   }
   
-  updateStartupInfo(category: string, data: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  updateStartupInfo(category: string, data: any): void { // ANY IS CORRECT: data can be any type of startup information
     this.startupInfo[category] = {
       ...this.startupInfo[category],
       ...data,
@@ -1452,7 +1470,8 @@ export class ApiRouter {
     }
   }
   
-  private async getMusicLibraryStatus(): Promise<ApiResponse<any>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async getMusicLibraryStatus(): Promise<ApiResponse<any>> { // ANY IS CORRECT: returns various status objects
     if (!this.musicLibraryCache) {
       return { status: 200, body: { status: 'not initialized' } };
     }
@@ -1580,6 +1599,7 @@ export class ApiRouter {
       this.defaultRoomManager.setDefaults(room);
       
       return { status: 200, body: { status: 'success' } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error(`Failed to play Pandora station '${name}':`, error);
       throw { status: 404, message: error.message || 'Failed to play Pandora station' };
@@ -1605,9 +1625,9 @@ export class ApiRouter {
       }
       
       return { status: 200, body: { status: 'success' } };
-    } catch (error: any) {
+    } catch (error) {
       logger.error('Failed to send Pandora thumbs up:', error);
-      throw { status: 400, message: error.message || 'Failed to send thumbs up' };
+      throw { status: 400, message: getErrorMessage(error) || 'Failed to send thumbs up' };
     }
   }
   
@@ -1638,9 +1658,9 @@ export class ApiRouter {
       this.defaultRoomManager.setDefaults(room);
       
       return { status: 200, body: { status: 'success' } };
-    } catch (error: any) {
+    } catch (error) {
       logger.error('Failed to send Pandora thumbs down:', error);
-      throw { status: 400, message: error.message || 'Failed to send thumbs down' };
+      throw { status: 400, message: getErrorMessage(error) || 'Failed to send thumbs down' };
     }
   }
   
@@ -1673,41 +1693,51 @@ export class ApiRouter {
         // Return just the station names for backwards compatibility
         return { status: 200, body: stationData.stations.map(s => s.stationName) };
       }
-    } catch (error: any) {
+    } catch (error) {
       logger.error('Failed to get Pandora stations:', error);
-      if (error.status) throw error;
-      throw { status: 500, message: error.message || 'Failed to get Pandora stations' };
+      if (getErrorStatus(error)) throw error;
+      throw { status: 500, message: getErrorMessage(error) || 'Failed to get Pandora stations' };
     }
   }
   
   // Queue management endpoints
-  private async getQueue({ room, limit, offset }: RouteParams): Promise<ApiResponse> {
+  private async getQueue({ room, limit, offset, detailed }: RouteParams): Promise<ApiResponse> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
     // Use coordinator for queue operations
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
-    const limitNum = limit ? parseInt(limit as string) : 100;
-    const offsetNum = offset ? parseInt(offset as string) : 0;
+    // Check if this is a detailed request (last path segment is 'detailed')
+    const isDetailed = detailed === 'detailed' || limit === 'detailed' || offset === 'detailed';
+    
+    // Parse numeric parameters
+    let limitNum = 100;
+    let offsetNum = 0;
+    
+    if (limit && limit !== 'detailed') {
+      limitNum = parseInt(limit as string);
+    }
+    
+    if (offset && offset !== 'detailed') {
+      offsetNum = parseInt(offset as string);
+    }
     
     const queueData = await coordinator.getQueue(limitNum, offsetNum);
     
-    // Return the full queue object for proper API compatibility
-    return { status: 200, body: queueData };
-  }
-  
-  private async getQueueDetailed({ room }: RouteParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    
-    const device = this.getDevice(room);
-    // Use coordinator for queue operations
-    const coordinator = this.discovery.getCoordinator(device.id) || device;
-    
-    // For detailed, return the full queue data structure
-    const queueData = await coordinator.getQueue(100, 0);
-    
-    return { status: 200, body: queueData };
+    if (isDetailed) {
+      // For detailed, return the full items with all properties
+      return { status: 200, body: queueData.items };
+    } else {
+      // For simplified, return only title, artist, album, albumArtUri
+      const simplified = queueData.items.map((item: { title?: string; artist?: string; album?: string; albumArtUri?: string }) => ({
+        title: item.title || '',
+        artist: item.artist || '',
+        album: item.album || '',
+        albumArtUri: item.albumArtUri || ''
+      }));
+      return { status: 200, body: simplified };
+    }
   }
   
   // Playback control endpoints
@@ -1814,8 +1844,13 @@ export class ApiRouter {
       throw { status: 400, message: 'Volume must be between 0 and 100' };
     }
     
-    await coordinator.setGroupVolume(volumeLevel);
-    return { status: 200, body: { status: 'success' } };
+    try {
+      await coordinator.setGroupVolume(volumeLevel);
+      return { status: 200, body: { status: 'success' } };
+    } catch (error) {
+      logger.error(`Failed to set group volume for ${room}:`, error);
+      throw { status: 500, message: `Failed to set group volume: ${getErrorMessage(error)}` };
+    }
   }
   
   // Global control endpoints
@@ -1855,13 +1890,45 @@ export class ApiRouter {
     const device = this.getDevice(room);
     const language = queryParams?.get('language') || 'en';
     const volume = parseInt(queryParams?.get('volume') || String(this.config.announceVolume || 40), 10);
+    const decodedText = decodeURIComponent(text);
     
-    // Get the base URL for this server
-    const baseUrl = `http://${this.config.host || 'localhost'}:${this.config.port}`;
+    // Get the base URL for TTS - Sonos needs direct HTTP access to the host
+    let ttsHost: string;
+    
+    // For Docker with host networking, we need the actual host IP
+    if (process.env.TTS_HOST_IP) {
+      // User can specify the host IP via environment variable
+      ttsHost = process.env.TTS_HOST_IP;
+      logger.debug(`Using TTS_HOST_IP from environment: ${ttsHost}`);
+    } else if (this.config.host === 'localhost' || this.config.host === '127.0.0.1' || this.config.host === '0.0.0.0') {
+      // For local development, auto-detect the IP
+      const detectedIP = this.discovery.getLocalIP();
+      if (detectedIP) {
+        ttsHost = detectedIP;
+        logger.debug(`Auto-detected host IP: ${ttsHost}`);
+      } else {
+        ttsHost = '192.168.4.17'; // Fallback
+        logger.warn(`Could not detect host IP, using fallback: ${ttsHost}`);
+      }
+    } else {
+      // For hostnames, try to detect the actual IP since Sonos needs direct access
+      const detectedIP = this.discovery.getLocalIP();
+      if (detectedIP) {
+        ttsHost = detectedIP;
+        logger.debug(`Using detected IP ${detectedIP} for TTS (instead of ${this.config.host})`);
+      } else {
+        // Last resort - use the hostname and hope it resolves correctly
+        ttsHost = this.config.host || 'localhost';
+        logger.warn(`Using hostname ${ttsHost} for TTS - ensure Sonos can resolve this`);
+      }
+    }
+    
+    // Always use HTTP with the actual port for direct container access
+    const baseUrl = `http://${ttsHost}:${this.config.port}`;
+    logger.debug(`TTS base URL: ${baseUrl}`);
     
     try {
       // Generate TTS URL
-      const decodedText = decodeURIComponent(text);
       const ttsUrl = await this.ttsService.getTTSUrl(decodedText, language, baseUrl);
       logger.debug(`Generated TTS URL: ${ttsUrl}`);
       
@@ -1884,7 +1951,15 @@ export class ApiRouter {
       
       return { status: 200, body: { status: 'success' } };
     } catch (error) {
-      throw { status: 500, message: `TTS failed: ${(error as Error).message}` };
+      logger.error('TTS failed:', error);
+      logger.error('TTS error details:', {
+        room,
+        text: decodedText,
+        volume,
+        hasDevice: !!device,
+        error: getErrorMessage(error)
+      });
+      throw { status: 500, message: `TTS failed: ${getErrorMessage(error)}` };
     }
   }
   
@@ -2151,7 +2226,8 @@ export class ApiRouter {
   }
   
   // Debug endpoint for account testing
-  async debugAccounts({ room }: RouteParams): Promise<ApiResponse<any>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async debugAccounts({ room }: RouteParams): Promise<ApiResponse<any>> { // ANY IS CORRECT: debug endpoint returns various account info
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
@@ -2166,6 +2242,7 @@ export class ApiRouter {
         '/xml/device_description.xml'
       ];
       
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const results: any = {};
       
       for (const endpoint of endpoints) {
@@ -2204,9 +2281,11 @@ export class ApiRouter {
     }
   }
 
-  async debugSubscriptions(): Promise<ApiResponse<any>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async debugSubscriptions(): Promise<ApiResponse<any>> { // ANY IS CORRECT: debug endpoint returns various subscription info
     const devices = this.discovery.getAllDevices();
-    const subscriber = (this.discovery as any).subscriber;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const subscriber = (this.discovery as any).subscriber; // ANY IS CORRECT: subscriber property not in discovery type but exists at runtime
     
     const result = {
       subscriberStatus: subscriber ? 'active' : 'not initialized',

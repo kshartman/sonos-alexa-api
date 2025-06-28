@@ -16,10 +16,47 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - **Don't add comments** unless specifically requested
 - **No emojis in code** unless user asks
 
+## Fundamental Coding Principles
+
+### TypeScript Type Safety: `unknown` vs `any`
+- **Always prefer `unknown` over `any`** when dealing with values of uncertain type
+- **`unknown` is the type-safe counterpart to `any`** - it represents any value but requires type checking before use
+- **Use `unknown` for**:
+  - External inputs (JSON parsing, API responses, user input)
+  - Function parameters that accept multiple types
+  - Error handling where error type is uncertain
+  - Any place where you need to check the type before using it
+- **Only use `any` when**:
+  - Interfacing with untyped JavaScript libraries
+  - Temporary workarounds during migration (with TODO comments)
+  - Complex generic constraints that TypeScript can't express
+  - Performance-critical code where type checks would be prohibitive
+
+#### Examples:
+```typescript
+// GOOD: Forces type checking
+function processData(input: unknown) {
+  if (typeof input === 'string') {
+    return input.toUpperCase(); // Safe!
+  }
+  if (typeof input === 'object' && input !== null) {
+    return JSON.stringify(input); // Safe!
+  }
+  throw new Error('Unsupported type');
+}
+
+// BAD: No type safety
+function processData(input: any) {
+  return input.toUpperCase(); // Runtime error if not string!
+}
+```
+
+**Key Principle**: If you're checking the type anyway, use `unknown`. It documents your intent and catches errors at compile time.
+
 ## Important Commands
 - Build: `npm run build`
-- Start: `npm start > logs/server.log 2>&1 &` (includes --openssl-legacy-provider)
-- Start with debug: `npm run dev > logs/server.log 2>&1 &` (enables debug logging, includes NODE_OPTIONS)
+- Start: `npm start > logs/server.log 2>&1 &` (loads .env file via dotenv)
+- Start with debug: `npm run dev > logs/server.log 2>&1 &` (forces LOG_LEVEL=debug, DEBUG_CATEGORIES=all)
 - Kill server: Multiple options depending on how it was started:
   - `pkill -f "node.*dist/server.js"` (for npm start)
   - `pkill -f "tsx.*src/server.ts"` (for npm run dev)
@@ -28,6 +65,21 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - Test endpoints: Use curl commands, not server restarts
 - **Note**: All npm scripts include `NODE_OPTIONS='--openssl-legacy-provider'` ONLY for Pandora API's Blowfish encryption. This is not needed if Pandora is not used.
 
+### Command Line Overrides
+```bash
+# Override debug categories (fast startup)
+DEBUG_CATEGORIES=api,discovery npm start
+
+# Enable all debug (verbose)
+DEBUG_CATEGORIES=all npm start
+
+# Disable all debug
+DEBUG_CATEGORIES= npm start
+
+# Override multiple settings
+CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
+```
+
 ## Debug Logging
 - **IMPORTANT**: Debug logging is NOT enabled by default with `npm start`
 - To enable debug logging, either:
@@ -35,20 +87,41 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
   2. Enable debug after starting with curl: `curl http://localhost:5005/debug/enable-all`
 - Check debug status: `curl http://localhost:5005/debug`
 - Set specific category: `curl http://localhost:5005/debug/category/discovery/true`
-- Set log level: `curl http://localhost:5005/debug/level/debug` (or error/warn/info/debug/wall)
+- Set log level: `curl http://localhost:5005/debug/level/debug` (or error/warn/info/debug/trace)
 
 ### Log Levels
 - **error**: Only errors
 - **warn**: Errors and warnings
 - **info**: Errors, warnings, and info messages (default)
 - **debug**: All of the above plus debug messages
-- **wall**: Everything including massive XML/SOAP responses (most verbose)
+- **trace**: Everything including massive XML/SOAP responses (most verbose)
+- **wall**: Deprecated alias for trace (use trace instead)
+
+### Debug Categories
+- **api**: API request/response logging (enabled by default)
+- **discovery**: Device discovery details
+- **soap**: SOAP request/response XML (verbose with trace level)
+- **topology**: UPnP topology events
+- **favorites**: Favorite resolution details
+- **presets**: Preset loading and conversion (can be very verbose)
+- **upnp**: Raw UPnP event details
+- **sse**: Server-Sent Events for webhooks
+- **all**: Enable all categories
 
 ### Log Format
 - **Development**: Winston with colorized output (default when NODE_ENV=development)
 - **Production**: Pino with JSON format for better parsing/aggregation (default when NODE_ENV=production)
 - **Logger Selection**: Set LOGGER=winston or LOGGER=pino to override defaults
 - **Legacy**: LOG_FORMAT=json is deprecated, use LOGGER=pino instead
+
+## Configuration Features
+
+### CREATE_DEFAULT_PRESETS
+- When set to `true`, automatically generates presets from all favorites, playlists, and stations
+- Generated presets use the default room configured in settings/env
+- Never overwrites existing user presets
+- Useful for initial setup or when moving between locations
+- Can be set via environment variable or in settings.json
 
 ## Configuration Files
 - `settings.json` - Main config (host, port, auth, TTS, default room/service)
@@ -267,6 +340,16 @@ test/
   - GitHub repository: https://github.com/kshartman/sonos-alexa-api
   - Release date: June 26, 2025
 
+## Recent Script Changes (June 27, 2025)
+- Removed `test:full` script (was non-functional, `npm test` already runs all tests)
+- Removed `test:id` script (was non-functional with trailing --)
+- Renamed `save-version` to `version:save` for consistency
+- Added `test:list:detailed` to show all test cases
+- Updated `test:coverage` to run check-coverage.ts instead of run-tests.ts
+- Added `--detailed` flag to check-coverage.ts
+- Updated `clean` script to also remove logs directory
+- Tests now run with LOG_LEVEL=error by default (use --debug flag for verbose output)
+
 ## Notes for Next Session
 - Unit tests would be valuable for reliability
 - Docker health check endpoint exists at /health
@@ -279,15 +362,44 @@ test/
 - Preset validation could be extended to validate favorites exist
 - **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead
 
-## Docker Environment Variables
-The Docker container now supports configuration via .env file:
+## Environment Variables
+All configuration can now be set via environment variables. `npm start` loads .env files via dotenv:
+
+### Core Settings
 - **PORT**: API server port (default: 5005)
-- **HOST_PRESET_PATH**: External preset directory to mount as volume
+- **HOST**: Interface to bind (default: 0.0.0.0)
+- **ANNOUNCE_VOLUME**: Volume for announcements (default: 40)
+- **CREATE_DEFAULT_PRESETS**: Auto-generate presets from favorites (default: false)
+
+### Logging
 - **LOG_LEVEL**: Log level (error, warn, info, debug)
 - **LOGGER**: Logger type - winston or pino (default: winston for dev, pino for prod)
 - **LOG_FORMAT**: DEPRECATED - use LOGGER instead
-- **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, wall)
-- **DEBUG_CATEGORIES**: Comma-separated debug categories (soap, topology, discovery, favorites, presets, upnp, api, sse, or "all")
+- **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, trace)
+- **DEBUG_CATEGORIES**: Comma-separated debug categories (api, discovery, soap, topology, favorites, presets, upnp, sse, or "all")
+- **NODE_ENV**: Environment (development or production)
+
+### Authentication
+- **AUTH_USERNAME**: Basic auth username
+- **AUTH_PASSWORD**: Basic auth password
+- **AUTH_REJECT_UNAUTHORIZED**: Enforce auth if credentials exist (default: true)
+- **AUTH_TRUSTED_NETWORKS**: Comma-separated trusted networks (e.g., "192.168.1.0/24,10.0.0.0/8")
+
+### Defaults
+- **DEFAULT_ROOM**: Default room for roomless endpoints
+- **DEFAULT_SERVICE**: Default music service (apple, spotify, etc.)
+
+### Services
+- **PANDORA_USERNAME**: Pandora account username
+- **PANDORA_PASSWORD**: Pandora account password
+- **TTS_PROVIDER**: TTS provider (voicerss, google, macos)
+- **TTS_LANG**: TTS language (default: en-US)
+- **TTS_MACOS_VOICE**: macOS voice name
+- **TTS_MACOS_RATE**: macOS speaking rate
+
+### Advanced
+- **LIBRARY_REINDEX_INTERVAL**: How often to reindex music library (e.g., "1 week")
+- **HOST_PRESET_PATH**: External preset directory to mount as volume (Docker)
 
 ## Architecture Critique & Enhancement Plan
 
@@ -334,3 +446,4 @@ The Docker container now supports configuration via .env file:
 18. **CLI Tools** - Device discovery tool, preset manager, diagnostic utilities
 19. **Plugin System** - Custom action plugins, music service plugins, TTS provider plugins
 20. **Home Assistant Integration** - Native integration, auto-discovery, media player entities
+21. **Remove Global Discovery Variable** - Refactor SonosDevice to accept discovery instance via constructor or method parameter instead of using global variable

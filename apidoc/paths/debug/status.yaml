@@ -1,0 +1,54 @@
+get:
+  summary: Get debug status
+  description: Returns the current debug configuration including log level and enabled categories
+  operationId: getDebugStatus
+  tags:
+    - Debug
+  responses:
+    '200':
+      description: Current debug configuration
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              logLevel:
+                type: string
+                enum: ['error', 'warn', 'info', 'debug', 'trace']
+                example: info
+              categories:
+                type: object
+                properties:
+                  soap:
+                    type: boolean
+                    description: SOAP request/response details
+                  topology:
+                    type: boolean
+                    description: UPnP topology events and processing
+                  discovery:
+                    type: boolean
+                    description: Device discovery details
+                  favorites:
+                    type: boolean
+                    description: Favorite resolution details
+                  presets:
+                    type: boolean
+                    description: Preset loading and resolution
+                  upnp:
+                    type: boolean
+                    description: Raw UPnP event details
+                  api:
+                    type: boolean
+                    description: API request logging (enabled by default)
+                  sse:
+                    type: boolean
+                    description: Server-Sent Events for webhooks
+                example:
+                  soap: false
+                  topology: false
+                  discovery: true
+                  favorites: false
+                  presets: false
+                  upnp: false
+                  api: true
+                  sse: false

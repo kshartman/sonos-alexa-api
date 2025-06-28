@@ -11,11 +11,12 @@ export interface DebugCategories {
   sse: boolean;
 }
 
-export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'wall';
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'wall'; // wall is alias for trace
 
 class DebugManager {
   private categories: DebugCategories;
   private logLevel: LogLevel;
+  private wallDeprecationWarned = false;
 
   constructor() {
     // Initialize with defaults
@@ -39,7 +40,8 @@ class DebugManager {
     // Set log level from DEBUG_LEVEL or LOG_LEVEL env var
     const envLogLevel = process.env.DEBUG_LEVEL || process.env.LOG_LEVEL;
     if (envLogLevel && this.isValidLogLevel(envLogLevel)) {
-      this.logLevel = envLogLevel as LogLevel;
+      // Normalize 'wall' to 'trace'
+      this.logLevel = envLogLevel.toLowerCase() === 'wall' ? 'trace' : envLogLevel as LogLevel;
       logger.info(`Log level set to '${this.logLevel}' from environment`);
     }
 
@@ -64,7 +66,7 @@ class DebugManager {
   }
 
   private isValidLogLevel(level: string): boolean {
-    return ['error', 'warn', 'info', 'debug', 'wall'].includes(level.toLowerCase());
+    return ['error', 'warn', 'info', 'debug', 'trace', 'wall'].includes(level.toLowerCase());
   }
 
   private isValidCategory(category: string): boolean {
@@ -81,8 +83,9 @@ class DebugManager {
   }
 
   setLogLevel(level: LogLevel): void {
-    this.logLevel = level;
-    logger.info(`Log level set to: ${level}`);
+    // Normalize 'wall' to 'trace'
+    this.logLevel = level === 'wall' ? 'trace' : level;
+    logger.info(`Log level set to: ${this.logLevel}`);
   }
 
   getLogLevel(): LogLevel {
@@ -110,40 +113,61 @@ class DebugManager {
   }
 
   // Conditional logging methods
-  debug(category: keyof DebugCategories, message: string, meta?: any): void {
+  debug(category: keyof DebugCategories, message: string, meta?: unknown): void {
     if (this.categories[category] && this.shouldLog('debug')) {
-      logger.debug(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
+      const logMeta = typeof meta === 'object' && meta !== null ? { ...meta, category } : { data: meta, category };
+      logger.debug(`[${category.toUpperCase()}] ${message}`, logMeta);
     }
   }
 
-  info(category: keyof DebugCategories, message: string, meta?: any): void {
+  info(category: keyof DebugCategories, message: string, meta?: unknown): void {
     if (this.categories[category] && this.shouldLog('info')) {
-      logger.info(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
+      const logMeta = typeof meta === 'object' && meta !== null ? { ...meta, category } : { data: meta, category };
+      logger.info(`[${category.toUpperCase()}] ${message}`, logMeta);
     }
   }
 
-  warn(category: keyof DebugCategories, message: string, meta?: any): void {
+  warn(category: keyof DebugCategories, message: string, meta?: unknown): void {
     if (this.categories[category] && this.shouldLog('warn')) {
-      logger.warn(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
+      const logMeta = typeof meta === 'object' && meta !== null ? { ...meta, category } : { data: meta, category };
+      logger.warn(`[${category.toUpperCase()}] ${message}`, logMeta);
     }
   }
 
-  error(category: keyof DebugCategories, message: string, meta?: any): void {
+  error(category: keyof DebugCategories, message: string, meta?: unknown): void {
     if (this.categories[category] && this.shouldLog('error')) {
-      logger.error(`[${category.toUpperCase()}] ${message}`, { ...meta, category });
+      const logMeta = typeof meta === 'object' && meta !== null ? { ...meta, category } : { data: meta, category };
+      logger.error(`[${category.toUpperCase()}] ${message}`, logMeta);
     }
   }
 
-  wall(category: keyof DebugCategories, message: string, meta?: any): void {
-    if (this.categories[category] && this.shouldLog('wall')) {
-      logger.debug(`[${category.toUpperCase()}] [WALL] ${message}`, { ...meta, category });
+  trace(category: keyof DebugCategories, message: string, meta?: unknown): void {
+    if (this.categories[category] && this.shouldLog('trace')) {
+      const logMeta = typeof meta === 'object' && meta !== null ? { ...meta, category } : { data: meta, category };
+      logger.trace(`[${category.toUpperCase()}] ${message}`, logMeta);
     }
+  }
+
+  // Deprecated - use trace() instead
+  wall(category: keyof DebugCategories, message: string, meta?: unknown): void {
+    if (!this.wallDeprecationWarned) {
+      logger.warn('debugManager.wall() is deprecated. Please use debugManager.trace() instead.');
+      this.wallDeprecationWarned = true;
+    }
+    this.trace(category, message, meta);
+  }
+  
+  // Always logs regardless of debug level or category
+  always(message: string, meta?: unknown): void {
+    logger.always(message, meta);
   }
 
   private shouldLog(level: LogLevel): boolean {
-    const levels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'wall'];
+    const levels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace'];
+    // Normalize 'wall' to 'trace' for comparison
+    const normalizedLevel = level === 'wall' ? 'trace' : level;
     const currentLevelIndex = levels.indexOf(this.logLevel);
-    const messageLevelIndex = levels.indexOf(level);
+    const messageLevelIndex = levels.indexOf(normalizedLevel);
     return messageLevelIndex <= currentLevelIndex;
   }
 }

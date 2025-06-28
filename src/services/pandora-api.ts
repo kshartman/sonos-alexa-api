@@ -19,7 +19,8 @@ interface AuthData {
 
 interface PandoraResponse {
   stat: 'ok' | 'fail';
-  result?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  result?: any; // ANY IS CORRECT: Pandora API returns different result types based on method
   message?: string;
   code?: number;
 }
@@ -111,6 +112,7 @@ export class PandoraAPI {
         cipher.final()
       ]);
       return encrypted.toString('hex').toLowerCase();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       // If bf-ecb is not supported, we need to use a different approach
       // For now, let's log the error and provide a better message
@@ -136,6 +138,7 @@ export class PandoraAPI {
         cipher.final()
       ]);
       return decrypted;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error('Decryption error:', error);
       
@@ -164,8 +167,10 @@ export class PandoraAPI {
     method: string;
     secure?: boolean;
     queryParams?: Record<string, string>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     body?: any;
     encrypt?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }): Promise<any> {
     const url = new URL(this.getEndpoint(options.secure || false));
     url.searchParams.append('method', options.method);
@@ -275,6 +280,7 @@ export class PandoraAPI {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async request(method: string, data?: any): Promise<any> {
     if (!this.authData) {
       throw new Error('Not authenticated with Pandora (call login() before request())');
@@ -306,6 +312,7 @@ export class PandoraAPI {
     
     // Enhance station data with additional metadata
     if (response.stations) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       response.stations = response.stations.map((station: any) => {
         const enhanced: PandoraStation = {
           ...station,

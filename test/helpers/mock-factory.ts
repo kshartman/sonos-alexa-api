@@ -184,6 +184,11 @@ export class MockDevice {
     return { CurrentVolume: this.state.volume.toString() };
   }
 
+  async getTransportInfo(): Promise<{ CurrentTransportState: string }> {
+    this.recordCall('getTransportInfo');
+    return { CurrentTransportState: this.state.playbackState };
+  }
+
   async setGroupVolume(level: number): Promise<void> {
     this.recordCall('setGroupVolume', [level]);
     // Clamp volume between 0 and 100

@@ -6,7 +6,8 @@
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
       "Bash(pkill:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(npx eslint:*)"
     ],
     "deny": []
   }

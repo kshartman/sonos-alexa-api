@@ -1,6 +1,7 @@
 {
   "port": 5005,
-  "host": "your-hostname-or-ip",
+  "_comment_host": "Host is for display only. For TTS, use TTS_HOST_IP env var or let it auto-detect",
+  "host": "localhost",
   "defaultRoom": "Living Room",
   "defaultMusicService": "library",  // Options: "library", "apple", "pandora"
   "announceVolume": 40,

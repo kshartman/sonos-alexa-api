@@ -111,6 +111,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const currentState = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await currentState.json();
       
+      console.log(`   Initial state before play: ${state.playbackState}`);
+      
       if (!state.currentTrack) {
         // Load content
         await loadTestContent(testRoom);
@@ -120,9 +122,18 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       // Now trigger state changes
       const initialHistory = eventManager.getStateHistory(deviceId).length;
       
+      // If already playing, pause first to ensure we get state changes
+      if (state.playbackState === 'PLAYING') {
+        await fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`);
+        await eventManager.waitForState(deviceId, state => 
+          state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 5000);
+      }
+      
+      // Now play
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
       await eventManager.waitForState(deviceId, 'PLAYING', 5000);
       
+      // And pause again
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`);
       await eventManager.waitForState(deviceId, state => 
         state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 5000);

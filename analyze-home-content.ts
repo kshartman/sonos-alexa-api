@@ -68,7 +68,7 @@ async function generateContentAnalysis(): Promise<string> {
   });
   
   // Fetch presets
-  const presetsRes = await fetch(`${API_URL}/presets?detailed=true`);
+  const presetsRes = await fetch(`${API_URL}/presets/detailed`);
   const presetsData = await presetsRes.json();
   const presets: Record<string, Preset> = presetsData.all;
   
@@ -180,7 +180,7 @@ async function generateValidationReport(): Promise<string> {
   }
   
   // Fetch presets for detailed info
-  const presetsRes = await fetch(`${API_URL}/presets?detailed=true`);
+  const presetsRes = await fetch(`${API_URL}/presets/detailed`);
   const presetsData = await presetsRes.json();
   const allPresets = presetsData.all || {};
   

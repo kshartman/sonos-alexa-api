@@ -24,6 +24,13 @@ responses:
         schema:
           $ref: './schemas.yaml#/schemas/Error'
           
+  BadRequest:
+    description: Bad request
+    content:
+      application/json:
+        schema:
+          $ref: './schemas.yaml#/schemas/Error'
+          
   NotImplemented:
     description: Feature not implemented
     content:

@@ -1,0 +1,59 @@
+get:
+  tags:
+    - System
+  summary: Get all presets with full details
+  description: |
+    Returns all available presets from both configuration and preset files
+    with complete metadata and configuration details.
+  operationId: getPresetsDetailed
+  responses:
+    '200':
+      description: Detailed preset information
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              config:
+                type: object
+                description: Presets from configuration file
+                additionalProperties:
+                  $ref: '#/components/schemas/PresetDetailed'
+              folder:
+                type: object
+                description: Presets from preset folder
+                additionalProperties:
+                  $ref: '#/components/schemas/PresetDetailed'
+              all:
+                type: object
+                description: All presets combined
+                additionalProperties:
+                  $ref: '#/components/schemas/PresetDetailed'
+            example:
+              config:
+                morning_music:
+                  roomName: "Kitchen"
+                  favorite: "Morning Playlist"
+                  volume: 20
+              folder:
+                jazz_favorites:
+                  roomName: "LivingRoom"
+                  favorite: "Jazz Radio"
+                  uri: "x-sonosapi-radio:ST%3aexample"
+                  volume: 25
+                  pauseOthers: true
+                  _originalFavorite: "Jazz Radio"
+                  _loadedFrom: "file"
+              all:
+                morning_music:
+                  roomName: "Kitchen"
+                  favorite: "Morning Playlist"
+                  volume: 20
+                jazz_favorites:
+                  roomName: "LivingRoom"
+                  favorite: "Jazz Radio"
+                  uri: "x-sonosapi-radio:ST%3aexample"
+                  volume: 25
+                  pauseOthers: true
+                  _originalFavorite: "Jazz Radio"
+                  _loadedFrom: "file"

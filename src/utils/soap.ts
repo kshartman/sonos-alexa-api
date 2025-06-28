@@ -22,7 +22,7 @@ interface SoapEnvelope {
     's:Body': {
       [key: string]: {
         '@_xmlns:u': string;
-        [key: string]: any;
+        [key: string]: unknown;
       };
     };
   };
@@ -31,13 +31,13 @@ interface SoapEnvelope {
 interface SoapFault {
   faultcode?: string;
   faultstring?: string;
-  detail?: any;
+  detail?: unknown;
 }
 
 interface SoapResponseBody {
   's:Fault'?: SoapFault;
   'SOAP-ENV:Fault'?: SoapFault;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface SoapResponseEnvelope {
@@ -50,7 +50,7 @@ interface ParsedSoapResponse {
   'SOAP-ENV:Envelope'?: SoapResponseEnvelope;
 }
 
-export function createSoapEnvelope(serviceType: string, action: string, body: Record<string, any> = {}): string {
+export function createSoapEnvelope(serviceType: string, action: string, body: Record<string, unknown> = {}): string {
   const envelope: SoapEnvelope = {
     's:Envelope': {
       '@_xmlns:s': 'http://schemas.xmlsoap.org/soap/envelope/',
@@ -67,7 +67,8 @@ export function createSoapEnvelope(serviceType: string, action: string, body: Re
   return xmlBuilder.build(envelope);
 }
 
-export function parseSoapResponse(xml: string): any {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseSoapResponse(xml: string): any { // ANY IS CORRECT: SOAP responses have dynamic structure based on service/action
   try {
     const parsed = xmlParser.parse(xml) as ParsedSoapResponse;
     const envelope = parsed['s:Envelope'] || parsed['SOAP-ENV:Envelope'];
@@ -83,9 +84,12 @@ export function parseSoapResponse(xml: string): any {
     // Check for fault
     const fault = body['s:Fault'] || body['SOAP-ENV:Fault'];
     if (fault) {
-      const error = new Error(fault.faultstring || 'SOAP fault');
-      (error as any).code = fault.faultcode;
-      (error as any).detail = fault.detail;
+      const error = new Error(fault.faultstring || 'SOAP fault') as Error & {
+        code?: string;
+        detail?: unknown;
+      };
+      error.code = fault.faultcode;
+      error.detail = fault.detail;
       throw error;
     }
 
@@ -102,7 +106,8 @@ export function parseSoapResponse(xml: string): any {
   }
 }
 
-export async function soapRequest(url: string, serviceType: string, action: string, body: Record<string, any> = {}): Promise<any> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function soapRequest(url: string, serviceType: string, action: string, body: Record<string, unknown> = {}): Promise<any> { // ANY IS CORRECT: Returns dynamic SOAP response data
   const soapAction = `"${serviceType}#${action}"`;
   const envelope = createSoapEnvelope(serviceType, action, body);
 
@@ -127,8 +132,8 @@ export async function soapRequest(url: string, serviceType: string, action: stri
 
     const result = parseSoapResponse(responseText);
     
-    // Log detailed SOAP response at wall level (for massive XML responses)
-    debugManager.wall('soap', `SOAP Response from ${url}`, { action, result });
+    // Log detailed SOAP response at trace level (for massive XML responses)
+    debugManager.trace('soap', `SOAP Response from ${url}`, { action, result });
     
     // Log summary at debug level
     debugManager.debug('soap', `SOAP Response from ${url} - ${action} completed`);

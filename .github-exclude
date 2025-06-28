@@ -13,3 +13,4 @@ private/
 .claude/
 .github-exclude
 archive/
+setup-local-enhanced.sh

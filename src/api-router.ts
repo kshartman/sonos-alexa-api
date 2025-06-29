@@ -105,7 +105,7 @@ export class ApiRouter {
     this.routes.set('GET /state', this.getState.bind(this));
     this.routes.set('GET /health', this.getHealth.bind(this));
     this.routes.set('GET /presets', this.getPresets.bind(this));
-    this.routes.set('GET /presets/detailed', this.getPresets.bind(this));
+    this.routes.set('GET /presets/{detailed}', this.getPresets.bind(this));
 
     // Room-specific routes
     this.routes.set('GET /{room}/state', this.getRoomState.bind(this));
@@ -133,15 +133,15 @@ export class ApiRouter {
 
     // Favorites routes
     this.routes.set('GET /{room}/favorites', this.getFavorites.bind(this));
-    this.routes.set('GET /{room}/favorites/detailed', this.getFavorites.bind(this));
+    this.routes.set('GET /{room}/favorites/{detailed}', this.getFavorites.bind(this));
     this.routes.set('GET /{room}/favourites', this.getFavorites.bind(this)); // British spelling
-    this.routes.set('GET /{room}/favourites/detailed', this.getFavorites.bind(this)); // British spelling
+    this.routes.set('GET /{room}/favourites/{detailed}', this.getFavorites.bind(this)); // British spelling
     this.routes.set('GET /{room}/favorite/{name}', this.playFavorite.bind(this));
     this.routes.set('GET /{room}/favourite/{name}', this.playFavorite.bind(this)); // British spelling
 
     // Playlists routes
     this.routes.set('GET /{room}/playlists', this.getPlaylists.bind(this));
-    this.routes.set('GET /{room}/playlists/detailed', this.getPlaylists.bind(this));
+    this.routes.set('GET /{room}/playlists/{detailed}', this.getPlaylists.bind(this));
     this.routes.set('GET /{room}/playlist/{name}', this.playPlaylist.bind(this));
 
     // Apple Music routes

@@ -38,6 +38,10 @@ async function generateContentAnalysis(): Promise<string> {
   const favoritesByType: Record<string, Favorite[]> = {};
   
   favorites.forEach(fav => {
+    if (!fav.uri) {
+      console.warn('Favorite missing URI:', fav.title);
+      return;
+    }
     const uriType = fav.uri.split(':')[0];
     if (!favoritesByType[uriType]) {
       favoritesByType[uriType] = [];

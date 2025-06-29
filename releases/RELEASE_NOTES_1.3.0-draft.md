@@ -113,6 +113,17 @@ Generates comprehensive reports about your Sonos system infrastructure:
 - Updated route patterns from `/detailed` to `/{detailed}` to properly capture the parameter
 - Queue endpoints (`/queue/detailed`) remain unchanged as they use a different pattern
 
+### Content Analyzer Improvements
+- Fixed favorites URL format in analyze-home-content.ts (from query parameter to path format)
+- Added defensive checks for missing URI and title properties in favorites
+- Improved error handling to prevent crashes with malformed data
+- Better logging for debugging problematic favorites
+
+### Infrastructure Analysis Enhancements
+- Device matrix now shows stereo/surround role designations (L, R, C, SW, SL, SR, HL, HR)
+- Improved readability for stereo pairs and home theater configurations
+- Makes it easier to identify which speaker is which in multi-speaker setups
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates

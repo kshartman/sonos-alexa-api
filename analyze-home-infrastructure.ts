@@ -296,7 +296,25 @@ async function generateDeviceMatrix(): Promise<string> {
     .forEach(device => {
       const features = modelFeatures[device.model] || { lineIn: false };
       const isGrouped = groupedDevices.has(device.id);
-      output += `| ${device.room} | ${device.model} | ${features.lineIn ? '✓' : '✗'} | ${device.paired ? '✓' : '✗'} | ${isGrouped ? '✓' : '✗'} |\n`;
+      
+      // Add designation for stereo/surround roles
+      let roomDisplay = device.room;
+      if (device.paired?.role) {
+        const roleMap: Record<string, string> = {
+          'left': 'L',
+          'right': 'R',
+          'center': 'C',
+          'subwoofer': 'SW',
+          'surround-left': 'SL',
+          'surround-right': 'SR',
+          'height-left': 'HL',
+          'height-right': 'HR'
+        };
+        const designation = roleMap[device.paired.role] || device.paired.role;
+        roomDisplay += ` (${designation})`;
+      }
+      
+      output += `| ${roomDisplay} | ${device.model} | ${features.lineIn ? '✓' : '✗'} | ${device.paired ? '✓' : '✗'} | ${isGrouped ? '✓' : '✗'} |\n`;
     });
   
   return output;

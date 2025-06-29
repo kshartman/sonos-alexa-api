@@ -479,3 +479,10 @@ All configuration can now be set via environment variables. `npm start` loads .e
 19. **Plugin System** - Custom action plugins, music service plugins, TTS provider plugins
 20. **Home Assistant Integration** - Native integration, auto-discovery, media player entities
 21. **Remove Global Discovery Variable** - Refactor SonosDevice to accept discovery instance via constructor or method parameter instead of using global variable
+## Recent Updates (June 29, 2025)
+- Fixed detailed endpoints regression where they returned arrays instead of objects
+- Added defensive checks to content analyzer for malformed favorites
+- Infrastructure analyzer now shows stereo/surround role designations (L, R, C, SW, SL, SR, HL, HR)
+- Discovered that some devices (particularly Connect and Amp) may show as "Unknown" until properly discovered via SSDP
+- Force discovery can be triggered by querying device state or waiting for SSDP announcement cycle
+- Moved force-discovery.ts to debug directory

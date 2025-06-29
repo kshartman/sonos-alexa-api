@@ -31,7 +31,7 @@ async function generateContentAnalysis(): Promise<string> {
   output += `Room: ${ROOM_NAME}\n\n`;
   
   // Fetch favorites
-  const favoritesRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites?detailed=true`);
+  const favoritesRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites/detailed`);
   const favorites: Favorite[] = await favoritesRes.json();
   
   // Categorize favorites by URI type
@@ -86,6 +86,10 @@ async function generateContentAnalysis(): Promise<string> {
   // Services breakdown
   const serviceMap: Record<string, number> = {};
   favorites.forEach((f: any) => {
+    if (!f.uri) {
+      console.warn('Favorite missing URI in services breakdown:', f.title);
+      return;
+    }
     const uriType = f.uri.split(':')[0];
     let service = 'Unknown';
     
@@ -251,11 +255,15 @@ async function generateValidationReport(): Promise<string> {
   );
   
   // Fetch favorites to find missing ones
-  const favoritesRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites?detailed=true`);
+  const favoritesRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites/detailed`);
   const favorites = await favoritesRes.json();
   
   // Check both _originalFavorite and preset names (case-insensitive)
   const missingFromPresets = favorites.filter((f: any) => {
+    if (!f.title) {
+      console.warn('Favorite missing title:', JSON.stringify(f));
+      return false;
+    }
     const favLower = f.title.toLowerCase();
     return !presetFavoritesLower.has(favLower) && !presetNamesLower.has(favLower);
   });

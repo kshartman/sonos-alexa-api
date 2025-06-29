@@ -102,6 +102,17 @@ Generates comprehensive reports about your Sonos system infrastructure:
 ./analyze-infrastructure.sh office-system http://192.168.1.100:5005
 ```
 
+## 🐛 Bug Fixes
+
+### Detailed Endpoints Regression Fix
+- Fixed regression where `/detailed` endpoints were returning simple arrays instead of full objects
+- Affected endpoints now properly return complete data:
+  - `/presets/detailed` - Returns full preset objects with metadata
+  - `/{room}/favorites/detailed` - Returns favorites with URI and metadata
+  - `/{room}/playlists/detailed` - Returns playlists with full details
+- Updated route patterns from `/detailed` to `/{detailed}` to properly capture the parameter
+- Queue endpoints (`/queue/detailed`) remain unchanged as they use a different pattern
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates

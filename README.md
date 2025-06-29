@@ -79,8 +79,8 @@ Key environment variables:
 ```bash
 # Server
 PORT=5005
-HOST=0.0.0.0                     # Display name only - server always listens on 0.0.0.0
-TTS_HOST_IP=192.168.1.100        # Your server's IP for TTS (auto-detected if not set)
+HOST=sonosapi.local              # Display name only (listens on 0.0.0.0)
+TTS_HOST_IP=192.168.1.100        # Optional - auto-detected if not set
 
 # Logging & Debug
 LOG_LEVEL=info                    # error, warn, info, debug, trace
@@ -146,14 +146,17 @@ DEBUG_CATEGORIES= npm start
 CREATE_DEFAULT_PRESETS=true npm start
 ```
 
-### settings.json (Alternative)
+### settings.json (Deprecated)
 
-For complex configurations, you can use `settings.json`:
+**⚠️ Deprecated**: Use environment variables instead.  
+Kept only for backward compatibility.
+
+For reference, the settings.json format is:
 
 ```json
 {
   "port": 5005,
-  "host": "0.0.0.0",
+  "host": "sonosapi.local",
   "defaultRoom": "Living Room",
   "defaultService": "apple",
   "announceVolume": 40,

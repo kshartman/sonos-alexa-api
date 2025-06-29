@@ -53,6 +53,7 @@
     "save-version": "npm run version:save"
   },
   "dependencies": {
+    "ci": "^2.3.0",
     "fast-xml-parser": "^4.3.2",
     "pino": "^9.7.0",
     "winston": "^3.11.0"

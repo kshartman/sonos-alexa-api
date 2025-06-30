@@ -1,0 +1,15 @@
+# Simple Caddy Configuration for Sonos Alexa API
+#
+# Minimal setup for internal use (HTTP only)
+# Use this for local/development environments
+
+:8080 {
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+    }
+
+    # Proxy all requests
+    reverse_proxy localhost:5005
+}

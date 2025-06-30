@@ -1,0 +1,77 @@
+# Caddy Configuration for Sonos Alexa API
+#
+# Caddy automatically handles SSL certificates via Let's Encrypt
+# Place this file at /etc/caddy/Caddyfile or specify with -config flag
+
+sonosapi.yourdomain.com {
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy no-referrer-when-downgrade
+        Content-Security-Policy upgrade-insecure-requests
+    }
+
+    # Request size limit (10MB)
+    request_body {
+        max_size 10MB
+    }
+
+    # Legacy endpoints - return 404
+    handle /index.html {
+        respond 404
+    }
+    
+    handle /docs {
+        respond 404
+    }
+
+    # Server-Sent Events endpoint
+    handle /events {
+        # Access control via IP matching
+        @allowed {
+            remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1
+        }
+        handle @allowed {
+            reverse_proxy localhost:5005 {
+                # SSE specific - no buffering
+                flush_interval -1
+                # Long timeout for SSE
+                transport http {
+                    read_timeout 24h
+                    write_timeout 24h
+                }
+            }
+        }
+        # Deny others
+        respond 403
+    }
+
+    # Debug endpoints with access control
+    handle_path /debug* {
+        @allowed {
+            remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1
+        }
+        handle @allowed {
+            reverse_proxy localhost:5005 {
+                flush_interval -1
+            }
+        }
+        respond 403
+    }
+
+    # Main API proxy
+    handle {
+        reverse_proxy localhost:5005 {
+            # Standard timeouts
+            transport http {
+                read_timeout 60s
+                write_timeout 60s
+            }
+        }
+    }
+}
+
+# HTTP to HTTPS redirect (automatic in Caddy)
+# Caddy handles this automatically when you specify a domain

@@ -1,0 +1,88 @@
+# Traefik Docker Compose Configuration for Sonos Alexa API
+#
+# This example shows how to use Traefik as a reverse proxy with Docker
+# Adjust labels and networks according to your setup
+
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.email=your-email@domain.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - proxy
+
+  sonos-api:
+    image: kshartman/sonos-alexa-api:latest
+    container_name: sonos-api
+    restart: unless-stopped
+    network_mode: host  # Required for SSDP discovery
+    environment:
+      - PORT=5005
+      - LOG_LEVEL=info
+      - DEFAULT_ROOM=Living Room
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      
+      # HTTP to HTTPS redirect
+      - "traefik.http.middlewares.sonos-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.sonos-http.rule=Host(`sonosapi.yourdomain.com`)"
+      - "traefik.http.routers.sonos-http.entrypoints=web"
+      - "traefik.http.routers.sonos-http.middlewares=sonos-redirect"
+      
+      # HTTPS router
+      - "traefik.http.routers.sonos.rule=Host(`sonosapi.yourdomain.com`)"
+      - "traefik.http.routers.sonos.entrypoints=websecure"
+      - "traefik.http.routers.sonos.tls=true"
+      - "traefik.http.routers.sonos.tls.certresolver=letsencrypt"
+      
+      # Security headers middleware
+      - "traefik.http.middlewares.sonos-headers.headers.customresponseheaders.X-Content-Type-Options=nosniff"
+      - "traefik.http.middlewares.sonos-headers.headers.customresponseheaders.X-Frame-Options=DENY"
+      - "traefik.http.middlewares.sonos-headers.headers.customresponseheaders.X-XSS-Protection=1; mode=block"
+      - "traefik.http.middlewares.sonos-headers.headers.customresponseheaders.Referrer-Policy=no-referrer-when-downgrade"
+      - "traefik.http.middlewares.sonos-headers.headers.customresponseheaders.Content-Security-Policy=upgrade-insecure-requests"
+      
+      # IP whitelist for debug endpoints
+      - "traefik.http.middlewares.debug-whitelist.ipwhitelist.sourcerange=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1"
+      
+      # Route for debug endpoints with IP restriction
+      - "traefik.http.routers.sonos-debug.rule=Host(`sonosapi.yourdomain.com`) && PathPrefix(`/debug`)"
+      - "traefik.http.routers.sonos-debug.entrypoints=websecure"
+      - "traefik.http.routers.sonos-debug.tls=true"
+      - "traefik.http.routers.sonos-debug.middlewares=debug-whitelist,sonos-headers"
+      - "traefik.http.routers.sonos-debug.service=sonos-api"
+      
+      # Route for events endpoint with IP restriction
+      - "traefik.http.routers.sonos-events.rule=Host(`sonosapi.yourdomain.com`) && Path(`/events`)"
+      - "traefik.http.routers.sonos-events.entrypoints=websecure"
+      - "traefik.http.routers.sonos-events.tls=true"
+      - "traefik.http.routers.sonos-events.middlewares=debug-whitelist,sonos-headers"
+      - "traefik.http.routers.sonos-events.service=sonos-api"
+      
+      # Apply headers to main router
+      - "traefik.http.routers.sonos.middlewares=sonos-headers"
+      
+      # Service definition
+      - "traefik.http.services.sonos-api.loadbalancer.server.port=5005"
+
+networks:
+  proxy:
+    external: true

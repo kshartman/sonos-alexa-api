@@ -286,7 +286,7 @@ The API supports optional HTTP Basic Authentication with trusted network bypass:
 3. Requests from trusted networks bypass authentication
 4. All other requests require authentication
 
-For HTTPS, use a reverse proxy like nginx, Caddy, or HAProxy.
+For HTTPS, use a reverse proxy like nginx, Apache, Caddy, or HAProxy. See [deploy/](deploy/) for example nginx and Apache configurations.
 
 ## Troubleshooting
 

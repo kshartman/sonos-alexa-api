@@ -62,6 +62,12 @@ The following features are under consideration for this release:
 - Fixed EventEmitter max listeners warnings
 - Fixed startup message ordering to appear before all other logs
 
+### Security Improvements
+- Added authentication failure logging with client IP and username
+- Logs missing authentication attempts with warning level
+- Logs invalid authorization headers for security monitoring
+- Helps identify potential attacks or authentication misconfigurations
+
 ## Architecture & Performance
 
 ### Code Quality

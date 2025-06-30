@@ -234,10 +234,11 @@ docker logs -f sonos-api
      - AUTH_PASSWORD_FILE=/run/secrets/auth_password
    ```
 
-3. Run behind a reverse proxy (nginx/traefik) for:
+3. Run behind a reverse proxy (nginx/Apache/traefik) for:
    - SSL/TLS termination
    - Additional security headers
    - Rate limiting
+   - See [deploy/](https://github.com/kshartman/sonos-alexa-api/tree/main/deploy) for nginx and Apache example configurations
 
 ## Updates
 

@@ -296,6 +296,8 @@ export class ApiRouter {
           const authHeader = req.headers.authorization;
           
           if (!authHeader || !authHeader.startsWith('Basic ')) {
+            const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
+            debugManager.warn('api', `Missing authentication from ${clientIp}`);
             res.statusCode = 401;
             res.setHeader('WWW-Authenticate', 'Basic realm="Sonos API"');
             res.end(JSON.stringify({ status: 'error', error: 'Authentication required' }));
@@ -304,6 +306,8 @@ export class ApiRouter {
         
           const base64Credentials = authHeader.split(' ')[1];
           if (!base64Credentials) {
+            const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
+            debugManager.warn('api', `Invalid authorization header from ${clientIp}`);
             res.statusCode = 401;
             res.end(JSON.stringify({ status: 'error', error: 'Invalid authorization header' }));
             return;
@@ -312,6 +316,8 @@ export class ApiRouter {
           const [username, password] = credentials.split(':');
         
           if (username !== this.config.auth.username || password !== this.config.auth.password) {
+            const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
+            debugManager.warn('api', `Authentication failed for user '${username}' from ${clientIp}`);
             res.statusCode = 401;
             res.end(JSON.stringify({ status: 'error', error: 'Invalid credentials' }));
             return;

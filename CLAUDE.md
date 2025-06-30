@@ -486,3 +486,21 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - Discovered that some devices (particularly Connect and Amp) may show as "Unknown" until properly discovered via SSDP
 - Force discovery can be triggered by querying device state or waiting for SSDP announcement cycle
 - Moved force-discovery.ts to debug directory
+
+## Recent API Changes (June 30, 2025)
+- Added music library cache endpoints:
+  - GET /library/index - Shows indexing status and metadata
+  - GET /library/refresh - Triggers library re-index
+  - GET /library/summary - Overview with top artists/albums
+  - GET /library/detailed - Full track/artist/album data
+- Added methods to MusicLibraryCache class:
+  - getSummary() - Returns statistics and top content
+  - getDetailedData() - Returns full tracks, artists, albums data
+- Integrated music library analysis into analyze-home-content.ts
+- analyze-content.sh now generates four outputs in homes/{home}/ directory:
+  - content-analysis.md - Favorites and presets breakdown
+  - preset-validation-results.md - Preset validation status
+  - music-library-analysis.md - Library statistics and top content
+  - music-library.json - Optimized JSON export of all tracks (with jq pretty-printing if available)
+- JSON export strips unnecessary fields (titleLower, artistLower, albumLower, albumArtURI) for ~50% size reduction
+- Tested previously unknown favorites in OfficeSpeakers - only Denon Audio: PatioSpeakers (line-in) worth keeping

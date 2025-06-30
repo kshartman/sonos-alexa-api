@@ -259,11 +259,15 @@ The project includes tools for analyzing your Sonos system:
 # Analyze system infrastructure
 ./analyze-infrastructure.sh [home-name] [api-url]
 
-# Analyze content (favorites, presets)
+# Analyze content (favorites, presets, music library)
 ./analyze-content.sh [home-name] [api-url] [room-name]
 ```
 
-These tools generate detailed reports in the `homes/` directory documenting your system configuration, device capabilities, and content.
+These tools generate detailed reports in the `homes/` directory documenting your system configuration, device capabilities, and content. The content analyzer creates:
+- `content-analysis.md` - Favorites breakdown by type and service
+- `preset-validation-results.md` - Preset validation status
+- `music-library-analysis.md` - Library statistics and top artists/albums
+- `music-library.json` - Complete track database (optimized, pretty-printed with jq)
 
 ## Deployment
 

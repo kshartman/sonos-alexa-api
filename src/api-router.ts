@@ -153,6 +153,8 @@ export class ApiRouter {
     this.routes.set('GET /{room}/musicsearch/library/album/{query}', this.musicLibrarySearchAlbum.bind(this));
     this.routes.set('GET /library/index', this.getMusicLibraryStatus.bind(this));
     this.routes.set('GET /library/refresh', this.refreshMusicLibrary.bind(this));
+    this.routes.set('GET /library/summary', this.getMusicLibrarySummary.bind(this));
+    this.routes.set('GET /library/detailed', this.getMusicLibraryDetailed.bind(this));
 
     // Music search routes (for Alexa compatibility)
     this.routes.set('GET /{room}/musicsearch/{service}/album/{name}', this.musicSearchAlbum.bind(this));
@@ -1646,6 +1648,45 @@ export class ApiRouter {
     }
     
     return { status: 200, body: { status: 'success' } };
+  }
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async getMusicLibrarySummary(): Promise<ApiResponse<any>> { // ANY IS CORRECT: returns summary object
+    if (!this.musicLibraryCache) {
+      return { status: 200, body: { status: 'not initialized' } };
+    }
+    
+    const summary = this.musicLibraryCache.getSummary();
+    const status = this.musicLibraryCache.getStatus();
+    
+    return { 
+      status: 200, 
+      body: {
+        ...summary,
+        lastUpdated: status.metadata?.lastUpdated,
+        isIndexing: status.isIndexing,
+        indexingProgress: status.progress
+      }
+    };
+  }
+  
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async getMusicLibraryDetailed(): Promise<ApiResponse<any>> { // ANY IS CORRECT: returns detailed library data
+    if (!this.musicLibraryCache) {
+      return { status: 200, body: { status: 'not initialized', tracks: [], artists: [], albums: [] } };
+    }
+    
+    const detailedData = this.musicLibraryCache.getDetailedData();
+    const status = this.musicLibraryCache.getStatus();
+    
+    return { 
+      status: 200, 
+      body: {
+        ...detailedData,
+        metadata: status.metadata,
+        isIndexing: status.isIndexing
+      }
+    };
   }
   
   // Service-specific endpoints

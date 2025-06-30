@@ -63,6 +63,8 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 ### System
 - Health check, zones, state, presets, settings
 - Server-Sent Events stream
+- Music library: index status, refresh, summary, detailed data
+- Device information with model and pairing details
 
 ### Room Control
 - Playback: play, pause, stop, next, previous
@@ -150,10 +152,15 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 ## Recent Enhancements
 
 1. **Music Library Integration**
-   - Auto-indexing at startup
-   - Cache persistence
-   - Search by song, artist, album
-   - Progress tracking
+   - Auto-indexing at startup with background updates
+   - Cache persistence with configurable reindex interval
+   - Search by song, artist, album with fast indexes
+   - Progress tracking during indexing
+   - New API endpoints for library data access:
+     - `/library/index` - Status and metadata
+     - `/library/summary` - Top artists/albums
+     - `/library/detailed` - Complete track database
+   - Efficient data structures supporting up to 65,000 tracks
 
 2. **Pandora Improvements**
    - Real API integration

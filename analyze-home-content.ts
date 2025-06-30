@@ -54,13 +54,21 @@ async function generateContentAnalysis(): Promise<string> {
   
   // Generate summary
   const uriTypeDescriptions: Record<string, string> = {
-    'x-sonosapi-stream': 'TuneIn radio stations and other streaming services',
-    'x-sonosapi-radio': 'Pandora stations and other personalized radio services',
-    'x-rincon-playlist': 'Music library playlists and albums',
-    'x-file-cifs': 'Direct file references for music library content',
-    'x-sonosapi-hls': 'HTTP Live Streaming (Apple Music radio)',
-    'x-rincon-cpcontainer': 'Container references for albums/playlists from music services',
-    'favorite': 'Legacy preset format that references a favorite by name'
+    // Well-known URI types
+    'x-sonosapi-stream': 'Music service streams (TuneIn, on-demand tracks, curated streams)',
+    'x-sonosapi-radio': 'Personalized radio streams (e.g., Pandora stations)',
+    'x-rincon-playlist': 'Sonos music library playlists (e.g., imported .m3u files)',
+    'x-file-cifs': 'UNC path to music library content on SMB/CIFS shares',
+    'x-sonosapi-hls': 'HTTP Live Streaming (Apple Music radio, dynamic streams)',
+    'x-rincon-cpcontainer': 'Container references to music service content via SMAPI',
+    'favorite': 'Legacy preset format that references a favorite by name',
+    
+    // Additional URI types
+    'file': 'Local filesystem reference (not officially supported, may not work)',
+    'x-rincon-mp3radio': 'MP3 Internet radio stream (legacy format)',
+    'x-rincon-stream': 'Internal stream (often Line-In or TV audio rebroadcast)',
+    'x-sonos-http': 'Direct HTTP stream from arbitrary URL (e.g., nature sounds)',
+    'x-sonosapi-hls-static': 'Static HLS content (e.g., Calm app, Sonos Radio)'
   };
   
   let typeIndex = 1;
@@ -95,6 +103,16 @@ async function generateContentAnalysis(): Promise<string> {
     
     if (uriType === 'x-file-cifs' || uriType === 'x-rincon-playlist') {
       service = 'Music Library';
+    } else if (uriType === 'x-rincon-stream') {
+      service = 'Line-In/Internal Stream';
+    } else if (uriType === 'x-sonos-http') {
+      service = 'HTTP Stream';
+    } else if (uriType === 'x-sonosapi-hls-static') {
+      service = 'HLS Stream (Calm/Sonos Radio)';
+    } else if (uriType === 'x-rincon-mp3radio') {
+      service = 'MP3 Radio Stream';
+    } else if (uriType === 'file') {
+      service = 'Local File (Unsupported)';
     } else if (f.metadata) {
       const serviceMatch = f.metadata.match(/SA_RINCON(\d+)/);
       if (serviceMatch) {
@@ -284,14 +302,104 @@ async function generateValidationReport(): Promise<string> {
   return output;
 }
 
+async function generateMusicLibraryAnalysis(): Promise<string> {
+  let output = '# Music Library Analysis\n\n';
+  output += `Generated: ${new Date().toISOString().split('T')[0]}\n`;
+  output += `API: ${API_URL}\n\n`;
+  
+  try {
+    // Get library summary
+    const summaryRes = await fetch(`${API_URL}/library/summary`);
+    const summary = await summaryRes.json();
+    
+    if (summary.status === 'not initialized') {
+      output += '**Music library not initialized**\n';
+      return output;
+    }
+    
+    // Also save the detailed library data as JSON
+    try {
+      const detailedRes = await fetch(`${API_URL}/library/detailed`);
+      const detailed = await detailedRes.json();
+      
+      // Save to output directory if we have it
+      const outputDir = process.argv[4];
+      if (outputDir && detailed && !detailed.status) {
+        // Strip out the *Lower fields and albumArtURI to reduce file size
+        if (detailed.tracks) {
+          detailed.tracks = detailed.tracks.map((track: any) => {
+            const { titleLower, artistLower, albumLower, albumArtURI, ...cleanTrack } = track;
+            return cleanTrack;
+          });
+        }
+        
+        const { execSync } = await import('child_process');
+        const jsonFile = join(outputDir, 'music-library.json');
+        
+        // Check if jq is available for pretty printing
+        try {
+          execSync('which jq', { stdio: 'ignore' });
+          // Use jq for pretty printing
+          writeFileSync(jsonFile + '.tmp', JSON.stringify(detailed));
+          execSync(`jq . "${jsonFile}.tmp" > "${jsonFile}"`, { stdio: 'ignore' });
+          execSync(`rm "${jsonFile}.tmp"`, { stdio: 'ignore' });
+        } catch {
+          // Fall back to JSON.stringify with indentation
+          writeFileSync(jsonFile, JSON.stringify(detailed, null, 2));
+        }
+      }
+    } catch (error) {
+      console.log('Note: Could not save library cache JSON:', error);
+    }
+    
+    output += '## Overview\n\n';
+    output += `- **Total Tracks**: ${summary.totalTracks?.toLocaleString() || 0}\n`;
+    output += `- **Total Artists**: ${summary.totalArtists?.toLocaleString() || 0}\n`;
+    output += `- **Total Albums**: ${summary.totalAlbums?.toLocaleString() || 0}\n`;
+    output += `- **Last Updated**: ${summary.lastUpdated ? new Date(summary.lastUpdated).toLocaleString() : 'Unknown'}\n`;
+    output += `- **Status**: ${summary.isIndexing ? 'Indexing in progress' : 'Complete'}\n\n`;
+    
+    // Calculate stats
+    const avgTracksPerArtist = summary.totalArtists > 0 ? (summary.totalTracks / summary.totalArtists).toFixed(1) : '0';
+    const avgTracksPerAlbum = summary.totalAlbums > 0 ? (summary.totalTracks / summary.totalAlbums).toFixed(1) : '0';
+    
+    output += '## Statistics\n\n';
+    output += `- **Average tracks per artist**: ${avgTracksPerArtist}\n`;
+    output += `- **Average tracks per album**: ${avgTracksPerAlbum}\n\n`;
+    
+    // Top artists
+    if (summary.topArtists && summary.topArtists.length > 0) {
+      output += '## Top 10 Artists by Track Count\n\n';
+      summary.topArtists.slice(0, 10).forEach((artist: any, i: number) => {
+        output += `${i + 1}. **${artist.name}** - ${artist.trackCount} tracks\n`;
+      });
+      output += '\n';
+    }
+    
+    // Top albums
+    if (summary.topAlbums && summary.topAlbums.length > 0) {
+      output += '## Top 10 Albums by Track Count\n\n';
+      summary.topAlbums.slice(0, 10).forEach((album: any, i: number) => {
+        output += `${i + 1}. **${album.name}** - ${album.trackCount} tracks\n`;
+      });
+    }
+    
+  } catch (error) {
+    output += `**Error fetching library data**: ${error}\n`;
+  }
+  
+  return output;
+}
+
 async function main() {
   try {
     console.log(`Analyzing Sonos content from ${API_URL}...`);
     
-    // Generate both reports
-    const [contentAnalysis, validationReport] = await Promise.all([
+    // Generate all reports
+    const [contentAnalysis, validationReport, libraryAnalysis] = await Promise.all([
       generateContentAnalysis(),
-      generateValidationReport()
+      generateValidationReport(),
+      generateMusicLibraryAnalysis()
     ]);
     
     // Save to output directory (will be created by shell script)
@@ -299,10 +407,12 @@ async function main() {
     
     writeFileSync(join(outputDir, 'content-analysis.md'), contentAnalysis);
     writeFileSync(join(outputDir, 'preset-validation-results.md'), validationReport);
+    writeFileSync(join(outputDir, 'music-library-analysis.md'), libraryAnalysis);
     
     console.log(`✅ Reports generated in ${outputDir}`);
     console.log('  - content-analysis.md');
     console.log('  - preset-validation-results.md');
+    console.log('  - music-library-analysis.md');
   } catch (error) {
     console.error('❌ Error generating reports:', error);
     process.exit(1);

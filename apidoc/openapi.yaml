@@ -1806,7 +1806,7 @@ paths:
       tags:
         - System
       summary: Get music library index status
-      description: Get the current status of the music library index including track counts
+      description: Get the current status of the music library index including metadata
       responses:
         '200':
           description: Library index status
@@ -1815,19 +1815,36 @@ paths:
               schema:
                 type: object
                 properties:
-                  indexed:
+                  isIndexing:
                     type: boolean
-                  totalTracks:
-                    type: integer
-                  totalAlbums:
-                    type: integer
-                  totalArtists:
-                    type: integer
-                  lastIndexed:
-                    type: string
-                    format: date-time
-                  cacheSize:
-                    type: integer
+                    description: Whether indexing is currently in progress
+                  progress:
+                    type: number
+                    description: Indexing progress percentage (0-100)
+                    minimum: 0
+                    maximum: 100
+                  metadata:
+                    type: object
+                    nullable: true
+                    properties:
+                      lastUpdated:
+                        type: string
+                        format: date-time
+                      totalTracks:
+                        type: integer
+                      totalAlbums:
+                        type: integer
+                      totalArtists:
+                        type: integer
+                      totalArtistEntries:
+                        type: integer
+                        description: Total artist entries including duplicates
+                      indexingDuration:
+                        type: integer
+                        description: Duration of last indexing in milliseconds
+                      isComplete:
+                        type: boolean
+                        description: Whether the last indexing completed successfully
                     
   /library/refresh:
     get:
@@ -1849,6 +1866,135 @@ paths:
                   message:
                     type: string
                     example: Library refresh initiated
+                    
+  /library/summary:
+    get:
+      tags:
+        - System
+      summary: Get music library summary
+      description: Get a summary of the music library including top artists and albums
+      responses:
+        '200':
+          description: Music library summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalTracks:
+                    type: integer
+                    example: 49322
+                  totalArtists:
+                    type: integer
+                    example: 4621
+                  totalAlbums:
+                    type: integer
+                    example: 3819
+                  topArtists:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: Academy of Ancient Music
+                        trackCount:
+                          type: integer
+                          example: 568
+                  topAlbums:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: Greatest Hits
+                        trackCount:
+                          type: integer
+                          example: 578
+                  lastUpdated:
+                    type: string
+                    format: date-time
+                  isIndexing:
+                    type: boolean
+                  indexingProgress:
+                    type: number
+                    minimum: 0
+                    maximum: 100
+                    
+  /library/detailed:
+    get:
+      tags:
+        - System
+      summary: Get detailed music library data
+      description: Get complete track, artist, and album data from the music library
+      responses:
+        '200':
+          description: Detailed music library data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tracks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        title:
+                          type: string
+                        artist:
+                          type: string
+                        album:
+                          type: string
+                        uri:
+                          type: string
+                        albumArtURI:
+                          type: string
+                  artists:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        trackCount:
+                          type: integer
+                  albums:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        trackCount:
+                          type: integer
+                  artistList:
+                    type: array
+                    items:
+                      type: string
+                    description: List of all unique artist names
+                  metadata:
+                    type: object
+                    properties:
+                      lastUpdated:
+                        type: string
+                        format: date-time
+                      totalTracks:
+                        type: integer
+                      totalAlbums:
+                        type: integer
+                      totalArtists:
+                        type: integer
+                      indexingDuration:
+                        type: integer
+                        description: Indexing duration in milliseconds
+                      isComplete:
+                        type: boolean
+                  isIndexing:
+                    type: boolean
                     
   /{room}/siriusxm/{name}:
     get:

@@ -124,11 +124,85 @@ Generates comprehensive reports about your Sonos system infrastructure:
 - Improved readability for stereo pairs and home theater configurations
 - Makes it easier to identify which speaker is which in multi-speaker setups
 
+## 📚 Music Library API
+
+New endpoints for accessing and analyzing your local music library content.
+
+### New Library Endpoints
+- **GET /library/index** - Get music library indexing status and metadata
+- **GET /library/refresh** - Trigger a manual re-index of the music library
+- **GET /library/summary** - Get library overview with top artists and albums
+- **GET /library/detailed** - Get complete track, artist, and album data
+
+### Library Summary Response Example:
+```json
+{
+  "totalTracks": 49322,
+  "totalArtists": 4621,
+  "totalAlbums": 3819,
+  "topArtists": [
+    {
+      "name": "Academy of Ancient Music",
+      "trackCount": 568
+    },
+    {
+      "name": "Beach Boys",
+      "trackCount": 314
+    }
+  ],
+  "topAlbums": [
+    {
+      "name": "Greatest Hits",
+      "trackCount": 578
+    }
+  ],
+  "lastUpdated": "2025-06-30T05:03:45.839Z",
+  "isIndexing": false,
+  "indexingProgress": 0
+}
+```
+
+### Music Library Analysis Integration
+- Content analysis script now generates music library report
+- **music-library-analysis.md** includes:
+  - Total tracks, artists, and albums
+  - Top 10 artists by track count
+  - Top 10 albums by track count
+  - Average tracks per artist/album statistics
+  - Last index time and status
+- **music-library.json** - Pretty-printed JSON export of all tracks:
+  - Optimized format with only essential fields (id, title, artist, album, uri)
+  - Reduced file size by ~50% by removing search-only fields
+  - Pretty-printed with jq if available
+
+### Technical Implementation
+- Added `getSummary()` and `getDetailedData()` methods to MusicLibraryCache class
+- Efficient data structures with artist and album indexes
+- Supports libraries up to Sonos limit of 65,000 tracks
+- Automatic background re-indexing based on configured interval
+
+## 🎵 Content Analysis Improvements
+
+### Enhanced analyze-content.sh Script
+- Now generates three comprehensive reports:
+  1. **content-analysis.md** - Favorites and presets breakdown
+  2. **preset-validation-results.md** - Preset validation status
+  3. **music-library-analysis.md** - Music library statistics
+
+### URI Type Recognition
+- Updated content analyzer to properly categorize all Sonos URI types:
+  - `file:` - Local filesystem references
+  - `x-rincon-mp3radio:` - MP3 Internet radio streams
+  - `x-rincon-stream:` - Internal streams (Line-In, TV audio)
+  - `x-sonos-http:` - Direct HTTP streams
+  - `x-sonosapi-hls-static:` - Static HLS content (Calm app, Sonos Radio)
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates
 - Enhanced error handling and retry logic
 - Additional device capabilities and service information
+- Music library search improvements
 
 ---
 

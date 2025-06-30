@@ -364,6 +364,61 @@ export class MusicLibraryCache {
     };
   }
 
+  getDetailedData(): { 
+    tracks: CachedTrack[]; 
+    artists: Array<{ name: string; trackCount: number }>;
+    albums: Array<{ name: string; trackCount: number }>;
+    artistList: string[];
+  } {
+    // Convert tracks Map to array
+    const tracks = Array.from(this.tracks.values());
+    
+    // Convert artist index to array with counts
+    const artists = Array.from(this.artistIndex.entries()).map(([name, trackIds]) => ({
+      name,
+      trackCount: trackIds.size
+    })).sort((a, b) => b.trackCount - a.trackCount);
+    
+    // Convert album index to array with counts
+    const albums = Array.from(this.albumIndex.entries()).map(([name, trackIds]) => ({
+      name,
+      trackCount: trackIds.size
+    })).sort((a, b) => b.trackCount - a.trackCount);
+    
+    return {
+      tracks,
+      artists,
+      albums,
+      artistList: this.artistList
+    };
+  }
+
+  getSummary(): {
+    totalTracks: number;
+    totalArtists: number;
+    totalAlbums: number;
+    topArtists: Array<{ name: string; trackCount: number }>;
+    topAlbums: Array<{ name: string; trackCount: number }>;
+  } {
+    const artists = Array.from(this.artistIndex.entries()).map(([name, trackIds]) => ({
+      name,
+      trackCount: trackIds.size
+    })).sort((a, b) => b.trackCount - a.trackCount);
+    
+    const albums = Array.from(this.albumIndex.entries()).map(([name, trackIds]) => ({
+      name,
+      trackCount: trackIds.size
+    })).sort((a, b) => b.trackCount - a.trackCount);
+    
+    return {
+      totalTracks: this.tracks.size,
+      totalArtists: this.artistIndex.size,
+      totalAlbums: this.albumIndex.size,
+      topArtists: artists.slice(0, 20),
+      topAlbums: albums.slice(0, 20)
+    };
+  }
+
   async refreshCache(): Promise<void> {
     logger.info('Manual cache refresh requested');
     await this.startBackgroundIndex();

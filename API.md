@@ -73,6 +73,32 @@ GET /settings
 ```
 Returns current server settings (sanitized).
 
+## Music Library
+
+### Get Library Status
+```
+GET /library/index
+```
+Returns indexing status and metadata including track counts.
+
+### Refresh Library Index
+```
+GET /library/refresh
+```
+Triggers a manual re-index of the music library.
+
+### Get Library Summary
+```
+GET /library/summary
+```
+Returns library overview with top artists and albums by track count.
+
+### Get Detailed Library Data
+```
+GET /library/detailed
+```
+Returns complete track, artist, and album data. Warning: Can be a large response.
+
 ## Room Control
 
 All room endpoints support URL-encoded room names and are case-insensitive.
@@ -289,4 +315,9 @@ curl http://localhost:5005/Kitchen/join/Living%20Room
 ### Text-to-Speech announcement
 ```bash
 curl http://localhost:5005/Living%20Room/say/Dinner%20is%20ready/40
+```
+
+### Get music library summary
+```bash
+curl http://localhost:5005/library/summary
 ```

@@ -70,16 +70,38 @@ if $TSX_CMD analyze-home-content.ts "$API_URL" "$ROOM_NAME" "$OUTPUT_DIR"; then
     VALID_COUNT=$(grep -oE "Valid presets.*: [0-9]+" "$OUTPUT_DIR/preset-validation-results.md" | grep -oE "[0-9]+$" | head -1 || echo "?")
     FAILED_COUNT=$(grep -oE "Failed favorite resolution.*: [0-9]+" "$OUTPUT_DIR/preset-validation-results.md" | grep -oE "[0-9]+$" | head -1 || echo "?")
     
+    # Extract music library stats if available
+    if [ -f "$OUTPUT_DIR/music-library-analysis.md" ]; then
+        TOTAL_TRACKS=$(grep -oE "Total Tracks.*: [0-9,]+" "$OUTPUT_DIR/music-library-analysis.md" | grep -oE "[0-9,]+$" || echo "?")
+        TOTAL_ARTISTS=$(grep -oE "Total Artists.*: [0-9,]+" "$OUTPUT_DIR/music-library-analysis.md" | grep -oE "[0-9,]+$" || echo "?")
+        TOTAL_ALBUMS=$(grep -oE "Total Albums.*: [0-9,]+" "$OUTPUT_DIR/music-library-analysis.md" | grep -oE "[0-9,]+$" || echo "?")
+    fi
+    
     echo -e "\n${GREEN}✅ Analysis complete!${NC}"
     echo -e "\nReports saved to: ${GREEN}$OUTPUT_DIR/${NC}"
     echo "  • content-analysis.md - Detailed breakdown of favorites and presets"
     echo "  • preset-validation-results.md - Validation status of all presets"
+    echo "  • music-library-analysis.md - Music library statistics and top content"
+    if [ -f "$OUTPUT_DIR/music-library.json" ]; then
+        if command -v jq &> /dev/null; then
+            echo "  • music-library.json - Music library data (pretty-printed)"
+        else
+            echo "  • music-library.json - Music library data (install jq for formatting)"
+        fi
+    fi
     
     echo -e "\n${YELLOW}Summary:${NC}"
     echo -e "  • Favorites: $TOTAL_FAVORITES"
     echo -e "  • Presets: $TOTAL_PRESETS"
     echo -e "  • Valid presets: $VALID_COUNT" 
     echo -e "  • Failed presets: $FAILED_COUNT"
+    
+    if [ -f "$OUTPUT_DIR/music-library-analysis.md" ]; then
+        echo -e "\n${YELLOW}Music Library:${NC}"
+        echo -e "  • Tracks: $TOTAL_TRACKS"
+        echo -e "  • Artists: $TOTAL_ARTISTS"
+        echo -e "  • Albums: $TOTAL_ALBUMS"
+    fi
 else
     echo -e "${RED}❌ Error generating reports${NC}"
     exit 1

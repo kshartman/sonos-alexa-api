@@ -93,6 +93,8 @@ export interface Config {
   readonly isProduction: boolean;
   // Version
   readonly version: string;
+  // Build date
+  readonly buildDate: string;
   // From settings.json
   host?: string;
   auth?: {

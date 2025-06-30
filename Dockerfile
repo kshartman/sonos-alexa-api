@@ -3,6 +3,7 @@ FROM node:22-alpine AS builder
 
 # Build arguments for metadata
 ARG BUILD_DATE
+ARG BUILD_SOURCE_DATE
 ARG VCS_REF
 ARG VERSION=latest
 
@@ -28,6 +29,7 @@ FROM node:22-alpine
 
 # Build arguments
 ARG BUILD_DATE
+ARG BUILD_SOURCE_DATE
 ARG VCS_REF
 ARG VERSION=latest
 ARG PORT=5005
@@ -43,6 +45,7 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV=production
 ENV PORT=${PORT}
+ENV BUILD_SOURCE_DATE=${BUILD_SOURCE_DATE}
 
 # Copy package files and install production dependencies
 COPY package*.json ./

@@ -25,9 +25,13 @@ cd "$SCRIPT_DIR"
 echo -e "\n${YELLOW}Pulling latest changes from git...${NC}"
 git pull
 
+# Get last commit date
+BUILD_SOURCE_DATE=$(npm run --silent build:date)
+echo -e "\n${YELLOW}Source Date: ${BUILD_SOURCE_DATE}${NC}"
+
 # Build the image
 echo -e "\n${YELLOW}Building Docker image...${NC}"
-docker build -t sonos-alexa-api:local .
+docker build --build-arg BUILD_SOURCE_DATE="${BUILD_SOURCE_DATE}" -t sonos-alexa-api:local .
 
 if [ $? -eq 0 ]; then
     echo -e "\n${GREEN}✅ Docker image built successfully!${NC}"

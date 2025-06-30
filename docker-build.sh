@@ -11,7 +11,8 @@ NC='\033[0m' # No Color
 
 # Get version from package.json
 VERSION=$(node -p "require('./package.json').version")
-BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Get last commit date in ISO format
+BUILD_SOURCE_DATE=$(npm run --silent build:date)
 VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Image name
@@ -20,13 +21,13 @@ DOCKER_USERNAME="kshartman"
 
 echo -e "${GREEN}Building Sonos Alexa API Docker image...${NC}"
 echo -e "Version: ${YELLOW}${VERSION}${NC}"
-echo -e "Build Date: ${YELLOW}${BUILD_DATE}${NC}"
+echo -e "Source Date: ${YELLOW}${BUILD_SOURCE_DATE}${NC}"
 echo -e "Git Ref: ${YELLOW}${VCS_REF}${NC}"
 echo ""
 
 # Build arguments
 BUILD_ARGS="--build-arg VERSION=${VERSION}"
-BUILD_ARGS="${BUILD_ARGS} --build-arg BUILD_DATE=${BUILD_DATE}"
+BUILD_ARGS="${BUILD_ARGS} --build-arg BUILD_SOURCE_DATE=${BUILD_SOURCE_DATE}"
 BUILD_ARGS="${BUILD_ARGS} --build-arg VCS_REF=${VCS_REF}"
 
 # Tags for local and Docker Hub

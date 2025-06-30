@@ -50,7 +50,8 @@
     "version": "node -p \"const v = require('./package.json').version.split('.'); console.log(JSON.stringify({version: require('./package.json').version, major: parseInt(v[0]), minor: parseInt(v[1]), patch: parseInt(v[2])})); ''\"",
     "version:simple": "node -p \"require('./package.json').version\"",
     "version:save": "node -e \"const v = require('./package.json').version.split('.'); const versionObj = {version: require('./package.json').version, major: parseInt(v[0]), minor: parseInt(v[1]), patch: parseInt(v[2])}; require('fs').writeFileSync('src/version.ts', 'export const applicationVersion = ' + JSON.stringify(versionObj, null, 2).replace(/\\\"/g, \\\"'\\\") + ';\\n');\"",
-    "save-version": "npm run version:save"
+    "save-version": "npm run version:save",
+    "build:date": "git log -1 --format=%cd --date=iso-strict"
   },
   "dependencies": {
     "fast-xml-parser": "^4.3.2",

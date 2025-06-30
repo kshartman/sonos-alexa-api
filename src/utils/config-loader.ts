@@ -204,9 +204,11 @@ export function loadConfiguration(): Config {
   
   // Show startup banner first
   const hostname = os.hostname();
+  const buildDate = process.env.BUILD_SOURCE_DATE || new Date().toISOString();
   logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
   logger.always(`🖥️  Host: ${hostname}`);
   logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
+  logger.always(`📅 Build Date: ${buildDate}`);
   
   logger.info(`Configuration loaded from: ${configSources.join(' → ')}`);
   
@@ -227,6 +229,11 @@ export function loadConfiguration(): Config {
     writable: false,
     enumerable: true
   });
+  Object.defineProperty(finalConfig, 'buildDate', {
+    value: process.env.BUILD_SOURCE_DATE || new Date().toISOString(),
+    writable: false,
+    enumerable: true
+  });
   
   return finalConfig;
 }
@@ -237,7 +244,7 @@ export function loadConfiguration(): Config {
 function getEnvironmentOverrides(): string[] {
   const overrides: string[] = [];
   const envVars = [
-    'NODE_ENV', 'LOGGER', 'TTS_HOST_IP',
+    'NODE_ENV', 'LOGGER', 'TTS_HOST_IP', 'BUILD_SOURCE_DATE',
     'HOST', 'PORT', 'ANNOUNCE_VOLUME',
     'LOG_LEVEL', 'DEBUG_LEVEL', 'DEBUG_CATEGORIES',
     'AUTH_USERNAME', 'AUTH_PASSWORD', 'AUTH_REJECT_UNAUTHORIZED', 'AUTH_TRUSTED_NETWORKS',

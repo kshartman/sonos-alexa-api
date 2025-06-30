@@ -67,11 +67,24 @@ The following features are under consideration for this release:
 - Logs missing authentication attempts with warning level
 - Logs invalid authorization headers for security monitoring
 - Helps identify potential attacks or authentication misconfigurations
+- Implemented structured logging for auth failures
+  - Auth failures include metadata: ip, user (if known), auth type, and path
+  - Auth types: 'missing', 'invalid-header', 'invalid-credentials'
+  - Works consistently across Winston and Pino loggers
 - Added `scripts/analyze-auth-failures.sh` for monitoring auth failures
   - Interactive mode shows detailed failure analysis
   - Cron mode for automated threshold monitoring
   - Configurable thresholds: hourly (5), 8-hourly (10), daily (20)
   - Shows top offending IPs when thresholds exceeded
+  - Updated to parse structured log format and use Docker relative time syntax
+
+### Build and Deployment Improvements
+- Added build date tracking for container deployments
+  - New npm script `build:date` retrieves last git commit date
+  - Docker builds now pass BUILD_SOURCE_DATE to track source version
+  - Build date displayed in startup banner and available via API
+  - Defaults to current time when not in container environment
+  - Accessible via `/debug/startup` and `/debug/startup/config` endpoints
 
 ## Architecture & Performance
 
@@ -86,8 +99,9 @@ The following features are under consideration for this release:
 - Added decision matrix for implementation approach
 - Documented use cases and target audiences
 - Updated CLAUDE.md with test patterns and fixes
-- Added new config fields: `nodeEnv`, `logger`, `ttsHostIp`, `debugCategories`
+- Added new config fields: `nodeEnv`, `logger`, `ttsHostIp`, `debugCategories`, `buildDate`
 - Documented configuration architecture with single source of truth pattern
+- Documented BUILD_SOURCE_DATE environment variable for container builds
 
 ## Breaking Changes
 None - This release maintains backward compatibility with v1.3.0

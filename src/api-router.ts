@@ -31,6 +31,8 @@ export class ApiRouter {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private startupInfo: any = { // ANY IS CORRECT: startup info contains dynamic properties added at runtime
     timestamp: new Date().toISOString(),
+    version: '',
+    config: {},
     presets: {},
     musicLibrary: {},
     devices: {},
@@ -46,6 +48,10 @@ export class ApiRouter {
     this.appleMusicService = new AppleMusicService();
     this.accountService = new AccountService();
     this.servicesCache = new ServicesCache(discovery);
+    
+    // Add version and config to startup info
+    this.startupInfo.version = config.version;
+    this.startupInfo.config = config;
     
     this.registerRoutes();
   }
@@ -224,6 +230,7 @@ export class ApiRouter {
     this.routes.set('GET /debug/enable-all', this.enableAllDebug.bind(this));
     this.routes.set('GET /debug/disable-all', this.disableAllDebug.bind(this));
     this.routes.set('GET /debug/startup', this.getStartupInfo.bind(this));
+    this.routes.set('GET /debug/startup/config', this.getStartupConfig.bind(this));
     
     // Settings route
     this.routes.set('GET /settings', this.getSettings.bind(this));
@@ -1404,6 +1411,13 @@ export class ApiRouter {
     return {
       status: 200,
       body: this.startupInfo
+    };
+  }
+  
+  private async getStartupConfig(): Promise<ApiResponse> {
+    return {
+      status: 200,
+      body: this.startupInfo.config
     };
   }
   

@@ -210,7 +210,7 @@ export function loadConfiguration(): Config {
   
   logger.info(`Configuration loaded from: ${configSources.join(' → ')}`);
   
-  // Add computed environment helpers
+  // Add computed environment helpers and version
   const finalConfig = config as Config;
   Object.defineProperty(finalConfig, 'isDevelopment', {
     value: !config.nodeEnv || config.nodeEnv === '' || config.nodeEnv === 'development',
@@ -219,6 +219,11 @@ export function loadConfiguration(): Config {
   });
   Object.defineProperty(finalConfig, 'isProduction', {
     value: config.nodeEnv === 'production',
+    writable: false,
+    enumerable: true
+  });
+  Object.defineProperty(finalConfig, 'version', {
+    value: applicationVersion.version,
     writable: false,
     enumerable: true
   });

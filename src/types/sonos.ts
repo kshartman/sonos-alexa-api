@@ -91,6 +91,8 @@ export interface Config {
   // Computed environment helpers
   readonly isDevelopment: boolean;
   readonly isProduction: boolean;
+  // Version
+  readonly version: string;
   // From settings.json
   host?: string;
   auth?: {

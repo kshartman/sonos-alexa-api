@@ -1,6 +1,6 @@
-# Sonos Alexa API v1.4.0 Release Notes (DRAFT)
+# Sonos Alexa API v1.4.0 Release Notes
 
-## Release Date: TBD
+## Release Date: June 30, 2025
 
 ## Overview
 Version 1.4.0 focuses on test infrastructure improvements and bug fixes that enhance the stability and reliability of the API.

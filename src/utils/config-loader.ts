@@ -45,7 +45,7 @@ function parseBooleanEnv(value: string | undefined): boolean | undefined {
  */
 export function loadConfiguration(): Config {
   // Start with defaults (we'll add computed fields at the end)
-  let config = { ...defaultConfig } as any;
+  let config: Partial<Config> = { ...defaultConfig };
 
   // Load settings.json if exists
   try {

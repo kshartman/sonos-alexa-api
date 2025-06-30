@@ -17,3 +17,4 @@ private/
 archive/
 setup-local-enhanced.sh
 *-draft.md
+test/debug/

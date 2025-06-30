@@ -511,4 +511,15 @@ All configuration can now be set via environment variables. `npm start` loads .e
   - music-library-analysis.md - Library statistics and top content
   - music-library.json - Optimized JSON export of all tracks (with jq pretty-printing if available)
 - JSON export strips unnecessary fields (titleLower, artistLower, albumLower, albumArtURI) for ~50% size reduction
-- Tested previously unknown favorites in OfficeSpeakers - only Denon Audio: PatioSpeakers (line-in) worth keeping
+- Created delete-favorite.ts script to remove ghost favorites (moved to debug directory)
+- Implemented DestroyObject SOAP call for removing favorites that don't appear in Sonos app
+
+## v1.3.0 Release (June 30, 2025)
+Major release with comprehensive device information API, music library endpoints, and services discovery:
+- **Device Information API**: /devices endpoints with model, IP, and stereo/surround configuration
+- **Infrastructure Analysis Tools**: analyze-infrastructure.sh generates detailed system reports
+- **Music Library API**: Complete library access with summary and detailed endpoints
+- **Music Services API**: Cached service discovery with proper TuneIn identification
+- **Bug Fixes**: Fixed detailed endpoints regression, content analyzer improvements, EventEmitter max listeners warning
+- **Content Analysis**: Enhanced URI type recognition and service identification
+- See releases/RELEASE_NOTES_1.3.0.md for complete details

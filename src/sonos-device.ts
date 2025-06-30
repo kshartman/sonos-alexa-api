@@ -59,6 +59,9 @@ export class SonosDevice extends EventEmitter {
   constructor(deviceInfo: DeviceInfo, location: string) {
     super();
     
+    // Increase max listeners to prevent warning when multiple components subscribe
+    this.setMaxListeners(20);
+    
     this.id = deviceInfo.device.UDN;
     this.modelName = deviceInfo.device.modelName;
     this.modelNumber = deviceInfo.device.modelNumber;

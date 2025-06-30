@@ -1,4 +1,4 @@
-# v1.3.0 Release Notes (DRAFT)
+# v1.3.0 Release Notes
 
 ## 🎯 Device Information API
 
@@ -254,13 +254,16 @@ New cached services discovery system for identifying all music services configur
 - Proper cleanup on server shutdown
 - Efficient SOAP-based discovery from coordinator devices
 
+## 🔧 Additional Fixes
+
+### EventEmitter Memory Leak Warning
+- Fixed "MaxListenersExceededWarning" for SonosDevice instances
+- Increased max listeners from 10 to 20 to accommodate multiple subscribers
+- Prevents warning when discovery service, event manager, and API endpoints all subscribe to state changes
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates
 - Enhanced error handling and retry logic
 - Additional device capabilities and service information
 - Music library search improvements
-
----
-
-*Note: This is a draft. Final release notes will be updated before v1.3.0 release.*

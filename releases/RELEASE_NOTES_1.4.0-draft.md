@@ -85,6 +85,12 @@ The following features are under consideration for this release:
   - Build date displayed in startup banner and available via API
   - Defaults to current time when not in container environment
   - Accessible via `/debug/startup` and `/debug/startup/config` endpoints
+- Added `scripts/analyze-build.sh` for deployment verification
+  - Fetches build information from running instances
+  - Identifies exact git commit from build date
+  - Shows server info: version, environment, uptime, auth status
+  - Smart terminal detection for proper color handling
+  - Useful for verifying which version is deployed on production servers
 
 ## Architecture & Performance
 
@@ -102,6 +108,9 @@ The following features are under consideration for this release:
 - Added new config fields: `nodeEnv`, `logger`, `ttsHostIp`, `debugCategories`, `buildDate`
 - Documented configuration architecture with single source of truth pattern
 - Documented BUILD_SOURCE_DATE environment variable for container builds
+- Added monitoring script documentation:
+  - Cron setup examples for auth failure monitoring
+  - Deployment verification workflow with analyze-build.sh
 
 ## Breaking Changes
 None - This release maintains backward compatibility with v1.3.0

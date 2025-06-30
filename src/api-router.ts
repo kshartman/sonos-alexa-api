@@ -332,7 +332,7 @@ export class ApiRouter {
         error: getErrorMessage(error) || 'Internal server error'
       };
       
-      if (process.env.NODE_ENV === 'development' && error instanceof Error && error.stack) {
+      if (this.config.isDevelopment && error instanceof Error && error.stack) {
         errorResponse.stack = error.stack;
       }
       
@@ -2166,10 +2166,10 @@ export class ApiRouter {
     let ttsHost: string;
     
     // For Docker with host networking, we need the actual host IP
-    if (process.env.TTS_HOST_IP) {
+    if (this.config.ttsHostIp) {
       // User can specify the host IP via environment variable
-      ttsHost = process.env.TTS_HOST_IP;
-      logger.debug(`Using TTS_HOST_IP from environment: ${ttsHost}`);
+      ttsHost = this.config.ttsHostIp;
+      logger.debug(`Using TTS_HOST_IP from configuration: ${ttsHost}`);
     } else if (this.config.host === 'localhost' || this.config.host === '127.0.0.1' || this.config.host === '0.0.0.0') {
       // For local development, auto-detect the IP
       const detectedIP = this.discovery.getLocalIP();

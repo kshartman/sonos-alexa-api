@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import type { Config } from '../types/sonos.js';
 
 export interface DebugCategories {
   soap: boolean;
@@ -18,7 +19,7 @@ class DebugManager {
   private logLevel: LogLevel;
   private wallDeprecationWarned = false;
 
-  constructor() {
+  constructor(config?: Config) {
     // Initialize with defaults
     this.categories = {
       soap: false,      // SOAP request/response details
@@ -32,38 +33,48 @@ class DebugManager {
     };
     this.logLevel = 'info';
 
-    // Initialize from environment variables
-    this.initFromEnv();
+    // Initialize from config
+    if (config) {
+      this.initFromConfig(config);
+    }
   }
 
-  private initFromEnv(): void {
-    // Set log level from DEBUG_LEVEL or LOG_LEVEL env var
-    const envLogLevel = process.env.DEBUG_LEVEL || process.env.LOG_LEVEL;
-    if (envLogLevel && this.isValidLogLevel(envLogLevel)) {
+  private initFromConfig(config: Config): void {
+    // Set log level from config
+    if (config.logLevel && this.isValidLogLevel(config.logLevel)) {
       // Normalize 'wall' to 'trace'
-      this.logLevel = envLogLevel.toLowerCase() === 'wall' ? 'trace' : envLogLevel as LogLevel;
-      logger.info(`Log level set to '${this.logLevel}' from environment`);
+      this.logLevel = config.logLevel.toLowerCase() === 'wall' ? 'trace' : config.logLevel as LogLevel;
+      logger.info(`Log level set to '${this.logLevel}' from configuration`);
     }
 
-    // Set debug categories from DEBUG_CATEGORIES env var (comma-separated)
-    const envCategories = process.env.DEBUG_CATEGORIES;
-    if (envCategories) {
-      const categoriesToEnable = envCategories.split(',').map(c => c.trim().toLowerCase());
+    // Set debug categories from config
+    if (config.debugCategories && config.debugCategories.length > 0) {
+      const categoriesToEnable = config.debugCategories.map(c => c.toLowerCase());
       
       // Special case: '*' or 'all' enables all categories
       if (categoriesToEnable.includes('*') || categoriesToEnable.includes('all')) {
         this.enableAll();
-        logger.info('All debug categories enabled from environment');
+        logger.info('All debug categories enabled from configuration');
       } else {
         categoriesToEnable.forEach(category => {
           if (this.isValidCategory(category)) {
             this.categories[category as keyof DebugCategories] = true;
           }
         });
-        logger.info(`Debug categories enabled from environment: ${categoriesToEnable.filter(c => this.isValidCategory(c)).join(', ')}`);
+        logger.info(`Debug categories enabled from configuration: ${categoriesToEnable.filter(c => this.isValidCategory(c)).join(', ')}`);
       }
     }
+
+    // Log the debug configuration
+    logger.info('Debug configuration:', {
+      logLevel: this.logLevel,
+      categories: Object.entries(this.categories)
+        .filter(([_, enabled]) => enabled)
+        .map(([category]) => category)
+        .join(', ') || 'none'
+    });
   }
+
 
   private isValidLogLevel(level: string): boolean {
     return ['error', 'warn', 'info', 'debug', 'trace', 'wall'].includes(level.toLowerCase());
@@ -172,13 +183,22 @@ class DebugManager {
   }
 }
 
-export const debugManager = new DebugManager();
+// Export a singleton instance that will be initialized later
+let debugManagerInstance: DebugManager | null = null;
 
-// Log startup configuration
-logger.info('Debug configuration:', {
-  logLevel: debugManager.getLogLevel(),
-  categories: Object.entries(debugManager.getCategories())
-    .filter(([_, enabled]) => enabled)
-    .map(([category]) => category)
-    .join(', ') || 'none'
+export function initializeDebugManager(config: Config): DebugManager {
+  if (!debugManagerInstance) {
+    debugManagerInstance = new DebugManager(config);
+  }
+  return debugManagerInstance;
+}
+
+// For backward compatibility, create a proxy that will use the initialized instance
+export const debugManager = new Proxy({} as DebugManager, {
+  get(_target, prop, receiver) {
+    if (!debugManagerInstance) {
+      throw new Error('DebugManager accessed before initialization. Call initializeDebugManager(config) first.');
+    }
+    return Reflect.get(debugManagerInstance, prop, receiver);
+  }
 });

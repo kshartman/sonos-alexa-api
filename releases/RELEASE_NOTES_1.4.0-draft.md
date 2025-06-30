@@ -34,6 +34,14 @@ The following features are under consideration for this release:
 
 ## Technical Improvements
 
+### Configuration Architecture Refactoring
+- **Single Source of Truth**: Config loader now handles ALL environment variables (except logger initialization)
+- **Startup Banner**: Application version and host info now display as first log entries
+- **Debug Manager Integration**: Debug configuration now reads from unified config instead of environment
+- **Computed Fields**: Added `isDevelopment` and `isProduction` boolean helpers to config
+- **Field Normalization**: Logger type automatically normalized to lowercase
+- **Environment Variables**: All modules now read from config object instead of `process.env`
+
 ### Test Infrastructure Enhancements
 - Fixed event bridge timing issues for reliable test execution
 - Improved device ID comparison to handle UUID prefix inconsistencies
@@ -46,6 +54,7 @@ The following features are under consideration for this release:
 - Resolved volume test serialization crashes
 - Corrected content loading order for faster test startup
 - Fixed EventEmitter max listeners warnings
+- Fixed startup message ordering to appear before all other logs
 
 ## Architecture & Performance
 
@@ -60,6 +69,8 @@ The following features are under consideration for this release:
 - Added decision matrix for implementation approach
 - Documented use cases and target audiences
 - Updated CLAUDE.md with test patterns and fixes
+- Added new config fields: `nodeEnv`, `logger`, `ttsHostIp`, `debugCategories`
+- Documented configuration architecture with single source of truth pattern
 
 ## Breaking Changes
 None - This release maintains backward compatibility with v1.3.0

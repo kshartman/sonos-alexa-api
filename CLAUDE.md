@@ -128,6 +128,19 @@ CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
 - `data/default-settings.json` - Persisted defaults (room, music service)
 - `presets/` - Preset files in JSON format
 
+## Configuration Architecture (v1.4.0+)
+- **Single Source of Truth**: Config loader reads ALL environment variables
+- **Logger Exception**: Logger module reads its own env vars (NODE_ENV, LOGGER, LOG_LEVEL) for early initialization
+- **No Direct process.env**: All other modules read from config object, never from process.env
+- **Computed Fields**: Config includes `isDevelopment` and `isProduction` boolean helpers
+- **Field Normalization**: Logger type is automatically lowercased in config
+- **Debug Integration**: Debug manager initialized with config, not environment variables
+- **Startup Order**: 
+  1. Logger initializes (reads its own env vars)
+  2. Config loader runs (reads all env vars, shows startup banner)
+  3. Debug manager initializes from config
+  4. All other modules use config object
+
 ## Preset Behavior
 - **Multi-room presets**: When a preset contains multiple players:
   - The **first player in the list becomes the group coordinator**
@@ -410,6 +423,7 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - **HOST**: Interface to bind (default: 0.0.0.0)
 - **ANNOUNCE_VOLUME**: Volume for announcements (default: 40)
 - **CREATE_DEFAULT_PRESETS**: Auto-generate presets from favorites (default: false)
+- **TTS_HOST_IP**: Override auto-detected IP for TTS (useful in Docker)
 
 ### Logging
 - **LOG_LEVEL**: Log level (error, warn, info, debug)

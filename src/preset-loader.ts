@@ -4,7 +4,7 @@ import { join } from 'path';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
 import { tryConvertPreset, type PresetWithLegacy } from './utils/preset-converter.js';
-import type { PresetCollection, Preset } from './types/sonos.js';
+import type { PresetCollection, Preset, Config } from './types/sonos.js';
 import type { SonosDiscovery } from './discovery.js';
 
 interface PresetStats {
@@ -34,11 +34,13 @@ export class PresetLoader {
   private watcher?: ReturnType<typeof watchFs>;
   private discovery?: SonosDiscovery;
   private onStatsUpdate?: (stats: PresetLoadResult) => void;
+  private config?: Config;
 
-  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void) {
+  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void, config?: Config) {
     this.presetDir = presetDir;
     this.discovery = discovery;
     this.onStatsUpdate = onStatsUpdate;
+    this.config = config;
   }
 
   async init(): Promise<void> {
@@ -152,7 +154,7 @@ export class PresetLoader {
       logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
       
       // Only use colors if we're in development and not using Pino
-      const useColors = process.env.NODE_ENV === 'development' && process.env.LOGGER?.toLowerCase() !== 'pino';
+      const useColors = this.config?.isDevelopment && this.config?.logger !== 'pino';
       
       if (validPresetNames.length > 0) {
         const presets = validPresetNames.sort().map(name => 

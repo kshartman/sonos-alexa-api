@@ -77,12 +77,20 @@ export interface WebhookConfig {
 export interface Config {
   port: number;
   logLevel: string;
+  debugCategories?: string[];
   presetDir: string;
   presets: PresetCollection;
   webhooks: WebhookConfig[];
   defaultRoom?: string;
   defaultMusicService?: string;
   dataDir?: string;
+  // Environment
+  nodeEnv?: string;
+  logger?: string;
+  ttsHostIp?: string;
+  // Computed environment helpers
+  readonly isDevelopment: boolean;
+  readonly isProduction: boolean;
   // From settings.json
   host?: string;
   auth?: {

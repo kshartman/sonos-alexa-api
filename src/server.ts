@@ -1,10 +1,9 @@
 import http, { ServerResponse } from 'http';
-import os from 'os';
 import { SonosDiscovery } from './discovery.js';
 import { ApiRouter } from './api-router.js';
 import { PresetLoader } from './preset-loader.js';
 import logger from './utils/logger.js';
-import { debugManager } from './utils/debug-manager.js';
+import { debugManager, initializeDebugManager } from './utils/debug-manager.js';
 import { DefaultRoomManager } from './utils/default-room-manager.js';
 import { TTSService } from './services/tts-service.js';
 import { applicationVersion } from './version.js';
@@ -12,14 +11,11 @@ import { loadConfiguration } from './utils/config-loader.js';
 import { PresetGenerator } from './utils/preset-generator.js';
 import type { Config, StateChangeEvent } from './types/sonos.js';
 
-// Load configuration from multiple sources
+// Load configuration from multiple sources (this will show the startup banner)
 const config: Config = loadConfiguration();
 
-// Show startup message immediately
-const hostname = os.hostname();
-logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
-logger.always(`🖥️  Host: ${hostname}`);
-logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
+// Initialize debug manager with the loaded config
+initializeDebugManager(config);
 
 // Environment variables are now handled in config-loader.ts
 
@@ -43,7 +39,7 @@ const presetLoader = new PresetLoader(config.presetDir, discovery, (presetStats)
   if (router) {
     router.updateStartupInfo('presets', presetStats);
   }
-});
+}, config);
 
 // Now create the router with all dependencies
 router = new ApiRouter(discovery, config, presetLoader, defaultRoomManager, ttsService);
@@ -291,7 +287,7 @@ async function start(): Promise<void> {
     await discovery.start();
     
     // Show detected IP for TTS after discovery starts
-    const ttsHostIp = process.env.TTS_HOST_IP;
+    const ttsHostIp = config.ttsHostIp;
     if (!ttsHostIp) {
       // Wait a moment for discovery to find devices
       await new Promise(resolve => setTimeout(resolve, 1000));

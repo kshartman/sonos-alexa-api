@@ -1,11 +1,13 @@
 import { readFileSync } from 'fs';
+import os from 'os';
 import logger from './logger.js';
+import { applicationVersion } from '../version.js';
 import type { Config, WebhookConfig } from '../types/sonos.js';
 
 /**
  * Default configuration values
  */
-const defaultConfig: Config = {
+const defaultConfig: Partial<Config> = {
   host: '0.0.0.0',
   port: 5005,
   announceVolume: 40,
@@ -42,8 +44,8 @@ function parseBooleanEnv(value: string | undefined): boolean | undefined {
  * 3. Environment variables (highest priority)
  */
 export function loadConfiguration(): Config {
-  // Start with defaults
-  let config: Config = { ...defaultConfig };
+  // Start with defaults (we'll add computed fields at the end)
+  let config = { ...defaultConfig } as any;
 
   // Load settings.json if exists
   try {
@@ -53,6 +55,11 @@ export function loadConfiguration(): Config {
     // Deep merge settings into config
     config = deepMerge(config as unknown as Record<string, unknown>, settings) as unknown as Config;
     
+    // Normalize logger field if it exists in settings
+    if (config.logger && typeof config.logger === 'string') {
+      config.logger = config.logger.toLowerCase();
+    }
+    
     logger.info('Loaded settings from settings.json');
   } catch (_error) {
     // settings.json is optional
@@ -61,10 +68,23 @@ export function loadConfiguration(): Config {
 
   // Apply environment variable overrides
   
+  // Environment settings (read first as they might affect other behavior)
+  if (process.env.NODE_ENV) config.nodeEnv = process.env.NODE_ENV;
+  if (process.env.LOGGER) config.logger = process.env.LOGGER.toLowerCase();
+  
   // Server configuration
   if (process.env.HOST) config.host = process.env.HOST;
   if (process.env.PORT) config.port = parseInt(process.env.PORT, 10);
   if (process.env.ANNOUNCE_VOLUME) config.announceVolume = parseInt(process.env.ANNOUNCE_VOLUME, 10);
+  if (process.env.TTS_HOST_IP) config.ttsHostIp = process.env.TTS_HOST_IP;
+  
+  // Logging configuration
+  if (process.env.LOG_LEVEL || process.env.DEBUG_LEVEL) {
+    config.logLevel = process.env.LOG_LEVEL || process.env.DEBUG_LEVEL || config.logLevel;
+  }
+  if (process.env.DEBUG_CATEGORIES) {
+    config.debugCategories = parseArrayEnv(process.env.DEBUG_CATEGORIES);
+  }
   
   // Authentication
   if (process.env.AUTH_USERNAME || process.env.AUTH_PASSWORD) {
@@ -177,9 +197,33 @@ export function loadConfiguration(): Config {
     configSources.push(`env vars (${envOverrides.join(', ')})`);
   }
   
+  // Apply log level to logger before showing startup banner
+  if (config.logLevel) {
+    logger.level = config.logLevel;
+  }
+  
+  // Show startup banner first
+  const hostname = os.hostname();
+  logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
+  logger.always(`🖥️  Host: ${hostname}`);
+  logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
+  
   logger.info(`Configuration loaded from: ${configSources.join(' → ')}`);
   
-  return config;
+  // Add computed environment helpers
+  const finalConfig = config as Config;
+  Object.defineProperty(finalConfig, 'isDevelopment', {
+    value: !config.nodeEnv || config.nodeEnv === '' || config.nodeEnv === 'development',
+    writable: false,
+    enumerable: true
+  });
+  Object.defineProperty(finalConfig, 'isProduction', {
+    value: config.nodeEnv === 'production',
+    writable: false,
+    enumerable: true
+  });
+  
+  return finalConfig;
 }
 
 /**
@@ -188,7 +232,9 @@ export function loadConfiguration(): Config {
 function getEnvironmentOverrides(): string[] {
   const overrides: string[] = [];
   const envVars = [
+    'NODE_ENV', 'LOGGER', 'TTS_HOST_IP',
     'HOST', 'PORT', 'ANNOUNCE_VOLUME',
+    'LOG_LEVEL', 'DEBUG_LEVEL', 'DEBUG_CATEGORIES',
     'AUTH_USERNAME', 'AUTH_PASSWORD', 'AUTH_REJECT_UNAUTHORIZED', 'AUTH_TRUSTED_NETWORKS',
     'TTS_PROVIDER', 'TTS_LANG', 'TTS_VOICE', 'TTS_ENDPOINT', 'TTS_API_KEY',
     'TTS_MACOS_VOICE', 'TTS_MACOS_RATE',

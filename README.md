@@ -85,6 +85,8 @@ TTS_HOST_IP=192.168.1.100        # Optional - auto-detected if not set
 # Logging & Debug
 LOG_LEVEL=info                    # error, warn, info, debug, trace
 DEBUG_CATEGORIES=api,discovery    # api,discovery,soap,topology,favorites,presets,upnp,sse,all
+NODE_ENV=development              # development or production
+LOGGER=winston                    # winston or pino
 
 # Authentication (optional)
 AUTH_USERNAME=admin

@@ -87,12 +87,8 @@ if (loggerType === 'winston') {
       return (winstonLogger as any).trace(message, ...args); // ANY REQUIRED: Winston doesn't have trace method in types
     }, // Alias for trace (deprecated)
     always: (message: string, ...args: unknown[]) => {
-      // Always log to console, bypassing Winston's level check
-      if (args.length === 0) {
-        console.log(message);
-      } else {
-        console.log(message, ...args);
-      }
+      // Always log at info level to ensure it's visible
+      winstonLogger.info(message, ...args);
     },
     get level() { return winstonLogger.level; },
     set level(level: string) { 
@@ -178,11 +174,12 @@ if (loggerType === 'winston') {
       }
     },
     always: (message: string, ...args: unknown[]) => {
-      // Always log to console, bypassing Pino's level check
-      if (args.length === 0) {
-        console.log(message);
+      // Always log at info level to ensure it's visible
+      const [meta] = args;
+      if (typeof meta === 'object' && meta !== null) {
+        pinoLogger.info(meta, message);
       } else {
-        console.log(message, ...args);
+        pinoLogger.info(message, meta);
       }
     },
     get level() { return pinoLogger.level; },

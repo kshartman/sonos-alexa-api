@@ -50,7 +50,7 @@ if ! docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER}$"; then
     exit 1
 fi
 
-# Function to count failures in time window
+# Function to count failures in time window (handles both Winston and Pino formats)
 count_failures_in_window() {
     local hours="$1"
     local since_time
@@ -62,10 +62,13 @@ count_failures_in_window() {
     esac
     
     # Get logs once and count all patterns
+    # Handle both Winston format and Pino JSON format
     local logs=$(docker logs "$CONTAINER" --since "$since_time" 2>&1)
-    local missing=$(echo "$logs" | grep -c "Missing authentication from" || echo 0)
-    local invalid=$(echo "$logs" | grep -c "Invalid authorization header from" || echo 0)
-    local failed=$(echo "$logs" | grep -c "Authentication failed for user" || echo 0)
+    
+    # For Pino JSON logs, extract the msg field; for Winston, grep directly
+    local missing=$(echo "$logs" | grep -E "(Missing authentication from|\"msg\":\"Missing authentication from)" | wc -l)
+    local invalid=$(echo "$logs" | grep -E "(Invalid authorization header from|\"msg\":\"Invalid authorization header from)" | wc -l)
+    local failed=$(echo "$logs" | grep -E "(Authentication failed for user|\"msg\":\"Authentication failed for user)" | wc -l)
     
     echo $((missing + invalid + failed))
 }
@@ -99,7 +102,7 @@ if [[ "$CRON_MODE" == "true" ]]; then
         echo -e "$warnings"
         echo "Top offending IPs (last 24 hours):"
         docker logs "$CONTAINER" --since "24 hours ago" 2>&1 | \
-            grep -E "(Missing authentication|Invalid authorization header|Authentication failed)" | \
+            grep -E "(Missing authentication|Invalid authorization header|Authentication failed|\"msg\":\"(Missing authentication|Invalid authorization header|Authentication failed))" | \
             grep -oE "from [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
             sed 's/from //' | \
             sort | uniq -c | sort -rn | head -5 | \
@@ -132,22 +135,22 @@ echo "----------------------------------------------------"
 LOGS_1H=$(docker logs "$CONTAINER" --since "1 hour ago" 2>&1)
 LOGS_8H=$(docker logs "$CONTAINER" --since "8 hours ago" 2>&1)
 
-# Missing authentication
-missing_1h=$(echo "$LOGS_1H" | grep -c "Missing authentication from" || echo 0)
-missing_8h=$(echo "$LOGS_8H" | grep -c "Missing authentication from" || echo 0)
-missing_24h=$(echo "$LOGS_24H" | grep -c "Missing authentication from" || echo 0)
+# Missing authentication (handle both Winston and Pino formats)
+missing_1h=$(echo "$LOGS_1H" | grep -E "(Missing authentication from|\"msg\":\"Missing authentication from)" | wc -l)
+missing_8h=$(echo "$LOGS_8H" | grep -E "(Missing authentication from|\"msg\":\"Missing authentication from)" | wc -l)
+missing_24h=$(echo "$LOGS_24H" | grep -E "(Missing authentication from|\"msg\":\"Missing authentication from)" | wc -l)
 printf "%-23s %6d    %7d   %8d\n" "Missing Auth" "$missing_1h" "$missing_8h" "$missing_24h"
 
 # Invalid headers
-invalid_1h=$(echo "$LOGS_1H" | grep -c "Invalid authorization header from" || echo 0)
-invalid_8h=$(echo "$LOGS_8H" | grep -c "Invalid authorization header from" || echo 0)
-invalid_24h=$(echo "$LOGS_24H" | grep -c "Invalid authorization header from" || echo 0)
+invalid_1h=$(echo "$LOGS_1H" | grep -E "(Invalid authorization header from|\"msg\":\"Invalid authorization header from)" | wc -l)
+invalid_8h=$(echo "$LOGS_8H" | grep -E "(Invalid authorization header from|\"msg\":\"Invalid authorization header from)" | wc -l)
+invalid_24h=$(echo "$LOGS_24H" | grep -E "(Invalid authorization header from|\"msg\":\"Invalid authorization header from)" | wc -l)
 printf "%-23s %6d    %7d   %8d\n" "Invalid Header" "$invalid_1h" "$invalid_8h" "$invalid_24h"
 
 # Failed credentials
-failed_1h=$(echo "$LOGS_1H" | grep -c "Authentication failed for user" || echo 0)
-failed_8h=$(echo "$LOGS_8H" | grep -c "Authentication failed for user" || echo 0)
-failed_24h=$(echo "$LOGS_24H" | grep -c "Authentication failed for user" || echo 0)
+failed_1h=$(echo "$LOGS_1H" | grep -E "(Authentication failed for user|\"msg\":\"Authentication failed for user)" | wc -l)
+failed_8h=$(echo "$LOGS_8H" | grep -E "(Authentication failed for user|\"msg\":\"Authentication failed for user)" | wc -l)
+failed_24h=$(echo "$LOGS_24H" | grep -E "(Authentication failed for user|\"msg\":\"Authentication failed for user)" | wc -l)
 printf "%-23s %6d    %7d   %8d\n" "Bad Credentials" "$failed_1h" "$failed_8h" "$failed_24h"
 
 # Totals
@@ -158,7 +161,7 @@ echo
 echo "=== Top Offending IPs (last 24 hours) ==="
 echo
 echo "$LOGS_24H" | \
-    grep -E "(Missing authentication|Invalid authorization header|Authentication failed)" | \
+    grep -E "(Missing authentication|Invalid authorization header|Authentication failed|\"msg\":\"(Missing authentication|Invalid authorization header|Authentication failed))" | \
     grep -oE "from [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | \
     sed 's/from //' | \
     sort | uniq -c | sort -rn | head -10 | \
@@ -168,7 +171,7 @@ echo
 echo "=== Failed Username Attempts (last 24 hours) ==="
 echo
 echo "$LOGS_24H" | \
-    grep "Authentication failed for user" | \
+    grep -E "(Authentication failed for user|\"msg\":\"Authentication failed for user)" | \
     grep -oE "user '[^']+'" | \
     sed "s/user '//" | sed "s/'//" | \
     sort | uniq -c | sort -rn | head -10 | \
@@ -178,5 +181,5 @@ echo
 echo "=== Recent Failures (last 10) ==="
 echo
 echo "$LOGS_24H" | \
-    grep -E "(Missing authentication|Invalid authorization header|Authentication failed)" | \
+    grep -E "(Missing authentication|Invalid authorization header|Authentication failed|\"msg\":\"(Missing authentication|Invalid authorization header|Authentication failed))" | \
     tail -10

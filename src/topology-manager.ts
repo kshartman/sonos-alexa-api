@@ -28,7 +28,7 @@ export declare interface TopologyManager {
   on(event: 'topology-change', listener: (event: TopologyChangeEvent) => void): this;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, no-redeclare
 export class TopologyManager extends EventEmitter {
   private zones: ZoneGroup[] = [];
   public xmlParser: XMLParser;

@@ -8,7 +8,7 @@ import { debugManager } from './utils/debug-manager.js';
 import { SonosDevice } from './sonos-device.js';
 import { UPnPSubscriber } from './upnp/subscriber.js';
 import { TopologyManager } from './topology-manager.js';
-import type { DeviceInfo, Zone, SonosState } from './types/sonos.js';
+import type { DeviceInfo, Zone, SonosState, SonosTrack } from './types/sonos.js';
 import type { ZoneGroup } from './topology-manager.js';
 
 const SSDP_ADDRESS = '239.255.255.250';
@@ -21,11 +21,10 @@ export declare interface SonosDiscovery {
   on(event: 'device-state-change', listener: (device: SonosDevice, state: SonosState, previousState?: Partial<SonosState>) => void): this;
   on(event: 'topology-change', listener: (zones: ZoneGroup[]) => void): this;
   on(event: 'content-update', listener: (deviceId: string, containerUpdateIDs: string) => void): this;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: any; currentTrack: any; timestamp: number }) => void): this; // ANY IS CORRECT: tracks may be null or SonosTrack type
+  on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: SonosTrack | null; currentTrack: SonosTrack | null; timestamp: number }) => void): this;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, no-redeclare
 export class SonosDiscovery extends EventEmitter {
   public readonly devices = new Map<string, SonosDevice>();
   private socket?: dgram.Socket;

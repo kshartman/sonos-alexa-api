@@ -369,7 +369,7 @@ export class MusicLibraryCache {
     artists: Array<{ name: string; trackCount: number }>;
     albums: Array<{ name: string; trackCount: number }>;
     artistList: string[];
-  } {
+    } {
     // Convert tracks Map to array
     const tracks = Array.from(this.tracks.values());
     
@@ -399,7 +399,7 @@ export class MusicLibraryCache {
     totalAlbums: number;
     topArtists: Array<{ name: string; trackCount: number }>;
     topAlbums: Array<{ name: string; trackCount: number }>;
-  } {
+    } {
     const artists = Array.from(this.artistIndex.entries()).map(([name, trackIds]) => ({
       name,
       trackCount: trackIds.size

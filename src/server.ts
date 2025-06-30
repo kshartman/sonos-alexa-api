@@ -21,7 +21,6 @@ const config: Config = loadConfiguration();
 const discovery = new SonosDiscovery();
 // Make discovery globally available for devices to access subscriber
 declare global {
-  // eslint-disable-next-line no-var
   var discovery: SonosDiscovery | undefined;
 }
 global.discovery = discovery;
@@ -31,7 +30,6 @@ const defaultRoomManager = new DefaultRoomManager(config.dataDir || './data', co
 const ttsService = new TTSService(config);
 
 // Create a temporary router variable that will be initialized later
-// eslint-disable-next-line prefer-const
 let router: ApiRouter;
 
 // Create preset loader with callback to update startup info

@@ -140,6 +140,7 @@ Temporary Items
 /test-output*.log
 /test-results/
 /test-reports/
+/test/results/
 *.test.json
 *.test.log
 /cache/

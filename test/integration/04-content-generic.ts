@@ -39,12 +39,18 @@ describe('Generic Content Integration Tests', { skip: skipIntegration, timeout: 
   after(async () => {
     console.log('\n🧹 Cleaning up Generic Content tests...\n');
     
-    // Stop playback
+    // Stop playback and wait for confirmation
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
     await eventManager.waitForState(deviceId, 'STOPPED', 5000);
     
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('Text-to-Speech (TTS)', () => {

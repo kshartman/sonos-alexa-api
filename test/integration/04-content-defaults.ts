@@ -87,12 +87,18 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       await fetch(`${defaultConfig.apiUrl}/default/service/${originalDefaults.musicService}`);
     }
     
-    // Stop playback
+    // Stop playback and wait for confirmation
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
     await eventManager.waitForState(deviceId, 'STOPPED', 5000);
     
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('Default Settings Management', () => {

@@ -9,10 +9,11 @@ export async function loadTestContent(room: string): Promise<boolean> {
   console.log('📻 Loading content for testing...');
   
   // Try multiple methods in order of preference
+  // Songs and playlists load faster than radio stations, so try favorites last
   const methods = [
-    () => loadFromFavorites(room),
     () => loadFromMusicSearch(room),
     () => loadFromPlaylists(room),
+    () => loadFromFavorites(room),
   ];
   
   for (const method of methods) {

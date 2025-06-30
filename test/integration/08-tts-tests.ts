@@ -35,13 +35,15 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
     // Get device ID for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
     const zones = await zonesResponse.json();
-    const device = zones.flatMap(z => z.members).find(m => m.roomName === room);
+    const zone = zones.find(z => z.members.some(m => m.roomName === room));
     
-    if (!device) {
-      throw new Error(`Device not found for room ${room}`);
+    if (!zone) {
+      throw new Error(`Zone not found for room ${room}`);
     }
     
-    deviceId = device.id;
+    // Use coordinator device ID (important for stereo pairs)
+    const coordinatorMember = zone.members.find(m => m.isCoordinator);
+    deviceId = coordinatorMember.id;
     console.log(`   Device ID: ${deviceId}`);
     
     // Get initial volume
@@ -51,15 +53,29 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
   });
   
   after(async () => {
-    // Restore original volume
+    console.log('\n🧹 Cleaning up TTS tests...\n');
+    
+    // Stop playback
     if (room) {
-      await fetch(`${defaultConfig.apiUrl}/${room}/volume/${originalVolume}`);
       await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
     }
     
+    // Restore original volume
+    if (room && originalVolume > 0) {
+      await fetch(`${defaultConfig.apiUrl}/${room}/volume/${originalVolume}`);
+      console.log(`✅ Restored volume to ${originalVolume}`);
+    }
+    
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
-    console.log('   ✓ TTS tests complete');
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✓ TTS tests complete');
   });
   
   describe('Core TTS Functionality', () => {

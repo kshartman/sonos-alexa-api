@@ -4,6 +4,12 @@ import type { SonosDevice } from '../sonos-device.js';
 import type { ZoneGroup } from '../topology-manager.js';
 import type { SonosTrack } from '../types/sonos.js';
 
+// Helper function to compare device IDs, handling uuid: prefix
+function compareDeviceIds(id1: string, id2: string): boolean {
+  const stripUuid = (id: string) => id.startsWith('uuid:') ? id.substring(5) : id;
+  return stripUuid(id1) === stripUuid(id2);
+}
+
 export interface StateChangeEvent {
   deviceId: string;
   roomName: string;
@@ -108,7 +114,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const stateHandler = (event: StateChangeEvent) => {
-        if (event.deviceId === deviceId) {
+        if (compareDeviceIds(event.deviceId, deviceId)) {
           const matches = typeof targetState === 'function' 
             ? targetState(event.currentState)
             : event.currentState === targetState;
@@ -134,7 +140,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const stateHandler = (event: StateChangeEvent) => {
-        if (event.deviceId === deviceId && event.currentState !== 'TRANSITIONING') {
+        if (compareDeviceIds(event.deviceId, deviceId) && event.currentState !== 'TRANSITIONING') {
           clearTimeout(timeoutId);
           this.off('state-change', stateHandler);
           resolve(event.currentState);
@@ -154,7 +160,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const volumeHandler = (event: VolumeChangeEvent) => {
-        if (event.deviceId === deviceId && event.currentVolume === targetVolume) {
+        if (compareDeviceIds(event.deviceId, deviceId) && event.currentVolume === targetVolume) {
           clearTimeout(timeoutId);
           this.off('volume-change', volumeHandler);
           resolve(true);
@@ -198,7 +204,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const muteHandler = (event: MuteChangeEvent) => {
-        if (event.deviceId === deviceId && event.currentMute === targetMute) {
+        if (compareDeviceIds(event.deviceId, deviceId) && event.currentMute === targetMute) {
           clearTimeout(timeoutId);
           this.off('mute-change', muteHandler);
           resolve(true);
@@ -218,7 +224,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const contentHandler = (event: ContentUpdateEvent) => {
-        if (event.deviceId === deviceId) {
+        if (compareDeviceIds(event.deviceId, deviceId)) {
           clearTimeout(timeoutId);
           this.off('content-update', contentHandler);
           resolve(event.containerUpdateIDs);
@@ -256,7 +262,7 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const trackHandler = (event: TrackChangeEvent) => {
-        if (event.deviceId === deviceId) {
+        if (compareDeviceIds(event.deviceId, deviceId)) {
           clearTimeout(timeoutId);
           this.off('track-change', trackHandler);
           resolve(true);

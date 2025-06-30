@@ -78,10 +78,16 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     // Get device IDs for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
     const zones = await zonesResponse.json();
-    const device1 = zones.flatMap(z => z.members).find(m => m.roomName === room1);
-    const device2 = zones.flatMap(z => z.members).find(m => m.roomName === room2);
-    device1Id = device1.id;
-    device2Id = device2.id;
+    const zone1 = zones.find(z => z.members.some(m => m.roomName === room1));
+    const zone2 = zones.find(z => z.members.some(m => m.roomName === room2));
+    
+    if (!zone1 || !zone2) {
+      throw new Error(`Zones not found for rooms ${room1} and ${room2}`);
+    }
+    
+    // Use coordinator device IDs (important for stereo pairs)
+    device1Id = zone1.id;
+    device2Id = zone2.id;
     
     console.log(`   Device IDs: ${device1Id}, ${device2Id}`);
   });
@@ -92,11 +98,21 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
   });
   
   after(async () => {
+    console.log('\n🧹 Cleaning up Group Management tests...\n');
+    
     // Ungroup all speakers to clean up
     await ungroupAllSpeakers();
     
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✓ Group management tests complete');
   });
   
   describe('Group Formation', () => {

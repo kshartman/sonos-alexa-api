@@ -33,25 +33,36 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
     // Get device ID for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
     const zones = await zonesResponse.json();
-    const device = zones.flatMap(z => z.members).find(m => m.roomName === room);
+    const zone = zones.find(z => z.members.some(m => m.roomName === room));
     
-    if (!device) {
-      throw new Error(`Device not found for room ${room}`);
+    if (!zone) {
+      throw new Error(`Zone not found for room ${room}`);
     }
     
-    deviceId = device.id;
+    // Use coordinator device ID (important for stereo pairs)
+    const coordinatorMember = zone.members.find(m => m.isCoordinator);
+    deviceId = coordinatorMember.id;
     console.log(`   Device ID: ${deviceId}`);
   });
   
   after(async () => {
-    // Clean up
+    console.log('\n🧹 Cleaning up Advanced Features tests...\n');
+    
+    // Stop playback
     if (room) {
       await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
     }
     
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
-    console.log('   ✓ Advanced features tests complete');
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    console.log('✓ Advanced features tests complete');
   });
   
   describe('Sleep Timer', () => {

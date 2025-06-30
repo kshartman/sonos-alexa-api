@@ -91,7 +91,10 @@ export class EventBridge {
     if (data.type === 'device-state-change') {
       logger.debug(`EventBridge: State change for ${data.data.room} - volume: ${data.data.state?.volume}, mute: ${data.data.state?.mute}`);
       const roomName = data.data.room;
-      const deviceId = data.data.deviceId || this.deviceIdMap.get(roomName) || roomName;
+      const eventDeviceId = data.data.deviceId;
+      const mappedDeviceId = this.deviceIdMap.get(roomName);
+      
+      const deviceId = eventDeviceId || mappedDeviceId || roomName;
       const newState = data.data.state.playbackState;
       const previousState = data.data.previousState?.playbackState || 'UNKNOWN';
       
@@ -228,6 +231,10 @@ export async function startEventBridge(): Promise<void> {
     bridgeInstance = new EventBridge();
   }
   await bridgeInstance.connect();
+  
+  // Wait for the event bridge to be fully ready and for any initial events to settle
+  console.log('⏳ Waiting for event bridge to establish...');
+  await new Promise(resolve => setTimeout(resolve, 2000));
 }
 
 export function stopEventBridge(): void {

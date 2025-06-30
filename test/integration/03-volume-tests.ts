@@ -36,8 +36,9 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
     
     // For stereo pairs, we need to track events from all member devices
     deviceIds = zone.members.map(m => m.id);
-    // Use the first member's ID (coordinator) as primary
-    deviceId = deviceIds[0];
+    // Use the coordinator's ID as primary
+    const coordinator = zone.members.find(m => m.isCoordinator);
+    deviceId = coordinator.id;
     console.log(`Test room: ${testRoom}, Device IDs: ${deviceIds.join(', ')}`);
     
     // Save original state
@@ -83,8 +84,14 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       console.log(`✅ Restored volume to ${originalVolume}`);
     }
     
+    // Clear any pending event listeners
+    eventManager.reset();
+    
     // Stop event bridge
     stopEventBridge();
+    
+    // Give a moment for cleanup to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   describe('Basic Volume Control', () => {

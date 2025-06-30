@@ -13,6 +13,7 @@ import { AccountService } from './services/account-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
 import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
+import { ServicesCache } from './utils/services-cache.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams) => Promise<ApiResponse>;
 
@@ -25,6 +26,7 @@ export class ApiRouter {
   private appleMusicService: AppleMusicService;
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
+  private servicesCache: ServicesCache;
   private routes = new Map<string, RouteHandler>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private startupInfo: any = { // ANY IS CORRECT: startup info contains dynamic properties added at runtime
@@ -43,8 +45,25 @@ export class ApiRouter {
     this.ttsService = ttsService!;
     this.appleMusicService = new AppleMusicService();
     this.accountService = new AccountService();
+    this.servicesCache = new ServicesCache(discovery);
     
     this.registerRoutes();
+  }
+
+  async initialize(): Promise<void> {
+    // Initialize services cache
+    try {
+      await this.servicesCache.initialize();
+      this.updateStartupInfo('services', this.servicesCache.getStatus());
+    } catch (error) {
+      logger.error('Failed to initialize services cache:', error);
+      this.updateStartupInfo('errors', {
+        servicesCache: (error as Error).message
+      });
+    }
+    
+    // Initialize music library
+    await this.initializeMusicLibrary();
   }
 
   async initializeMusicLibrary(): Promise<void> {
@@ -96,6 +115,11 @@ export class ApiRouter {
     return this.musicLibraryCache;
   }
 
+  destroy(): void {
+    this.servicesCache.destroy();
+    logger.info('Services cache cleaned up');
+  }
+
   private registerRoutes(): void {
     // System routes
     this.routes.set('GET /zones', this.getZones.bind(this));
@@ -105,6 +129,8 @@ export class ApiRouter {
     this.routes.set('GET /state', this.getState.bind(this));
     this.routes.set('GET /health', this.getHealth.bind(this));
     this.routes.set('GET /presets', this.getPresets.bind(this));
+    this.routes.set('GET /services', this.getServices.bind(this));
+    this.routes.set('GET /services/refresh', this.refreshServices.bind(this));
     this.routes.set('GET /presets/{detailed}', this.getPresets.bind(this));
 
     // Room-specific routes
@@ -431,6 +457,51 @@ export class ApiRouter {
       }
     };
   }
+
+  private async getServices(): Promise<ApiResponse> {
+    try {
+      const services = await this.servicesCache.getServices();
+      return { 
+        status: 200, 
+        body: services
+      };
+    } catch (error) {
+      logger.error('Failed to get services:', error);
+      return { 
+        status: 500, 
+        body: { 
+          error: 'Failed to get services', 
+          message: error instanceof Error ? error.message : 'Unknown error' 
+        } 
+      };
+    }
+  }
+
+  private async refreshServices(): Promise<ApiResponse> {
+    try {
+      await this.servicesCache.refresh();
+      const status = this.servicesCache.getStatus();
+      
+      return { 
+        status: 200, 
+        body: {
+          message: 'Services cache refreshed successfully',
+          serviceCount: status.serviceCount,
+          lastRefresh: status.lastRefresh
+        }
+      };
+    } catch (error) {
+      logger.error('Failed to refresh services:', error);
+      return { 
+        status: 500, 
+        body: { 
+          error: 'Failed to refresh services', 
+          message: error instanceof Error ? error.message : 'Unknown error' 
+        } 
+      };
+    }
+  }
+
 
   private parseStereoRole(device: SonosDevice, channelMapSet?: string): { role: string; groupId: string } | undefined {
     if (!channelMapSet) return undefined;

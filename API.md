@@ -73,6 +73,49 @@ GET /settings
 ```
 Returns current server settings (sanitized).
 
+### Get Music Services
+```
+GET /services
+```
+Returns all available music services configured in the Sonos system. Results are cached for 24 hours.
+
+Example response:
+```json
+{
+  "254": {
+    "id": 254,
+    "name": "TuneIn",
+    "internalName": "TuneIn",
+    "uri": "https://legato.radiotime.com/Radio.asmx",
+    "type": "tunein",
+    "isTuneIn": true,
+    "isPersonalized": false
+  },
+  "9223": {
+    "id": 9223,
+    "name": "HEARTS of SPACE",
+    "type": "unknown",
+    "isTuneIn": false,
+    "isPersonalized": false
+  }
+}
+```
+
+### Refresh Music Services
+```
+GET /services/refresh
+```
+Manually refresh the services cache. Returns refresh status.
+
+Example response:
+```json
+{
+  "message": "Services cache refreshed successfully",
+  "serviceCount": 101,
+  "lastRefresh": "2025-06-30T08:03:31.670Z"
+}
+```
+
 ## Music Library
 
 ### Get Library Status

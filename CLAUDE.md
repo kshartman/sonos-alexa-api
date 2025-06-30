@@ -275,6 +275,7 @@ test/
   - Search by song, artist, album
   - Periodic reindex via library.reindexInterval setting
   - Progress tracking during indexing
+  - API endpoints: /library/index, /library/refresh, /library/summary, /library/detailed
 - Documentation updates:
   - Modular OpenAPI spec in apidoc/ folder
   - Updated README with complete API endpoints
@@ -313,6 +314,13 @@ test/
 - Logger improvements:
   - NODE_ENV defaults to development when not set (enables colorized output)
   - Respects LOG_LEVEL and DEBUG_CATEGORIES from environment/dotenv
+- Music Services API:
+  - Added /services endpoint to get all available music services
+  - Added /services/refresh endpoint to manually refresh services cache
+  - Automatic 24-hour cache refresh with retry on failure
+  - Proper identification of personalized services (e.g., user-specific TuneIn accounts)
+  - Service name resolution from presentation strings
+  - Content analysis now uses services API for accurate service identification
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML

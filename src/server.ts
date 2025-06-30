@@ -255,6 +255,9 @@ async function shutdown(): Promise<void> {
     logger.info('Music library cache cleaned up');
   }
   
+  // Clean up services cache
+  router.destroy();
+  
   // Clean up TTS service
   ttsService.destroy();
   logger.info('TTS service cleaned up');
@@ -392,7 +395,7 @@ async function start(): Promise<void> {
       
       // Initialize music library cache in the background
       logger.info('📚 Initializing music library cache...');
-      router.initializeMusicLibrary().then(() => {
+      router.initialize().then(() => {
         // Get cache status to show counts
         const cacheStatus = router.getMusicLibraryCacheStatus();
         if (cacheStatus && cacheStatus.metadata) {

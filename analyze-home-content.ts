@@ -24,6 +24,27 @@ interface Preset {
 const API_URL = process.argv[2] || 'http://localhost:5005';
 const ROOM_NAME = process.argv[3] || 'ShanesOfficeSpeakers';
 
+// Cache for services lookup
+let servicesCache: Record<string, any> | null = null;
+
+async function getServices(): Promise<Record<string, any>> {
+  if (!servicesCache) {
+    try {
+      const res = await fetch(`${API_URL}/services`);
+      if (res.ok) {
+        servicesCache = await res.json();
+      } else {
+        console.warn('Could not fetch services from API');
+        servicesCache = {};
+      }
+    } catch (error) {
+      console.warn('Error fetching services:', error);
+      servicesCache = {};
+    }
+  }
+  return servicesCache;
+}
+
 async function generateContentAnalysis(): Promise<string> {
   let output = '# Content Analysis\n\n';
   output += `Generated: ${new Date().toISOString().split('T')[0]}\n`;
@@ -93,10 +114,10 @@ async function generateContentAnalysis(): Promise<string> {
   
   // Services breakdown
   const serviceMap: Record<string, number> = {};
-  favorites.forEach((f: any) => {
+  for (const f of favorites) {
     if (!f.uri) {
       console.warn('Favorite missing URI in services breakdown:', f.title);
-      return;
+      continue;
     }
     const uriType = f.uri.split(':')[0];
     let service = 'Unknown';
@@ -113,22 +134,70 @@ async function generateContentAnalysis(): Promise<string> {
       service = 'MP3 Radio Stream';
     } else if (uriType === 'file') {
       service = 'Local File (Unsupported)';
+    } else if (uriType === 'x-sonosapi-stream') {
+      // x-sonosapi-stream without metadata is typically TuneIn
+      service = 'TuneIn';
     } else if (f.metadata) {
-      const serviceMatch = f.metadata.match(/SA_RINCON(\d+)/);
+      // First check for standard service IDs
+      const serviceMatch = f.metadata.match(/SA_RINCON(\d+)(?:_|$)/);
       if (serviceMatch) {
-        service = {
-          '60423': 'Pandora',
-          '77575': 'TuneIn', 
-          '52231': 'Apple Music',
-          '236': 'Pandora',
-          '303': 'TuneIn',
-          '204': 'Apple Music'
-        }[serviceMatch[1]] || `Service ${serviceMatch[1]}`;
+        const serviceId = serviceMatch[1];
+        const services = await getServices();
+        
+        // Check if we have this service in our dynamic list
+        if (services[serviceId]) {
+          service = services[serviceId].name;
+          // Special handling for personalized services
+          if (services[serviceId].isPersonalized && services[serviceId].isTuneIn) {
+            service = 'TuneIn';
+          }
+        } else {
+          // Fall back to hardcoded mappings for legacy/common services
+          service = {
+            '204': 'Sonos Radio',
+            '254': 'TuneIn',
+            '236': 'Pandora',
+            '9': 'Spotify',
+            '13': 'Amazon Music',
+            '368': 'YouTube Music',
+            '7': 'Deezer',
+            '166': 'iHeartRadio',
+            '15': 'Napster',
+            '259': 'Qobuz',
+            '160': 'Tidal',
+            '38': 'SiriusXM',
+            '216': 'SoundCloud',
+            '350': 'Audacy',
+            '518': 'Bandcamp',
+            '550': 'BBC Sounds',
+            '248': 'Calm Radio',
+            '302': 'Idagio',
+            '275': 'Plex',
+            '331': 'Datpiff',
+            '444': 'Amazon Audible',
+            '452': 'Hoopla',
+            // Service-specific metadata IDs
+            '9223': 'HEARTS of SPACE',
+            '51463': 'RadioApp',
+            // Legacy mappings
+            '60423': 'Pandora',
+            '77575': 'TuneIn',
+            '52231': 'Apple Music',
+            '303': 'TuneIn'
+          }[serviceId] || `Service ${serviceId}`;
+        }
+      } else {
+        // Check for extended format (e.g., SA_RINCON85255_X_#Svc85255-0-Token)
+        // These are typically TuneIn stations with user-specific service IDs
+        const extendedMatch = f.metadata.match(/SA_RINCON(\d{5,})_X_/);
+        if (extendedMatch && (uriType === 'x-sonosapi-stream' || uriType === 'x-sonosapi-radio')) {
+          service = 'TuneIn';
+        }
       }
     }
     
     serviceMap[service] = (serviceMap[service] || 0) + 1;
-  });
+  }
   
   output += '### Services Breakdown:\n';
   Object.entries(serviceMap).forEach(([service, count]) => {
@@ -153,9 +222,9 @@ async function generateContentAnalysis(): Promise<string> {
   output += '\n## Detailed Analysis\n\n';
   output += '### Favorites by Type\n\n';
   
-  Object.entries(favoritesByType).sort().forEach(([type, items]) => {
+  for (const [type, items] of Object.entries(favoritesByType).sort()) {
     output += `#### ${type} (${items.length} items)\n`;
-    items.forEach(item => {
+    for (const item of items) {
       output += `- ${item.title}`;
       
       // Add extra details based on type
@@ -167,24 +236,89 @@ async function generateContentAnalysis(): Promise<string> {
         }
       } else if (type === 'x-file-cifs') {
         output += ` → Path: ${item.uri.substring(13)}`;
-      } else if (type === 'x-sonosapi-radio' || type === 'x-sonosapi-stream') {
+      } else if (type === 'x-sonosapi-radio' || type === 'x-sonosapi-stream' || type === 'x-sonosapi-hls-static') {
         const serviceMatch = item.metadata?.match(/SA_RINCON(\d+)/);
         if (serviceMatch) {
-          const serviceName = {
-            '60423': 'Pandora',
-            '77575': 'TuneIn',
-            '52231': 'Apple Music',
-            '236': 'Pandora',
-            '303': 'TuneIn',
-            '204': 'Apple Music'
-          }[serviceMatch[1]] || 'Unknown';
+          const serviceId = serviceMatch[1];
+          const services = await getServices();
+          let serviceName = 'Unknown';
+          
+          // Check if we have this service in our dynamic list
+          if (services[serviceId]) {
+            serviceName = services[serviceId].name;
+            // Special handling for personalized services
+            if (services[serviceId].isPersonalized && services[serviceId].isTuneIn) {
+              serviceName = 'TuneIn';
+            }
+          } else {
+            // Fall back to hardcoded mappings for legacy/common services
+            serviceName = {
+              '204': 'Sonos Radio',  // Also Apple Music - differentiated by URI
+              '254': 'TuneIn',
+              '236': 'Pandora',
+              '9': 'Spotify',
+              '13': 'Amazon Music',
+              '368': 'YouTube Music',
+              '7': 'Deezer',
+              '166': 'iHeartRadio',
+              '15': 'Napster',
+              '259': 'Qobuz',
+              '160': 'Tidal',
+              '38': 'SiriusXM',
+              '216': 'SoundCloud',
+              '350': 'Audacy',
+              '518': 'Bandcamp',
+              '550': 'BBC Sounds',
+              '248': 'Calm Radio',
+              '302': 'Idagio',
+              '275': 'Plex',
+              '331': 'Datpiff',
+              '444': 'Amazon Audible',
+              '452': 'Hoopla',
+              // Service-specific metadata IDs
+              '9223': 'HEARTS of SPACE',
+              '51463': 'RadioApp',
+              // Legacy mappings
+              '60423': 'Pandora',
+              '77575': 'TuneIn',
+              '52231': 'Apple Music',
+              '303': 'TuneIn'
+            }[serviceId] || (() => {
+              const serviceIdNum = parseInt(serviceId, 10);
+              // 5-digit IDs starting with 8 or 9 are typically user-specific TuneIn accounts
+              if (serviceIdNum >= 80000 && serviceIdNum <= 99999 && type === 'x-sonosapi-stream') {
+                return 'TuneIn';
+              }
+              return 'Unknown';
+            })();
+          }
           output += ` (${serviceName})`;
+        } else {
+          // For x-sonosapi-stream, check for extended format or default to TuneIn
+          if (type === 'x-sonosapi-stream') {
+            // Check for the extended format SA_RINCON#####_X_#Svc#####-0-Token
+            const extendedMatch = item.metadata?.match(/SA_RINCON(\d+)_X_/);
+            if (extendedMatch || !item.metadata) {
+              // These are typically TuneIn stations
+              output += ' (TuneIn)';
+            } else {
+              // Debug: what's in the metadata?
+              console.error(`Stream ${item.title} has metadata but no extended match: ${item.metadata?.substring(0, 100)}`);
+            }
+          } else if (type === 'x-sonosapi-radio' || type === 'x-sonosapi-hls-static') {
+            // Check for the extended format SA_RINCON#####_X_#Svc#####-0-Token
+            const extendedMatch = item.metadata?.match(/SA_RINCON(\d+)_X_/);
+            if (extendedMatch) {
+              // These are typically TuneIn stations with account-specific IDs
+              output += ' (TuneIn)';
+            }
+          }
         }
       }
       output += '\n';
-    });
+    }
     output += '\n';
-  });
+  }
   
   return output;
 }

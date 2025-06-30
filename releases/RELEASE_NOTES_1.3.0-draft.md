@@ -197,6 +197,63 @@ New endpoints for accessing and analyzing your local music library content.
   - `x-sonos-http:` - Direct HTTP streams
   - `x-sonosapi-hls-static:` - Static HLS content (Calm app, Sonos Radio)
 
+## 🔌 Music Services API
+
+New cached services discovery system for identifying all music services configured in your Sonos system.
+
+### New Services Endpoints
+- **GET /services** - Get all available music services (cached for 24 hours)
+- **GET /services/refresh** - Manually refresh the services cache
+
+### Features
+- Automatic service discovery using SOAP protocol
+- 24-hour cache with automatic refresh
+- Identifies personalized services (e.g., user-specific TuneIn accounts)
+- Proper service name resolution from presentation strings
+- Support for service-specific metadata IDs
+
+### Service Response Example:
+```json
+{
+  "254": {
+    "id": 254,
+    "name": "TuneIn",
+    "internalName": "TuneIn",
+    "uri": "https://legato.radiotime.com/Radio.asmx",
+    "type": "tunein",
+    "isTuneIn": true,
+    "isPersonalized": false
+  },
+  "85255": {
+    "id": 85255,
+    "name": "TuneIn",
+    "internalName": "TuneIn",
+    "type": "tunein", 
+    "isTuneIn": true,
+    "isPersonalized": true
+  },
+  "9223": {
+    "id": 9223,
+    "name": "HEARTS of SPACE",
+    "type": "unknown",
+    "isTuneIn": false,
+    "isPersonalized": false
+  }
+}
+```
+
+### Content Analysis Integration
+- analyze-content.sh now uses the services API for accurate service identification
+- Eliminates "Unknown" service labels in content reports
+- Properly identifies TuneIn stations with user-specific service IDs (80000-99999 range)
+- Maps service-specific metadata IDs (e.g., 9223 for HEARTS of SPACE)
+
+### Technical Implementation
+- ServicesCache class manages service discovery and caching
+- Automatic retry on failed refresh (1 hour delay)
+- Proper cleanup on server shutdown
+- Efficient SOAP-based discovery from coordinator devices
+
 ### Coming in Future Releases
 
 - WebSocket support for real-time device state updates

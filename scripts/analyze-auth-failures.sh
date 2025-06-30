@@ -56,9 +56,9 @@ count_failures_in_window() {
     local since_time
     
     case $hours in
-        1) since_time="1 hour ago" ;;
-        8) since_time="8 hours ago" ;;
-        24) since_time="24 hours ago" ;;
+        1) since_time="1h" ;;
+        8) since_time="8h" ;;
+        24) since_time="24h" ;;
     esac
     
     # Get logs once and count all patterns
@@ -100,7 +100,7 @@ if [[ "$CRON_MODE" == "true" ]]; then
     if [[ "$threshold_exceeded" == "true" ]]; then
         echo -e "$warnings"
         echo "Top offending IPs (last 24 hours):"
-        docker logs "$CONTAINER" --since "24 hours ago" 2>&1 | \
+        docker logs "$CONTAINER" --since "24h" 2>&1 | \
             grep -E "\"auth\":\"(missing|invalid-header|invalid-credentials)\"" | \
             grep -oE "\"ip\":\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"" | \
             sed 's/"ip":"//' | sed 's/"//' | \
@@ -122,7 +122,7 @@ echo "Time: $(date)"
 echo
 
 # Get logs once for 24h window and analyze
-LOGS_24H=$(docker logs "$CONTAINER" --since "24 hours ago" 2>&1)
+LOGS_24H=$(docker logs "$CONTAINER" --since "24h" 2>&1)
 
 # Count different types of failures
 echo "=== Failure Counts by Time Window ==="
@@ -131,8 +131,8 @@ echo "Type                    1 hour    8 hours   24 hours"
 echo "----------------------------------------------------"
 
 # Get logs for each time window
-LOGS_1H=$(docker logs "$CONTAINER" --since "1 hour ago" 2>&1)
-LOGS_8H=$(docker logs "$CONTAINER" --since "8 hours ago" 2>&1)
+LOGS_1H=$(docker logs "$CONTAINER" --since "1h" 2>&1)
+LOGS_8H=$(docker logs "$CONTAINER" --since "8h" 2>&1)
 
 # Missing authentication (structured logs)
 missing_1h=$(echo "$LOGS_1H" | grep -E "\"auth\":\"missing\"" | wc -l)

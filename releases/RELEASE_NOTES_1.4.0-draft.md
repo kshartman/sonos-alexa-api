@@ -67,6 +67,11 @@ The following features are under consideration for this release:
 - Logs missing authentication attempts with warning level
 - Logs invalid authorization headers for security monitoring
 - Helps identify potential attacks or authentication misconfigurations
+- Added `scripts/analyze-auth-failures.sh` for monitoring auth failures
+  - Interactive mode shows detailed failure analysis
+  - Cron mode for automated threshold monitoring
+  - Configurable thresholds: hourly (5), 8-hourly (10), daily (20)
+  - Shows top offending IPs when thresholds exceeded
 
 ## Architecture & Performance
 

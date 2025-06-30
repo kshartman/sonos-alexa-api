@@ -1,0 +1,101 @@
+# Sonos Alexa API v1.4.0 Release Notes (DRAFT)
+
+## Release Date: TBD
+
+## Overview
+Version 1.4.0 focuses on test infrastructure improvements and bug fixes that enhance the stability and reliability of the API.
+
+## New Features
+
+### Potential Features (TBD)
+The following features are under consideration for this release:
+
+#### Spotify Public Content Support (Tentative)
+- **Spotify URL/URI Playback**: Play Spotify content directly by URL or URI
+  - Support for track, album, playlist, and artist links
+  - Automatic parsing of Spotify share URLs
+  - Direct URI support (e.g., `spotify:playlist:37i9dQZF1DX4JAvHpjipBk`)
+
+- **Popular Playlist Access**: Curated collection of public playlists
+  - Global and regional Top 50 charts
+  - Genre-specific playlists (Chill, Workout, etc.)
+  - No authentication required
+
+- **Simplified Integration**: Leverages existing Sonos Spotify connection
+  - No OAuth implementation needed
+  - No credential storage
+  - Works with user's existing Spotify setup in Sonos
+
+#### API Endpoints (If Spotify is implemented)
+- `GET /{room}/spotify/uri/{spotifyUri}` - Play by Spotify URI
+- `GET /{room}/spotify/url` - Play by Spotify URL (URL in query param)
+- `GET /{room}/spotify/playlist/{playlistId}` - Play specific playlist
+- `GET /{room}/spotify/popular/{playlistName}` - Play from curated list
+
+## Technical Improvements
+
+### Test Infrastructure Enhancements
+- Fixed event bridge timing issues for reliable test execution
+- Improved device ID comparison to handle UUID prefix inconsistencies
+- Enhanced coordinator selection for stereo pairs and groups
+- Standardized test cleanup patterns across all integration tests
+- Added comprehensive test result tracking
+
+### Bug Fixes
+- Fixed playback state event handling for stereo pairs
+- Resolved volume test serialization crashes
+- Corrected content loading order for faster test startup
+- Fixed EventEmitter max listeners warnings
+
+## Architecture & Performance
+
+### Code Quality
+- Reduced integration test failures from 8 to 2 (98.7% pass rate)
+- Improved test stability with proper wait states
+- Enhanced error handling in event management
+- Better coordinator device selection logic
+
+### Documentation
+- Created comprehensive Spotify feature analysis document
+- Added decision matrix for implementation approach
+- Documented use cases and target audiences
+- Updated CLAUDE.md with test patterns and fixes
+
+## Breaking Changes
+None - This release maintains backward compatibility with v1.3.0
+
+## Migration Guide
+No migration required. Spotify features are additive and optional.
+
+## Known Issues
+- Spotify personal playlists not accessible (by design - public content only)
+- Dynamic Spotify search not implemented (requires full OAuth)
+- Two group management tests still failing (carried from v1.3.0)
+
+## Future Enhancements
+- Phase 2: Enhanced public content discovery
+- Phase 3: Optional OAuth for personal content (if demand justifies)
+- Complete resolution of remaining test failures
+
+## Acknowledgments
+Thanks to the ChatGPT analysis that validated our simplified Spotify approach, confirming it delivers ~80% of use cases with ~20% of complexity.
+
+## Installation
+```bash
+docker pull kshartman/sonos-alexa-api:v1.4.0
+# or
+docker pull kshartman/sonos-alexa-api:latest
+```
+
+## Upgrade from v1.3.0
+```bash
+docker stop sonos-api
+docker rm sonos-api
+docker pull kshartman/sonos-alexa-api:v1.4.0
+docker run -d --name sonos-api --network host \
+  -v $(pwd)/presets:/app/presets \
+  -v $(pwd)/settings.json:/app/settings.json \
+  -v $(pwd)/data:/app/data \
+  -e CREATE_DEFAULT_PRESETS=false \
+  kshartman/sonos-alexa-api:v1.4.0
+```

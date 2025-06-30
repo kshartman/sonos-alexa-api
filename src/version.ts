@@ -1,6 +1,6 @@
 export const applicationVersion = {
-  'version': '1.3.0',
+  'version': '1.4.0',
   'major': 1,
-  'minor': 3,
+  'minor': 4,
   'patch': 0
 };

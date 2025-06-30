@@ -15,6 +15,12 @@ import type { Config, StateChangeEvent } from './types/sonos.js';
 // Load configuration from multiple sources
 const config: Config = loadConfiguration();
 
+// Show startup message immediately
+const hostname = os.hostname();
+logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
+logger.always(`🖥️  Host: ${hostname}`);
+logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
+
 // Environment variables are now handled in config-loader.ts
 
 // Initialize components
@@ -275,12 +281,6 @@ process.on('SIGINT', shutdown);
 // Start server
 async function start(): Promise<void> {
   try {
-    // Always show startup message regardless of log level
-    const hostname = os.hostname();
-    logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
-    logger.always(`🖥️  Host: ${hostname}`);
-    logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
-    
     // Load default room settings
     await defaultRoomManager.load();
     

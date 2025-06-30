@@ -1076,6 +1076,63 @@ paths:
                     type: object
                   presets:
                     type: object
+                  config:
+                    type: object
+                    description: Full configuration object
+                    
+  /debug/startup/config:
+    get:
+      tags:
+        - Debug
+      summary: Get startup configuration
+      description: Returns the configuration that the API was started with, including version
+      responses:
+        '200':
+          description: Startup configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: "1.4.0"
+                    description: API version
+                  port:
+                    type: integer
+                    example: 5005
+                  host:
+                    type: string
+                    example: "0.0.0.0"
+                  logLevel:
+                    type: string
+                    example: "info"
+                  isDevelopment:
+                    type: boolean
+                    example: true
+                  isProduction:
+                    type: boolean
+                    example: false
+                  nodeEnv:
+                    type: string
+                    example: "development"
+                  logger:
+                    type: string
+                    example: "winston"
+                  ttsHostIp:
+                    type: string
+                    example: "192.168.1.100"
+                  debugCategories:
+                    type: array
+                    items:
+                      type: string
+                    example: ["api", "discovery"]
+                  defaultRoom:
+                    type: string
+                    example: "LivingRoom"
+                  defaultMusicService:
+                    type: string
+                    example: "apple"
                     
   /debug/subscriptions:
     get:

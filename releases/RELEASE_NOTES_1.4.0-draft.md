@@ -32,6 +32,10 @@ The following features are under consideration for this release:
 - `GET /{room}/spotify/playlist/{playlistId}` - Play specific playlist
 - `GET /{room}/spotify/popular/{playlistName}` - Play from curated list
 
+### New Debug Endpoints
+- `GET /debug/startup` - Enhanced with version and config information
+- `GET /debug/startup/config` - Returns full startup configuration including version
+
 ## Technical Improvements
 
 ### Configuration Architecture Refactoring
@@ -41,6 +45,8 @@ The following features are under consideration for this release:
 - **Computed Fields**: Added `isDevelopment` and `isProduction` boolean helpers to config
 - **Field Normalization**: Logger type automatically normalized to lowercase
 - **Environment Variables**: All modules now read from config object instead of `process.env`
+- **Version in Config**: Application version now included as readonly field in config object
+- **Debug Endpoints**: New `/debug/startup/config` endpoint shows full startup configuration
 
 ### Test Infrastructure Enhancements
 - Fixed event bridge timing issues for reliable test execution

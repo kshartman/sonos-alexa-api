@@ -290,6 +290,9 @@ GET /debug/level/{level}        # Set debug level
 GET /debug/category/{category}/{true|false}  # Toggle category
 GET /debug/enable-all           # Enable all categories
 GET /debug/disable-all          # Disable all categories
+GET /debug/startup              # Get startup info (version, config, presets)
+GET /debug/startup/config       # Get startup configuration with version
+GET /debug/subscriptions        # Get UPnP subscription status
 ```
 
 ## Server-Sent Events

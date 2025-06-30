@@ -510,6 +510,14 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - Moved force-discovery.ts to debug directory
 
 ## Recent API Changes (June 30, 2025)
+
+### Debug Endpoints Enhanced
+- Added application version to Config as readonly field
+- Enhanced /debug/startup to include version and full config
+- Added /debug/startup/config endpoint that returns just the configuration
+- Version is now easily accessible via debug endpoints for troubleshooting
+
+### Music Library Endpoints
 - Added music library cache endpoints:
   - GET /library/index - Shows indexing status and metadata
   - GET /library/refresh - Triggers library re-index

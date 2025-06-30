@@ -1,56 +1,32 @@
-# API Documentation Structure
+# API Documentation
 
-This directory contains the OpenAPI 3.0 specification for the Sonos Alexa API, broken into manageable segments for easier maintenance.
+This directory contains the OpenAPI 3.0 specification for the Sonos Alexa API.
 
 ## Structure
 
 ```
 apidoc/
-├── openapi.yaml           # Main entry point
-├── components/            # Reusable components
-│   ├── info.yaml         # API info and description
-│   ├── servers.yaml      # Server definitions
-│   ├── tags.yaml         # Tag definitions
-│   ├── parameters.yaml   # Common parameters
-│   ├── responses.yaml    # Common responses
-│   ├── schemas.yaml      # Data schemas
-│   └── security.yaml     # Security schemes
-└── paths/                # Endpoint definitions
-    ├── system/          # System endpoints
-    ├── room/            # Room-specific endpoints
-    ├── global/          # Global/default endpoints
-    └── debug/           # Debug endpoints
+├── openapi.yaml           # Complete OpenAPI specification
+└── README.md             # This file
 ```
 
 ## Usage
-
-The main OpenAPI specification is in `openapi.yaml`, which references all other files using `$ref`.
 
 To view the API documentation:
 
 1. **Using Swagger UI**:
    ```bash
-   docker run -p 8080:8080 -e SWAGGER_JSON=/openapi.yaml -v $(pwd):/usr/share/nginx/html swaggerapi/swagger-ui
+   docker run -p 8080:8080 -e SWAGGER_JSON=/api/openapi.yaml -v $(pwd):/api swaggerapi/swagger-ui
    ```
+   Then open http://localhost:8080
 
 2. **Using ReDoc**:
    ```bash
-   docker run -p 8080:80 -v $(pwd):/usr/share/nginx/html/spec redocly/redoc
+   npx @redocly/cli preview-docs openapi.yaml
    ```
+   Then open http://localhost:8080
 
-3. **Generate a single file** (if needed):
-   ```bash
-   npx @redocly/cli bundle openapi.yaml -o openapi-bundled.yaml
-   ```
-
-## Maintenance
-
-When adding new endpoints:
-
-1. Add the path reference to `openapi.yaml`
-2. Create the endpoint file in the appropriate `paths/` subdirectory
-3. Reference common components using `$ref` where possible
-4. Update schemas in `components/schemas.yaml` if new data types are needed
+3. **Using VS Code**: Install the "OpenAPI (Swagger) Editor" extension
 
 ## Validation
 
@@ -59,3 +35,17 @@ To validate the OpenAPI specification:
 ```bash
 npx @redocly/cli lint openapi.yaml
 ```
+
+## Current Status
+
+The OpenAPI specification is functional but incomplete. Many endpoints are documented but some are missing:
+- Detailed request/response schemas
+- Example values
+- Some newer endpoints
+
+## Future Improvements
+
+- Add missing endpoint documentation
+- Add request/response examples
+- Consider modularizing into components for easier maintenance
+- Add automated API testing based on the spec

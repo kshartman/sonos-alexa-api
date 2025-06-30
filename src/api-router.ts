@@ -297,7 +297,11 @@ export class ApiRouter {
           
           if (!authHeader || !authHeader.startsWith('Basic ')) {
             const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
-            debugManager.warn('api', `Missing authentication from ${clientIp}`);
+            debugManager.warn('api', 'Authentication failed', {
+              ip: clientIp,
+              auth: 'missing',
+              path: path
+            });
             res.statusCode = 401;
             res.setHeader('WWW-Authenticate', 'Basic realm="Sonos API"');
             res.end(JSON.stringify({ status: 'error', error: 'Authentication required' }));
@@ -307,7 +311,11 @@ export class ApiRouter {
           const base64Credentials = authHeader.split(' ')[1];
           if (!base64Credentials) {
             const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
-            debugManager.warn('api', `Invalid authorization header from ${clientIp}`);
+            debugManager.warn('api', 'Authentication failed', {
+              ip: clientIp,
+              auth: 'invalid-header',
+              path: path
+            });
             res.statusCode = 401;
             res.end(JSON.stringify({ status: 'error', error: 'Invalid authorization header' }));
             return;
@@ -317,7 +325,12 @@ export class ApiRouter {
         
           if (username !== this.config.auth.username || password !== this.config.auth.password) {
             const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.socket.remoteAddress;
-            debugManager.warn('api', `Authentication failed for user '${username}' from ${clientIp}`);
+            debugManager.warn('api', 'Authentication failed', {
+              ip: clientIp,
+              user: username,
+              auth: 'invalid-credentials',
+              path: path
+            });
             res.statusCode = 401;
             res.end(JSON.stringify({ status: 'error', error: 'Invalid credentials' }));
             return;

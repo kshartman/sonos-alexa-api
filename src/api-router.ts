@@ -17,6 +17,10 @@ import { ServicesCache } from './utils/services-cache.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams) => Promise<ApiResponse>;
 
+/**
+ * Main API router that handles all HTTP requests for the Sonos API.
+ * Maps URL patterns to handler functions and manages request/response lifecycle.
+ */
 export class ApiRouter {
   private discovery: SonosDiscovery;
   private config: Config;
@@ -39,6 +43,14 @@ export class ApiRouter {
     errors: []
   };
 
+  /**
+   * Creates a new API router instance.
+   * @param discovery - The Sonos discovery service for finding and controlling devices
+   * @param config - Application configuration
+   * @param presetLoader - Optional preset loader for managing saved presets
+   * @param defaultRoomManager - Manager for persisting default room/service settings
+   * @param ttsService - Text-to-speech service for announcements
+   */
   constructor(discovery: SonosDiscovery, config: Config, presetLoader?: PresetLoader | undefined, defaultRoomManager?: DefaultRoomManager, ttsService?: TTSService) {
     this.discovery = discovery;
     this.config = config;
@@ -56,6 +68,10 @@ export class ApiRouter {
     this.registerRoutes();
   }
 
+  /**
+   * Initializes the API router by setting up services cache and music library.
+   * Should be called after construction but before handling requests.
+   */
   async initialize(): Promise<void> {
     // Initialize services cache
     try {
@@ -72,6 +88,10 @@ export class ApiRouter {
     await this.initializeMusicLibrary();
   }
 
+  /**
+   * Initializes the music library cache if devices are available.
+   * Sets up periodic reindexing based on configuration.
+   */
   async initializeMusicLibrary(): Promise<void> {
     try {
       // Get any device IP to access the music library
@@ -109,23 +129,37 @@ export class ApiRouter {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getMusicLibraryCacheStatus(): { isIndexing: boolean; progress: number; metadata: any } | null { // ANY IS CORRECT: CacheMetadata type not exported from music-library-cache
+  /**
+   * Gets the current status of the music library cache.
+   * @returns Cache status including indexing progress, or null if not initialized
+   */
+  getMusicLibraryCacheStatus(): { isIndexing: boolean; progress: number; metadata: unknown } | null { // CacheMetadata type not exported from music-library-cache
     if (!this.musicLibraryCache) {
       return null;
     }
     return this.musicLibraryCache.getStatus();
   }
 
+  /**
+   * Gets the music library cache instance.
+   * @returns The music library cache or undefined if not initialized
+   */
   getMusicLibraryCache(): MusicLibraryCache | undefined {
     return this.musicLibraryCache;
   }
 
+  /**
+   * Cleans up resources when shutting down the API router.
+   */
   destroy(): void {
     this.servicesCache.destroy();
     logger.info('Services cache cleaned up');
   }
 
+  /**
+   * Registers all API routes with their handlers.
+   * Called during construction to set up the routing table.
+   */
   private registerRoutes(): void {
     // System routes
     this.routes.set('GET /zones', this.getZones.bind(this));
@@ -267,6 +301,12 @@ export class ApiRouter {
     this.routes.set('GET /debug/subscriptions', this.debugSubscriptions.bind(this));
   }
 
+  /**
+   * Main request handler for all HTTP requests.
+   * Handles authentication, CORS, routing, and error responses.
+   * @param req - The incoming HTTP request
+   * @param res - The HTTP response object
+   */
   async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const { method, url } = req;
     const [path, queryString] = (url || '/').split('?');
@@ -366,6 +406,14 @@ export class ApiRouter {
     }
   }
 
+  /**
+   * Routes requests to the appropriate handler based on method and path.
+   * Supports both exact matches and pattern matching with parameters.
+   * @param method - HTTP method (GET, POST, etc.)
+   * @param path - Request path
+   * @param queryParams - Optional query string parameters
+   * @returns API response with status and body
+   */
   private async routeRequest(method: string, path: string, queryParams?: URLSearchParams): Promise<ApiResponse> {
     // Try exact match first
     let handler = this.routes.get(`${method} ${path}`);
@@ -394,6 +442,13 @@ export class ApiRouter {
     return handler(params, queryParams);
   }
 
+  /**
+   * Matches a request path against a route pattern.
+   * Extracts parameters from path segments like {room} or {volume}.
+   * @param actualPath - The actual request path
+   * @param pattern - The route pattern to match against
+   * @returns Extracted parameters or null if no match
+   */
   private matchPath(actualPath: string, pattern: string): RouteParams | null {
     const actualParts = actualPath.split('/').filter(Boolean);
     const patternParts = pattern.split('/').filter(Boolean);
@@ -434,6 +489,12 @@ export class ApiRouter {
   }
 
   // Helper methods
+  /**
+   * Gets a device by room name, using default room if not specified.
+   * @param roomName - Optional room name
+   * @returns The Sonos device
+   * @throws Error if room not found or no default configured
+   */
   private getDevice(roomName: string | undefined) {
     // Use default room manager to resolve room name
     const resolvedRoom = this.defaultRoomManager.getRoom(roomName);
@@ -450,10 +511,18 @@ export class ApiRouter {
   }
 
   // System endpoints
+  /**
+   * Gets current zone topology with all groups and members.
+   * @returns Zone group information
+   */
   private async getZones(): Promise<ApiResponse> {
     return { status: 200, body: this.discovery.getZones() };
   }
 
+  /**
+   * Gets playback state for all devices.
+   * @returns Current state of all devices including volume, playback, and track info
+   */
   private async getState(): Promise<ApiResponse> {
     const devices = this.discovery.getAllDevices();
     const state = devices.map(device => ({
@@ -578,6 +647,11 @@ export class ApiRouter {
     return undefined;
   }
 
+  /**
+   * Gets information about all discovered Sonos devices.
+   * Includes model, IP, and stereo/surround pair configuration.
+   * @returns Array of device information
+   */
   private async getDevices(): Promise<ApiResponse> {
     const devices = Array.from(this.discovery.devices.values());
     const topology = this.discovery.topologyManager.getZones();
@@ -605,6 +679,11 @@ export class ApiRouter {
     return { status: 200, body: deviceInfo };
   }
 
+  /**
+   * Gets information about a specific device by ID.
+   * @param params - Route parameters containing device ID
+   * @returns Device information including model, IP, and pairing info
+   */
   private async getDeviceById({ id }: RouteParams): Promise<ApiResponse> {
     if (!id) {
       return { status: 400, body: { status: 'error', error: 'Device ID is required' } };
@@ -646,6 +725,11 @@ export class ApiRouter {
     };
   }
 
+  /**
+   * Gets all devices in a specific room (handles stereo pairs).
+   * @param params - Route parameters containing room name
+   * @returns Array of devices in the room
+   */
   private async getDevicesByRoom({ room }: RouteParams): Promise<ApiResponse> {
     if (!room) {
       return { status: 400, body: { status: 'error', error: 'Room name is required' } };
@@ -682,6 +766,11 @@ export class ApiRouter {
     return { status: 200, body: deviceInfo };
   }
 
+  /**
+   * Gets available presets from configuration and preset files.
+   * @param params - Route parameters (may contain 'detailed' flag)
+   * @returns List of preset names or detailed preset objects
+   */
   private async getPresets(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
     const configPresets = this.config.presets || {};
     const folderPresets = this.presetLoader ? this.presetLoader.getAllPresets() : {};
@@ -710,6 +799,12 @@ export class ApiRouter {
   }
 
   // Room-specific endpoints
+  /**
+   * Gets comprehensive state for a specific room.
+   * Includes playback state, volume, track info, play modes, and equalizer settings.
+   * @param params - Route parameters containing room name
+   * @returns Complete room state information
+   */
   private async getRoomState({ room }: RouteParams): Promise<ApiResponse> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
@@ -836,6 +931,12 @@ export class ApiRouter {
     return { status: 200, body: safeState };
   }
 
+  /**
+   * Starts playback in the specified room.
+   * Routes to coordinator if room is part of a group.
+   * @param params - Route parameters containing room name
+   * @returns Success response
+   */
   private async play({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
@@ -844,6 +945,12 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
 
+  /**
+   * Pauses playback in the specified room.
+   * Routes to coordinator if room is part of a group.
+   * @param params - Route parameters containing room name
+   * @returns Success response
+   */
   private async pause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
@@ -852,6 +959,12 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
 
+  /**
+   * Toggles between play and pause based on current state.
+   * Fetches fresh transport info to ensure accurate state.
+   * @param params - Route parameters containing room name
+   * @returns Success response
+   */
   private async playPause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     const device = this.getDevice(room);
@@ -895,6 +1008,12 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
 
+  /**
+   * Sets the volume for a specific room.
+   * Supports absolute values (0-100) and relative changes (+5, -10).
+   * @param params - Route parameters containing room name and volume level
+   * @returns Success response
+   */
   private async setVolume({ room, level }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!level) throw { status: 400, message: 'Level parameter is required' };

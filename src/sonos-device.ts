@@ -44,6 +44,11 @@ interface DiscoveredService {
   SCPDURL: string;
 }
 
+/**
+ * Represents a Sonos device with control capabilities.
+ * Handles SOAP requests, UPnP subscriptions, and state management.
+ * Emits events for state changes and content updates.
+ */
 export class SonosDevice extends EventEmitter {
   public readonly id: string;
   public readonly modelName: string;
@@ -56,6 +61,11 @@ export class SonosDevice extends EventEmitter {
   
   private xmlParser: XMLParser;
 
+  /**
+   * Creates a new Sonos device instance.
+   * @param deviceInfo - Device information from discovery
+   * @param location - Device location URL
+   */
   constructor(deviceInfo: DeviceInfo, location: string) {
     super();
     
@@ -87,6 +97,11 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
+  /**
+   * Subscribes to UPnP events for state updates.
+   * Only subscribes to AVTransport and RenderingControl services.
+   * Portable devices subscribe to GroupRenderingControl instead.
+   */
   async subscribe(): Promise<void> {
     const discovery = global.discovery;
     if (!discovery) {
@@ -168,6 +183,10 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
+  /**
+   * Discovers available UPnP services from the device description.
+   * @returns Array of discovered services with their endpoints
+   */
   async discoverServices(): Promise<DiscoveredService[]> {
     const deviceDescUrl = `${this.baseUrl}/xml/device_description.xml`;
     
@@ -399,6 +418,10 @@ export class SonosDevice extends EventEmitter {
   }
 
   // AVTransport actions
+  /**
+   * Starts playback.
+   * @throws Error if SOAP request fails
+   */
   async play(): Promise<void> {
     await this.soap('AVTransport', 'Play', {
       InstanceID: 0,
@@ -406,30 +429,51 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
+  /**
+   * Pauses playback.
+   * @throws Error if SOAP request fails
+   */
   async pause(): Promise<void> {
     await this.soap('AVTransport', 'Pause', {
       InstanceID: 0
     });
   }
 
+  /**
+   * Stops playback.
+   * @throws Error if SOAP request fails
+   */
   async stop(): Promise<void> {
     await this.soap('AVTransport', 'Stop', {
       InstanceID: 0
     });
   }
 
+  /**
+   * Skips to the next track.
+   * @throws Error if SOAP request fails
+   */
   async next(): Promise<void> {
     await this.soap('AVTransport', 'Next', {
       InstanceID: 0
     });
   }
 
+  /**
+   * Goes to the previous track.
+   * @throws Error if SOAP request fails
+   */
   async previous(): Promise<void> {
     await this.soap('AVTransport', 'Previous', {
       InstanceID: 0
     });
   }
 
+  /**
+   * Seeks to a specific position in the current track or to a specific track.
+   * @param positionOrTrack - Time position (HH:MM:SS) or track number
+   * @param elapsedTime - Optional elapsed time when seeking to track number
+   */
   async seek(positionOrTrack: string | number, elapsedTime?: number): Promise<void> {
     if (typeof positionOrTrack === 'number' && elapsedTime !== undefined) {
       // Seek to track number first
@@ -462,6 +506,12 @@ export class SonosDevice extends EventEmitter {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
 
+  /**
+   * Sets the transport URI for playback.
+   * Used for playing content or joining groups.
+   * @param uri - The URI to play (content URI or x-rincon: for grouping)
+   * @param metadata - Optional DIDL-Lite metadata for the content
+   */
   async setAVTransportURI(uri: string, metadata = ''): Promise<void> {
     await this.soap('AVTransport', 'SetAVTransportURI', {
       InstanceID: 0,
@@ -498,6 +548,11 @@ export class SonosDevice extends EventEmitter {
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   // RenderingControl actions
+  /**
+   * Sets the device volume.
+   * @param level - Volume level (0-100), automatically clamped to valid range
+   * @throws Error if SOAP request fails
+   */
   async setVolume(level: number): Promise<void> {
     const clampedLevel = Math.max(0, Math.min(100, level));
     await this.soap('RenderingControl', 'SetVolume', {
@@ -516,6 +571,11 @@ export class SonosDevice extends EventEmitter {
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
+  /**
+   * Sets the mute state.
+   * @param mute - True to mute, false to unmute
+   * @throws Error if SOAP request fails
+   */
   async setMute(mute: boolean): Promise<void> {
     await this.soap('RenderingControl', 'SetMute', {
       InstanceID: 0,
@@ -559,6 +619,13 @@ export class SonosDevice extends EventEmitter {
   }
 
   // Utility methods
+  /**
+   * Plays a specific URI with automatic handling for different content types.
+   * Handles special cases like playlists, containers, and queue-based content.
+   * @param uri - The content URI to play
+   * @param metadata - Optional DIDL-Lite metadata
+   * @param discovery - Optional discovery instance for coordinator lookup
+   */
   async playUri(uri: string, metadata = '', discovery?: SonosDiscovery): Promise<void> {
     // Handle x-rincon-playlist: URIs for music library playlists
     // These need special handling - we browse the playlist and add its contents to the queue

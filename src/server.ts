@@ -395,9 +395,14 @@ async function start(): Promise<void> {
         // Get cache status to show counts
         const cacheStatus = router.getMusicLibraryCacheStatus();
         if (cacheStatus && cacheStatus.metadata) {
-          logger.info(`✅ Music library cache initialized: ${cacheStatus.metadata.totalTracks} tracks, ${cacheStatus.metadata.totalAlbums} albums, ${cacheStatus.metadata.totalArtists} artists`);
+          const metadata = cacheStatus.metadata as { totalTracks?: number; totalAlbums?: number; totalArtists?: number };
+          if (metadata.totalTracks !== undefined && metadata.totalAlbums !== undefined && metadata.totalArtists !== undefined) {
+            logger.info(`✅ Music library cache initialized: ${metadata.totalTracks} tracks, ${metadata.totalAlbums} albums, ${metadata.totalArtists} artists`);
+          } else {
+            logger.info('⏳ Music library cache started (still indexing)');
+          }
         } else {
-          logger.info('✅ Music library cache initialized');
+          logger.info('⏳ Music library cache started (no metadata yet)');
         }
       }).catch(error => {
         logger.error('Failed to initialize music library cache:', error);

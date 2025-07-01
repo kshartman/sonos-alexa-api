@@ -8,12 +8,21 @@ import type { Config } from '../types/sonos.js';
 
 const execAsync = promisify(exec);
 
+/**
+ * Text-to-speech service that generates audio files from text.
+ * Supports multiple providers (Google TTS, VoiceRSS, macOS Say).
+ * Caches generated audio files to avoid redundant generation.
+ */
 export class TTSService {
   private config: Config;
   private cacheDir: string;
   private cleanupInterval?: NodeJS.Timeout;
   private maxAge: number = 24 * 60 * 60 * 1000; // 24 hours default
 
+  /**
+   * Creates a new TTS service instance.
+   * @param config - Application configuration including TTS provider settings
+   */
   constructor(config: Config) {
     this.config = config;
     this.cacheDir = path.join(config.dataDir || './data', 'tts-cache');
@@ -22,6 +31,10 @@ export class TTSService {
     this.maxAge = (config as any).ttsCacheMaxAge || this.maxAge; // ANY IS CORRECT: Config type doesn't include ttsCacheMaxAge but it may be present
   }
 
+  /**
+   * Initializes the TTS service.
+   * Creates cache directory and starts periodic cleanup.
+   */
   async init(): Promise<void> {
     // Create cache directory
     await fs.mkdir(this.cacheDir, { recursive: true });
@@ -38,6 +51,13 @@ export class TTSService {
     logger.info(`TTS cache cleanup scheduled - removing files older than ${this.maxAge / 1000 / 60 / 60} hours`);
   }
 
+  /**
+   * Generates a TTS audio file from text.
+   * Returns cached file if available, otherwise generates new audio.
+   * @param text - The text to convert to speech
+   * @param language - Language code (default: 'en')
+   * @returns Path to the generated MP3 file
+   */
   async generateTTS(text: string, language = 'en'): Promise<string> {
     // Generate cache key
     const cacheKey = crypto.createHash('md5').update(`${text}-${language}`).digest('hex');
@@ -181,6 +201,14 @@ export class TTSService {
     }
   }
 
+  /**
+   * Gets a URL for accessing TTS audio.
+   * Generates the audio file if needed and returns a URL path.
+   * @param text - The text to convert to speech
+   * @param language - Language code (default: 'en')
+   * @param baseUrl - Base URL of the API server
+   * @returns URL to access the audio file
+   */
   async getTTSUrl(text: string, language = 'en', baseUrl: string): Promise<string> {
     const audioFile = await this.generateTTS(text, language);
     
@@ -193,6 +221,11 @@ export class TTSService {
     return url;
   }
 
+  /**
+   * Serves a TTS audio file by filename.
+   * @param filename - The filename to serve from the cache
+   * @returns Buffer containing the audio data or null if not found
+   */
   async serveTTSFile(filename: string): Promise<Buffer | null> {
     const filePath = path.join(this.cacheDir, filename);
     
@@ -205,6 +238,10 @@ export class TTSService {
     }
   }
 
+  /**
+   * Cleans old files from the TTS cache.
+   * @param maxAgeDays - Remove files older than this many days (default: 7)
+   */
   async cleanCache(maxAgeDays = 7): Promise<void> {
     const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
     const now = Date.now();
@@ -226,6 +263,9 @@ export class TTSService {
     }
   }
   
+  /**
+   * Shuts down the TTS service and cleans up resources.
+   */
   destroy(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);

@@ -19,6 +19,11 @@ interface iTunesTrack {
   wrapperType?: string;
 }
 
+/**
+ * Apple Music service implementation.
+ * Uses iTunes Search API to find music content.
+ * No authentication required - uses public iTunes API.
+ */
 export class AppleMusicService extends MusicService {
   constructor() {
     const config: MusicServiceConfig = {
@@ -48,6 +53,13 @@ export class AppleMusicService extends MusicService {
     super(config);
   }
 
+  /**
+   * Searches Apple Music/iTunes for content.
+   * @param type - Type of content to search for (album, song, or station)
+   * @param term - Search query (supports prefixes like artist:, album:, track:)
+   * @param country - Country code for localized results (default: 'US')
+   * @returns Array of search results
+   */
   async search(type: 'album' | 'song' | 'station', term: string, country = 'US'): Promise<MusicSearchResult[]> {
     try {
       const searchTerm = this.processSearchTerm(type, term);
@@ -101,6 +113,12 @@ export class AppleMusicService extends MusicService {
     };
   }
 
+  /**
+   * Generates a Sonos-compatible URI for Apple Music content.
+   * @param type - Type of content (album, song, or station)
+   * @param result - Search result to generate URI for
+   * @returns Sonos URI string
+   */
   generateURI(type: 'album' | 'song' | 'station', result: MusicSearchResult): string {
     if (!this.account) {
       throw new Error('Apple Music account not configured');
@@ -115,6 +133,12 @@ export class AppleMusicService extends MusicService {
     }
   }
 
+  /**
+   * Generates DIDL-Lite metadata for Apple Music content.
+   * @param type - Type of content (album, song, or station)
+   * @param result - Search result to generate metadata for
+   * @returns DIDL-Lite XML string
+   */
   generateMetadata(type: 'album' | 'song' | 'station', result: MusicSearchResult): string {
     const metaId = this.config.metaStart[type] + result.id;
     const parentId = this.config.parent[type] + result.id;

@@ -39,6 +39,11 @@ export interface ServiceAccount {
   sid: string;
 }
 
+/**
+ * Base class for music service implementations.
+ * Provides common functionality for searching and generating URIs/metadata.
+ * Subclasses must implement search, generateURI, and generateMetadata.
+ */
 export abstract class MusicService {
   protected config: MusicServiceConfig;
   protected account?: ServiceAccount;
@@ -47,16 +52,46 @@ export abstract class MusicService {
     this.config = config;
   }
 
+  /**
+   * Sets the service account for authenticated requests.
+   * @param account - Service account with ID and credentials
+   */
   setAccount(account: ServiceAccount): void {
     this.account = account;
   }
 
+  /**
+   * Searches the music service for content.
+   * @param type - Type of content to search for
+   * @param term - Search query
+   * @param country - Optional country code for localized results
+   * @returns Array of search results
+   */
   abstract search(type: 'album' | 'song' | 'station', term: string, country?: string): Promise<MusicSearchResult[]>;
   
+  /**
+   * Generates a Sonos-compatible URI for the content.
+   * @param type - Type of content
+   * @param result - Search result to generate URI for
+   * @returns Sonos URI string
+   */
   abstract generateURI(type: 'album' | 'song' | 'station', result: MusicSearchResult): string;
   
+  /**
+   * Generates DIDL-Lite metadata for the content.
+   * @param type - Type of content
+   * @param result - Search result to generate metadata for
+   * @returns DIDL-Lite XML string
+   */
   abstract generateMetadata(type: 'album' | 'song' | 'station', result: MusicSearchResult): string;
 
+  /**
+   * Processes search terms with special prefixes.
+   * Extracts artist:, album:, and track: prefixes from search query.
+   * @param _type - Content type (unused in base implementation)
+   * @param term - Raw search term
+   * @returns Processed search term
+   */
   protected processSearchTerm(_type: string, term: string): string {
     // Handle search prefixes like "artist:", "track:", "album:"
     if (term.indexOf(':') > -1) {
@@ -95,6 +130,14 @@ export abstract class MusicService {
     return term;
   }
 
+  /**
+   * Formats extracted search components into a single search string.
+   * Subclasses can override for service-specific formatting.
+   * @param artist - Artist name
+   * @param album - Album name
+   * @param track - Track name
+   * @returns Formatted search term
+   */
   protected formatSearchTerm(artist: string, album: string, track: string): string {
     // Default implementation - services can override
     const parts = [artist, album, track].filter(Boolean);

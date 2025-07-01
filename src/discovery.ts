@@ -24,6 +24,11 @@ export declare interface SonosDiscovery {
   on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: SonosTrack | null; currentTrack: SonosTrack | null; timestamp: number }) => void): this;
 }
 
+/**
+ * Service that discovers Sonos devices on the network using SSDP.
+ * Manages device lifecycle, tracks topology changes, and handles UPnP subscriptions.
+ * Emits events for device discovery, state changes, and topology updates.
+ */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, no-redeclare
 export class SonosDiscovery extends EventEmitter {
   public readonly devices = new Map<string, SonosDevice>();
@@ -55,6 +60,10 @@ export class SonosDiscovery extends EventEmitter {
     });
   }
 
+  /**
+   * Starts the discovery service.
+   * Begins listening for SSDP announcements and sends periodic search requests.
+   */
   async start(): Promise<void> {
     // Start UPnP subscriber first
     await this.subscriber!.start();
@@ -81,6 +90,10 @@ export class SonosDiscovery extends EventEmitter {
     // No longer needed - we subscribe to topology on every device
   }
 
+  /**
+   * Stops the discovery service and cleans up resources.
+   * Unsubscribes from all devices and closes the UDP socket.
+   */
   stop(): void {
     if (this.searchInterval) {
       clearInterval(this.searchInterval);
@@ -104,6 +117,10 @@ export class SonosDiscovery extends EventEmitter {
     debugManager.info('discovery', 'Discovery stopped');
   }
 
+  /**
+   * Sends an SSDP M-SEARCH request to discover Sonos devices.
+   * Devices respond with their location URLs.
+   */
   private search(): void {
     if (!this.socket) return;
 
@@ -231,6 +248,11 @@ export class SonosDiscovery extends EventEmitter {
     });
   }
 
+  /**
+   * Gets a device by room name (case-insensitive).
+   * @param roomName - The room name to search for
+   * @returns The device or null if not found
+   */
   getDevice(roomName: string): SonosDevice | null {
     // Simple approach: just return the first device with this room name
     // The API endpoints will handle stereo pair complexity if needed
@@ -248,6 +270,11 @@ export class SonosDiscovery extends EventEmitter {
     return this.devices.get(cleanId) || null;
   }
 
+  /**
+   * Gets the current zone topology.
+   * Groups devices by their zone coordinator.
+   * @returns Array of zones with coordinator and members
+   */
   getZones(): Zone[] {
     const topologyZones = this.topologyManager.getZones();
     
@@ -262,10 +289,19 @@ export class SonosDiscovery extends EventEmitter {
     }));
   }
 
+  /**
+   * Gets all discovered devices.
+   * @returns Array of all devices
+   */
   getAllDevices(): SonosDevice[] {
     return Array.from(this.devices.values());
   }
 
+  /**
+   * Gets the local IP address that can reach Sonos devices.
+   * Prefers IPs on the same subnet as discovered devices.
+   * @returns Local IP address or undefined if none found
+   */
   getLocalIP(): string | undefined {
     // Get the first non-localhost IP address from any discovered device's perspective
     // This ensures we get an IP that's reachable from the Sonos network
@@ -316,14 +352,30 @@ export class SonosDiscovery extends EventEmitter {
   }
 
   // Topology-related methods
+  /**
+   * Checks if a device is a zone coordinator.
+   * @param deviceId - The device ID to check
+   * @returns True if the device is a coordinator
+   */
   isCoordinator(deviceId: string): boolean {
     return this.topologyManager.isCoordinator(deviceId);
   }
 
+  /**
+   * Gets the coordinator device for a given device.
+   * Returns the device itself if it's already a coordinator.
+   * @param deviceId - The device ID to find the coordinator for
+   * @returns The coordinator device or undefined
+   */
   getCoordinator(deviceId: string): SonosDevice | undefined {
     return this.topologyManager.getCoordinator(deviceId);
   }
 
+  /**
+   * Gets all members of the group that the specified device belongs to.
+   * @param deviceId - The device ID
+   * @returns Array of devices in the same group
+   */
   getGroupMembers(deviceId: string): SonosDevice[] {
     return this.topologyManager.getGroupMembers(deviceId);
   }

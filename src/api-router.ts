@@ -1499,11 +1499,11 @@ export class ApiRouter {
         logLevel: debugManager.getLogLevel(),
         categories: debugManager.getCategories(),
         usage: {
-          level: 'GET /debug/level/{level} - Set log level (error|warn|info|debug)',
+          level: 'GET /debug/level/{level} - Set log level (error|warn|info|debug|trace)',
           category: 'GET /debug/category/{category}/{enabled} - Enable/disable category (true|false)',
           enableAll: 'GET /debug/enable-all - Enable all debug categories',
           disableAll: 'GET /debug/disable-all - Disable all debug categories (except API)',
-          categories: 'soap, topology, discovery, favorites, presets, upnp, api'
+          categories: 'soap, topology, discovery, favorites, presets, upnp, api, sse'
         }
       }
     };
@@ -2416,7 +2416,7 @@ export class ApiRouter {
   private async setLogLevel({ level }: RouteParams): Promise<ApiResponse> {
     if (!level) throw { status: 400, message: 'Level parameter is required' };
     
-    const validLevels = ['error', 'warn', 'info', 'debug'];
+    const validLevels = ['error', 'warn', 'info', 'debug', 'trace'];
     if (!validLevels.includes(level)) {
       throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
     }

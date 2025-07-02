@@ -35,6 +35,12 @@ export function isLegacyPreset(preset: unknown): preset is LegacyPreset {
 export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): PresetWithLegacy {
   debugManager.debug('presets', `Converting legacy preset: ${presetName}`);
 
+  // Validate mutual exclusivity of favorite, uri, and spotifyUrl
+  const contentSources = [legacy.favorite, legacy.uri, legacy.spotifyUrl].filter(Boolean);
+  if (contentSources.length > 1) {
+    throw new Error(`Preset ${presetName} cannot have multiple content sources. Use only one of: favorite, uri, or spotifyUrl`);
+  }
+
   // For the new simple format, we'll create a basic preset
   // The coordinator will be the first player in the list
   const coordinator = legacy.players[0];
@@ -45,19 +51,24 @@ export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): P
   let uri = '';
   let metadata = '';
 
-  // Handle favorite vs URI
+  // Handle favorite vs URI vs SpotifyUrl (mutually exclusive)
   if (legacy.favorite) {
     // For favorites, we'll use a special URI that indicates this needs to be resolved
     // at runtime by looking up the favorite in the Sonos system
     uri = `favorite:${legacy.favorite}`;
     metadata = '';
+  } else if (legacy.spotifyUrl) {
+    // For Spotify URLs, we'll use a special URI that indicates this needs to be resolved
+    // at runtime by parsing the Spotify share URL
+    uri = `spotifyUrl:${legacy.spotifyUrl}`;
+    metadata = '';
   } else if (legacy.uri) {
     uri = legacy.uri;
   } else {
-    // If neither favorite nor URI is specified, create a placeholder
+    // If neither favorite nor URI nor SpotifyUrl is specified, create a placeholder
     // This allows loading the preset even if it doesn't have playable content
     uri = 'placeholder:no-content';
-    logger.warn(`Legacy preset ${presetName} has no favorite or uri - creating placeholder`);
+    logger.warn(`Legacy preset ${presetName} has no favorite, uri, or spotifyUrl - creating placeholder`);
   }
 
   const converted: PresetWithLegacy = {

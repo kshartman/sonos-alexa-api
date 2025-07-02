@@ -17,6 +17,22 @@ This is a complete TypeScript rewrite of the original [node-sonos-http-api](http
 - 📊 **96% test coverage** - Comprehensive test suite
 - 🔐 **Secure** - Optional authentication with trusted network support
 
+## Requirements
+
+- **Sonos S2 system** - S1 systems are not supported
+- **Node.js 18+** - Uses native Node.js APIs
+- **Network access** - Must be on same network as Sonos devices
+
+### For Spotify Support
+- **Spotify Premium account** - Free accounts cannot be controlled via API
+- **Account linked in Sonos app** - Spotify must be configured in your Sonos system
+- **Required favorites** - Add at least one of each to Sonos favorites:
+  - A Spotify track
+  - A Spotify album  
+  - A Spotify playlist
+  
+  *These favorites are used to extract authentication tokens since S2 systems don't expose account details via API*
+
 ## Performance
 
 Typical response times:
@@ -215,7 +231,7 @@ This rewrite maintains full API compatibility while modernizing the codebase wit
 - ✅ Apple Music (via iTunes Search API)
 - ✅ Pandora (with account)
 - ✅ Line-In playback
-- ❌ Spotify (requires OAuth2 - PRs welcome!)
+- ⚡ Spotify (Phase 1: Direct playback ✅, Search requires OAuth2)
 - ❌ SiriusXM (no public API)
 - ❌ Amazon Music (no public API)
 - ❌ Deezer (not implemented)
@@ -223,7 +239,7 @@ This rewrite maintains full API compatibility while modernizing the codebase wit
 ## Requirements
 
 - Node.js 20+ 
-- Sonos S2 system (S1 untested)
+- Sonos S2 system (S1 not supported)
 - Network access to Sonos devices
 
 ## License

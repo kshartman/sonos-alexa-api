@@ -55,6 +55,7 @@ export interface LegacyPreset {
   state?: 'stopped' | 'playing' | 'paused';
   favorite?: string;
   uri?: string;
+  spotifyUrl?: string; // New field for Spotify share URLs
   playMode?: {
     shuffle?: boolean;
     repeat?: 'none' | 'all' | 'one';
@@ -190,6 +191,7 @@ export interface BrowseItem {
   artist?: string;
   album?: string;
   metadata?: string;
+  desc?: string; // DIDL-Lite desc field containing tokens
 }
 
 export interface BrowseResult {

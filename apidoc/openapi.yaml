@@ -863,6 +863,175 @@ paths:
         '404':
           $ref: '#/components/responses/RoomNotFound'
 
+  /{room}/spotify/play/{id}:
+    get:
+      tags:
+        - Room
+      summary: Play Spotify content
+      description: Play Spotify content by ID or URI
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: id
+          in: path
+          required: true
+          description: Spotify URI (e.g., spotify:track:123, spotify:album:456, spotify:playlist:789)
+          schema:
+            type: string
+            example: spotify:track:3n3Ppam7vgaVa1iaRUc9Lp
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '400':
+          description: Invalid Spotify ID or URI format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+        '503':
+          description: Spotify service not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /{room}/pandora/play/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play Pandora station
+      description: Play a Pandora station by name
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: Pandora station name
+          schema:
+            type: string
+            example: Today's Hits
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          description: Room or station not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /{room}/pandora/stations:
+    get:
+      tags:
+        - Room
+      summary: List Pandora stations
+      description: Get list of available Pandora stations
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          description: List of Pandora stations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    uri:
+                      type: string
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+
+  /{room}/pandora/thumbsup:
+    get:
+      tags:
+        - Room
+      summary: Thumbs up current track
+      description: Give thumbs up to the currently playing Pandora track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+
+  /{room}/pandora/thumbsdown:
+    get:
+      tags:
+        - Room
+      summary: Thumbs down current track
+      description: Give thumbs down to the currently playing Pandora track
+      parameters:
+        - $ref: '#/components/parameters/room'
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+
+  /{room}/applemusic/{action}/{id}:
+    get:
+      tags:
+        - Room
+      summary: Play Apple Music content
+      description: Play Apple Music content with specified action
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: action
+          in: path
+          required: true
+          description: Action to perform
+          schema:
+            type: string
+            enum: [now, next, queue]
+            example: now
+        - name: id
+          in: path
+          required: true
+          description: Apple Music ID
+          schema:
+            type: string
+            example: "1234567890"
+      responses:
+        '200':
+          $ref: '#/components/responses/Success'
+        '404':
+          $ref: '#/components/responses/RoomNotFound'
+        '503':
+          description: Apple Music service not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /{room}/siriusxm/{name}:
+    get:
+      tags:
+        - Room
+      summary: Play SiriusXM channel
+      description: Play a SiriusXM channel by name (NOT IMPLEMENTED)
+      parameters:
+        - $ref: '#/components/parameters/room'
+        - name: name
+          in: path
+          required: true
+          description: SiriusXM channel name
+          schema:
+            type: string
+            example: The Beatles Channel
+      responses:
+        '501':
+          description: SiriusXM support not yet implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /pauseall:
     get:
       tags:
@@ -1055,7 +1224,7 @@ paths:
       tags:
         - Debug
       summary: Get startup information
-      description: Returns information about the API startup including discovered devices and loaded presets
+      description: Returns information about the API startup including discovered devices, loaded presets, and readiness status
       responses:
         '200':
           description: Startup information
@@ -1066,19 +1235,84 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: "1.2.0"
-                  startTime:
+                    example: "1.5.0"
+                  timestamp:
                     type: string
                     format: date-time
+                    description: When the API was started
                   devices:
                     type: object
+                    description: Discovered Sonos devices
                   topology:
                     type: object
+                    description: Zone topology information
                   presets:
                     type: object
+                    description: Loaded presets
                   config:
                     type: object
                     description: Full configuration object
+                  musicLibrary:
+                    type: object
+                    description: Music library indexing status
+                  services:
+                    type: object
+                    description: Music services cache status
+                  errors:
+                    type: array
+                    items:
+                      type: string
+                    description: Any startup errors encountered
+                  readiness:
+                    type: object
+                    description: Readiness status of various components
+                    properties:
+                      discovery:
+                        type: boolean
+                        description: Device discovery is ready
+                      servicesCache:
+                        type: boolean
+                        description: Music services cache is ready
+                      musicLibrary:
+                        type: boolean
+                        description: Music library index is ready
+                      upnpSubscriptions:
+                        type: boolean
+                        description: UPnP subscriptions are ready
+                      topology:
+                        type: boolean
+                        description: Topology manager is ready
+                      allReady:
+                        type: boolean
+                        description: All components are ready
+                  readinessTimes:
+                    type: object
+                    description: Timestamps when each component became ready
+                    properties:
+                      discovery:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      servicesCache:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      musicLibrary:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      upnpSubscriptions:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      topology:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      allReady:
+                        type: string
+                        format: date-time
+                        nullable: true
 
   /debug/startup/config:
     get:
@@ -2145,29 +2379,6 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/Success'
-        '404':
-          $ref: '#/components/responses/RoomNotFound'
-
-  /{room}/debug/accounts:
-    get:
-      tags:
-        - Debug
-      summary: Debug accounts endpoint
-      description: Get account information for debugging music services
-      parameters:
-        - $ref: '#/components/parameters/room'
-      responses:
-        '200':
-          description: Account information
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  accounts:
-                    type: array
-                    items:
-                      type: object
         '404':
           $ref: '#/components/responses/RoomNotFound'
 

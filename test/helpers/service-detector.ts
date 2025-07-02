@@ -1,5 +1,42 @@
 import { SystemTopology, defaultConfig } from './test-config.js';
 
+export class ServiceDetector {
+  constructor(private apiUrl: string) {}
+
+  async hasSpotify(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.apiUrl}/services`);
+      if (!response.ok) return false;
+      
+      const services = await response.json();
+      // Look for Spotify service (usually ID 12 or 9)
+      return Object.values(services).some((service: any) => 
+        service.name?.toLowerCase().includes('spotify') ||
+        service.internalName?.toLowerCase().includes('spotify')
+      );
+    } catch (error) {
+      console.warn('Failed to detect Spotify service:', error);
+      return false;
+    }
+  }
+
+  async hasPandora(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.apiUrl}/services`);
+      if (!response.ok) return false;
+      
+      const services = await response.json();
+      return Object.values(services).some((service: any) => 
+        service.name?.toLowerCase().includes('pandora') ||
+        service.internalName?.toLowerCase().includes('pandora')
+      );
+    } catch (error) {
+      console.warn('Failed to detect Pandora service:', error);
+      return false;
+    }
+  }
+}
+
 export interface ExtendedTopology extends SystemTopology {
   hasFavorites: boolean;
   hasPlaylists: boolean;

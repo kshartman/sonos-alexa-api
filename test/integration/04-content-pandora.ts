@@ -35,9 +35,6 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
     const coordinatorMember = zone.members.find(m => m.isCoordinator);
     deviceId = coordinatorMember.id;
     
-    console.log(`📊 Test room: ${testRoom}`);
-    console.log(`📊 Device ID: ${deviceId}`);
-    
     // Get device IP from the state endpoint
     const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
     if (!stateResponse.ok) {
@@ -59,6 +56,9 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       console.log('⚠️  Skipping Pandora tests - service not available or not configured');
       return;
     }
+    
+    console.log(`📊 Test room: ${testRoom}`);
+    console.log(`📊 Device ID: ${deviceId}`);
     
     // Clear any existing Pandora session by playing a Beatles song
     console.log('🎵 Playing Beatles song to clear Pandora session...');

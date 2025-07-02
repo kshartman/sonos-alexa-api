@@ -34,6 +34,20 @@ const ttsService = new TTSService(config);
 // Create a temporary router variable that will be initialized later
 let router: ApiRouter;
 
+// Track discovery readiness
+discovery.on('device-found', () => {
+  if (router && discovery.devices.size > 0) {
+    router.updateReadiness('discovery', true);
+  }
+});
+
+// Track topology readiness
+discovery.on('topology-change', () => {
+  if (router) {
+    router.updateReadiness('topology', true);
+  }
+});
+
 // Create preset loader with callback to update startup info
 const presetLoader = new PresetLoader(config.presetDir, discovery, (presetStats) => {
   if (router) {
@@ -388,6 +402,9 @@ async function start(): Promise<void> {
       logger.info('═══════════════════════════════════════');
       logger.info('✅ System ready for Alexa requests');
       logger.info('═══════════════════════════════════════');
+      
+      // Mark UPnP subscriptions as ready (they're set up by now)
+      router.updateReadiness('upnpSubscriptions', true);
       
       // Initialize music library cache in the background
       logger.info('📚 Initializing music library cache...');

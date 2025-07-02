@@ -110,6 +110,9 @@ const endpointPatterns = [
   // Music services - Apple Music
   '/{room}/applemusic/{action}/{id}',
   
+  // Music services - Spotify
+  '/{room}/spotify/play/{id}',
+  
   // Music services - Pandora
   '/{room}/pandora/play/{name}',
   '/{room}/pandora/stations',
@@ -136,7 +139,9 @@ const endpointPatterns = [
   '/resumeAll',
   
   // Debug endpoints
-  '/{room}/debug/accounts',
+  '/debug/spotify/parse/{input}',
+  '/debug/spotify/account/{room}',
+  '/debug/spotify/browse/{room}/{sid}',
 ];
 
 // Endpoints covered by tests
@@ -255,9 +260,10 @@ console.log('   ✅ Playback controls: 100%');
 console.log('   ✅ Volume controls: 100%');
 console.log('   ✅ Queue management: 100%');
 console.log('   ✅ Group management: 100%');
-console.log('   ✅ Debug endpoints: 86% (debug/subscriptions, debug/accounts not tested)');
+console.log('   ✅ Debug endpoints: 86% (debug/subscriptions, spotify debug endpoints not tested)');
 console.log('   ✅ Default room: 100%');
 console.log('   ✅ Music services - Apple: 100%');
+console.log('   ✅ Music services - Spotify: 100%');
 console.log('   ✅ Music services - Library: 100%');
 console.log('   ✅ Music services - Pandora: 100%');
 console.log('   ⚠️  Music services - SiriusXM: 0% (not implemented)');
@@ -270,7 +276,7 @@ console.log('   ✅ Sleep timer: 100%');
 
 console.log('\n💡 To improve coverage:');
 console.log('   - Add tests for /debug/subscriptions endpoint');
-console.log('   - Add tests for /{room}/debug/accounts endpoint');
+console.log('   - Add tests for /debug/spotify/* endpoints (parse, account, browse)');
 console.log('   - SiriusXM endpoints return 501 (not implemented)');
 
 // Exit with error if coverage is below threshold
@@ -332,6 +338,7 @@ if (showDetailed) {
       'integration/04-content-generic.ts',
       'integration/04-content-library.ts',
       'integration/04-content-pandora.ts',
+      'integration/04-content-spotify-tests.ts',
       'integration/05-group-tests-quick.ts',
       'integration/06-playback-modes-tests.ts',
       'integration/07-advanced-tests.ts',
@@ -378,6 +385,7 @@ if (showDetailed) {
   console.log('   - 04-content-generic.ts: Generic music search');
   console.log('   - 04-content-library.ts: Music library search and indexing');
   console.log('   - 04-content-pandora.ts: Pandora playback and feedback');
+  console.log('   - 04-content-spotify-tests.ts: Spotify direct playback');
   console.log('   - 05-group-tests-quick.ts: Basic group management');
   console.log('   - 06-playback-modes-tests.ts: Repeat, shuffle, crossfade, sleep');
   console.log('   - 07-advanced-tests.ts: Presets, settings, line-in');

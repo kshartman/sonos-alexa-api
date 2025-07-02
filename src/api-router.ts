@@ -9,6 +9,7 @@ import type { PresetLoader } from './preset-loader.js';
 import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
+import { SpotifyService } from './services/spotify-service.js';
 import { AccountService } from './services/account-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
 import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
@@ -28,6 +29,7 @@ export class ApiRouter {
   private defaultRoomManager: DefaultRoomManager;
   private ttsService: TTSService;
   private appleMusicService: AppleMusicService;
+  private spotifyService: SpotifyService;
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
   private servicesCache: ServicesCache;
@@ -40,7 +42,23 @@ export class ApiRouter {
     presets: {},
     musicLibrary: {},
     devices: {},
-    errors: []
+    errors: [],
+    readiness: {
+      discovery: false,
+      servicesCache: false,
+      musicLibrary: false,
+      upnpSubscriptions: false,
+      topology: false,
+      allReady: false
+    },
+    readinessTimes: {
+      discovery: null as string | null,
+      servicesCache: null as string | null,
+      musicLibrary: null as string | null,
+      upnpSubscriptions: null as string | null,
+      topology: null as string | null,
+      allReady: null as string | null
+    }
   };
 
   /**
@@ -58,8 +76,9 @@ export class ApiRouter {
     this.defaultRoomManager = defaultRoomManager!;
     this.ttsService = ttsService!;
     this.appleMusicService = new AppleMusicService();
-    this.accountService = new AccountService();
+    this.spotifyService = new SpotifyService();
     this.servicesCache = new ServicesCache(discovery);
+    this.accountService = new AccountService(this.servicesCache);
     
     // Add version and config to startup info
     this.startupInfo.version = config.version;
@@ -77,6 +96,7 @@ export class ApiRouter {
     try {
       await this.servicesCache.initialize();
       this.updateStartupInfo('services', this.servicesCache.getStatus());
+      this.updateReadiness('servicesCache', true);
     } catch (error) {
       logger.error('Failed to initialize services cache:', error);
       this.updateStartupInfo('errors', {
@@ -109,6 +129,7 @@ export class ApiRouter {
               this.config.dataDir || './data',
               (musicLibraryStats) => {
                 this.updateStartupInfo('musicLibrary', musicLibraryStats);
+                this.updateReadiness('musicLibrary', true);
               }
             );
             await this.musicLibraryCache.initialize();
@@ -233,6 +254,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/thumbsup', this.pandoraThumbsUp.bind(this));
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
     this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
+    this.routes.set('GET /{room}/spotify/play/{id}', this.spotifyPlay.bind(this));
     
     // Queue management routes
     this.routes.set('GET /{room}/queue', this.getQueue.bind(this));
@@ -265,7 +287,9 @@ export class ApiRouter {
     this.routes.set('GET /debug/disable-all', this.disableAllDebug.bind(this));
     this.routes.set('GET /debug/startup', this.getStartupInfo.bind(this));
     this.routes.set('GET /debug/startup/config', this.getStartupConfig.bind(this));
-    
+    this.routes.set('GET /debug/spotify/parse/{input}', this.debugSpotifyParse.bind(this));
+    this.routes.set('GET /debug/spotify/browse/{room}/{sid}', this.debugBrowseSpotify.bind(this));
+    this.routes.set('GET /debug/spotify/account/{room}', this.debugSpotifyAccount.bind(this));
     // Settings route
     this.routes.set('GET /settings', this.getSettings.bind(this));
     
@@ -293,9 +317,6 @@ export class ApiRouter {
     this.routes.set('GET /song/{query}', this.musicSearchSongDefault.bind(this));
     this.routes.set('GET /album/{name}', this.musicSearchAlbumDefault.bind(this));
     this.routes.set('GET /station/{name}', this.musicSearchStationDefault.bind(this));
-    
-    // Debug endpoint for account testing
-    this.routes.set('GET /{room}/debug/accounts', this.debugAccounts.bind(this));
     
     // Debug endpoint for subscription status
     this.routes.set('GET /debug/subscriptions', this.debugSubscriptions.bind(this));
@@ -1559,6 +1580,7 @@ export class ApiRouter {
     };
   }
   
+  
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateStartupInfo(category: string, data: any): void { // ANY IS CORRECT: data can be any type of startup information
     this.startupInfo[category] = {
@@ -1566,6 +1588,27 @@ export class ApiRouter {
       ...data,
       lastUpdated: new Date().toISOString()
     };
+  }
+
+  /**
+   * Update readiness status for a component
+   */
+  updateReadiness(component: string, ready: boolean): void {
+    this.startupInfo.readiness[component] = ready;
+    if (ready) {
+      this.startupInfo.readinessTimes[component] = new Date().toISOString();
+    }
+    
+    // Check if all components are ready
+    const allReady = Object.entries(this.startupInfo.readiness)
+      .filter(([key]) => key !== 'allReady')
+      .every(([, value]) => value === true);
+    
+    if (allReady && !this.startupInfo.readiness.allReady) {
+      this.startupInfo.readiness.allReady = true;
+      this.startupInfo.readinessTimes.allReady = new Date().toISOString();
+      logger.info('All system components are ready');
+    }
   }
   
   // Default room management endpoints
@@ -2254,6 +2297,84 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
   
+  private async spotifyPlay({ room, id }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!id) throw { status: 400, message: 'Spotify ID is required' };
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    // Try to parse the ID as a Spotify URI or extract type from context
+    const spotifyInput = id.includes(':') ? id : `spotify:track:${id}`;
+    const parsed = SpotifyService.parseSpotifyInput(spotifyInput);
+    
+    if (!parsed) {
+      throw { status: 400, message: 'Invalid Spotify ID or URI format' };
+    }
+    
+    // Get Spotify account from Sonos
+    logger.info('Getting Spotify account for playback...');
+    const account = await this.accountService.getServiceAccount(coordinator, 'spotify');
+    if (!account) {
+      throw { status: 503, message: 'Spotify service not configured in Sonos. Please add Spotify account in Sonos app.' };
+    }
+    
+    logger.info(`Using Spotify account - SID: ${account.sid}, SN: ${account.serialNumber}`);
+    if ((account as any).spotifyAccountId) {
+      logger.info(`Spotify account ID: ${(account as any).spotifyAccountId}`);
+    }
+    
+    this.spotifyService.setAccount(account);
+    this.spotifyService.setDevice(coordinator);
+    
+    try {
+      // Generate URI and basic metadata
+      const uri = await this.spotifyService.generateDirectURI(parsed.type as 'track' | 'album' | 'playlist' | 'artist', parsed.id);
+      logger.info(`Spotify play - type: ${parsed.type}, id: ${parsed.id}, Sonos URI: ${uri}`);
+      
+      // Generate metadata using the direct metadata method which supports all types
+      const metadata = this.spotifyService.generateDirectMetadata(
+        parsed.type as 'track' | 'album' | 'playlist' | 'artist', 
+        parsed.id,
+        `Spotify ${parsed.type}`
+      );
+      
+      // Play based on URI type
+      if (uri.includes('x-sonos-spotify') || uri.includes('x-sonosapi-radio')) {
+        // Direct play for tracks and artist radio (streams)
+        await coordinator.setAVTransportURI(uri, metadata);
+        await coordinator.play();
+      } else {
+        // Container URIs (albums, playlists) replace the queue
+        // More robust approach: clear, add, then explicitly set transport to the queue
+        await coordinator.clearQueue();
+        await coordinator.addURIToQueue(uri, metadata, true, 1);
+        
+        // Set playback explicitly to the new queue position
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.setAVTransportURI(queueURI, '');
+        await coordinator.play();
+      }
+      
+      this.defaultRoomManager.setDefaults(room);
+      
+      return { status: 200, body: { status: 'success' } };
+    } catch (error) {
+      logger.error('Failed to play Spotify content:', error);
+      
+      // Check if this is a SOAP error 800 (content not playable) which often means Premium required
+      const errorMsg = getErrorMessage(error);
+      if (errorMsg.includes('errorCode>800') || errorMsg.includes('UPnPError') && errorMsg.includes('800')) {
+        throw { 
+          status: 402, // Payment Required
+          message: 'Spotify Premium account required. Free Spotify accounts cannot play content via API control.' 
+        };
+      }
+      
+      throw { status: 500, message: `Failed to play Spotify content: ${errorMsg}` };
+    }
+  }
+  
   private async setGroupVolume({ room, level }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!level) throw { status: 400, message: 'Level parameter is required' };
@@ -2488,8 +2609,8 @@ export class ApiRouter {
     if (serviceLower === 'library' && type === 'station') {
       throw { status: 400, message: 'Library does not support station search, only song and album' };
     }
-    if (serviceLower !== 'apple' && serviceLower !== 'pandora' && serviceLower !== 'library') {
-      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'pandora', and 'library' are supported.` };
+    if (serviceLower !== 'apple' && serviceLower !== 'spotify' && serviceLower !== 'pandora' && serviceLower !== 'library') {
+      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'spotify', 'pandora', and 'library' are supported.` };
     }
 
     try {
@@ -2554,19 +2675,26 @@ export class ApiRouter {
         };
       }
       
-      // Apple Music logic
+      // Apple Music and Spotify logic
       // Get service account from Sonos
       const account = await this.accountService.getServiceAccount(coordinator, service);
       if (!account) {
         throw { status: 503, message: `${service} service not configured in Sonos. Please add ${service} account in Sonos app.` };
       }
 
-      // Set account in service
-      this.appleMusicService.setAccount(account);
+      // Set account in appropriate service
+      let musicService: typeof this.appleMusicService | typeof this.spotifyService;
+      if (serviceLower === 'spotify') {
+        this.spotifyService.setAccount(account);
+        musicService = this.spotifyService;
+      } else {
+        this.appleMusicService.setAccount(account);
+        musicService = this.appleMusicService;
+      }
 
       // Perform search
       logger.info(`Searching ${service} for ${type}: ${term}`);
-      const results = await this.appleMusicService.search(type, term);
+      const results = await musicService.search(type, term);
       
       if (results.length === 0) {
         throw { status: 404, message: `No ${type}s found for: ${term}` };
@@ -2580,8 +2708,8 @@ export class ApiRouter {
       logger.info(`Found ${type}: ${result.title} by ${result.artist || 'Unknown'}`);
 
       // Generate URI and metadata
-      const uri = this.appleMusicService.generateURI(type, result);
-      const metadata = this.appleMusicService.generateMetadata(type, result);
+      const uri = musicService.generateURI(type, result);
+      const metadata = musicService.generateMetadata(type, result);
 
       logger.debug(`Generated URI: ${uri}`);
 
@@ -2647,61 +2775,6 @@ export class ApiRouter {
     }
   }
   
-  // Debug endpoint for account testing
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async debugAccounts({ room }: RouteParams): Promise<ApiResponse<any>> { // ANY IS CORRECT: debug endpoint returns various account info
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    
-    const device = this.getDevice(room);
-    const coordinator = this.discovery.getCoordinator(device.id) || device;
-    
-    try {
-      // Try multiple endpoints to find account data
-      const endpoints = [
-        '/status/accounts',
-        '/status',
-        '/status/zp',
-        '/xml/device_description.xml'
-      ];
-      
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const results: any = {};
-      
-      for (const endpoint of endpoints) {
-        try {
-          const url = `${coordinator.baseUrl}${endpoint}`;
-          const response = await fetch(url);
-          const text = await response.text();
-          results[endpoint] = {
-            status: response.status,
-            length: text.length,
-            content: text.substring(0, 500) + (text.length > 500 ? '...' : '')
-          };
-        } catch (error) {
-          results[endpoint] = { error: (error as Error).message };
-        }
-      }
-      
-      // Also try to call the account service directly
-      const account = await this.accountService.getServiceAccount(coordinator, 'apple');
-      
-      return {
-        status: 200,
-        body: {
-          device: {
-            id: coordinator.id,
-            baseUrl: coordinator.baseUrl,
-            roomName: coordinator.roomName
-          },
-          endpoints: results,
-          appleAccount: account,
-          cachedAccounts: this.accountService.getCachedAccounts()
-        }
-      };
-    } catch (error) {
-      throw { status: 500, message: `Debug failed: ${(error as Error).message}` };
-    }
-  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async debugSubscriptions(): Promise<ApiResponse<any>> { // ANY IS CORRECT: debug endpoint returns various subscription info
@@ -2753,4 +2826,158 @@ export class ApiRouter {
       body: safeSettings
     };
   }
+
+  private async debugSpotifyParse({ input }: RouteParams): Promise<ApiResponse> {
+    if (!input) throw { status: 400, message: 'Input parameter is required' };
+    
+    // Parse the Spotify input
+    const parsed = SpotifyService.parseSpotifyInput(input);
+    if (!parsed) {
+      return {
+        status: 400,
+        body: { error: 'Invalid Spotify URL or URI format' }
+      };
+    }
+    
+    // Generate the Sonos URI
+    const sonosUri = SpotifyService.parseSpotifyUrlToUri(input);
+    
+    // Parse the URI to extract components
+    let sid = '12';
+    let sn = '1';
+    let flags = '';
+    let prefix = '';
+    
+    if (sonosUri) {
+      // Extract parameters from URI
+      const sidMatch = sonosUri.match(/sid=(\d+)/);
+      if (sidMatch && sidMatch[1]) sid = sidMatch[1];
+      
+      const snMatch = sonosUri.match(/sn=(\d+)/);
+      if (snMatch && snMatch[1]) sn = snMatch[1];
+      
+      const flagsMatch = sonosUri.match(/flags=(\d+)/);
+      if (flagsMatch && flagsMatch[1]) flags = flagsMatch[1];
+      
+      // Extract prefix for containers
+      if (sonosUri.includes('x-rincon-cpcontainer:')) {
+        const prefixMatch = sonosUri.match(/x-rincon-cpcontainer:([0-9a-f]+)spotify/);
+        if (prefixMatch && prefixMatch[1]) prefix = prefixMatch[1];
+      }
+    }
+    
+    // Also generate what our API would create with full account info
+    const devices = this.discovery.getAllDevices();
+    const device = devices[0];
+    let fullUri = null;
+    let accountInfo = null;
+    
+    if (device) {
+      try {
+        // Get Spotify account
+        const account = await this.accountService.getServiceAccount(device, 'spotify');
+        if (account) {
+          accountInfo = {
+            id: account.id,
+            sid: account.sid,
+            serialNumber: account.serialNumber,
+            spotifyAccountId: (account as any).spotifyAccountId
+          };
+          
+          this.spotifyService.setAccount(account);
+          fullUri = await this.spotifyService.generateDirectURI(
+            parsed.type as 'track' | 'album' | 'playlist' | 'artist', 
+            parsed.id
+          );
+        }
+      } catch (error) {
+        // Ignore errors, this is just for debugging
+      }
+    }
+    
+    return {
+      status: 200,
+      body: {
+        input,
+        parsed: {
+          type: parsed.type,
+          id: parsed.id,
+          spotifyUri: `spotify:${parsed.type}:${parsed.id}`,
+          sid,
+          sn,
+          flags,
+          prefix: prefix || undefined,
+          account: accountInfo
+        },
+        sonosUri,
+        fullUri: fullUri || 'Unable to generate with account info'
+      }
+    };
+  }
+
+  private async debugBrowseSpotify({ room, sid }: RouteParams): Promise<ApiResponse> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!sid) throw { status: 400, message: 'SID parameter is required' };
+    
+    const device = this.getDevice(room);
+    
+    try {
+      const browseId = `SP:${sid}`;
+      logger.info(`Browsing ${browseId} on ${device.roomName}...`);
+      
+      const result = await device.browse(browseId);
+      
+      return {
+        status: 200,
+        body: {
+          browseId,
+          device: device.roomName,
+          totalMatches: result.totalMatches,
+          numberReturned: result.numberReturned,
+          items: result.items
+        }
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        body: {
+          error: getErrorMessage(error),
+          message: `Failed to browse SP:${sid}`
+        }
+      };
+    }
+  }
+
+  private async debugSpotifyAccount({ room }: RouteParams): Promise<ApiResponse> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    
+    const device = this.getDevice(room);
+    
+    try {
+      // Get the Spotify account info
+      const account = await this.accountService.getServiceAccount(device, 'spotify');
+      
+      // Get all discovered Spotify accounts
+      const allAccounts = this.accountService.getAllSpotifyAccounts();
+      
+      return {
+        status: 200,
+        body: {
+          device: device.roomName,
+          currentAccount: account,
+          discoveredAccounts: Object.fromEntries(allAccounts),
+          message: 'Spotify account info discovered from favorites'
+        }
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        body: {
+          error: getErrorMessage(error),
+          message: 'Failed to get Spotify account info'
+        }
+      };
+    }
+  }
+
 }

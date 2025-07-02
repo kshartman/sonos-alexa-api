@@ -6,6 +6,7 @@ import { debugManager } from './utils/debug-manager.js';
 import { tryConvertPreset, type PresetWithLegacy } from './utils/preset-converter.js';
 import type { PresetCollection, Preset, Config } from './types/sonos.js';
 import type { SonosDiscovery } from './discovery.js';
+import { SpotifyService } from './services/spotify-service.js';
 
 interface PresetStats {
   totalFiles: number;
@@ -114,6 +115,11 @@ export class PresetLoader {
               stats.failedResolution++;
               failedResolutionNames.push(presetName);
               debugManager.debug('presets', `Preset ${presetName}: Failed to resolve favorite ${resolvedPreset.uri}`);
+            } else if (resolvedPreset.uri.startsWith('spotifyUrl:')) {
+              // Spotify URL was not resolved
+              stats.failedResolution++;
+              failedResolutionNames.push(presetName);
+              debugManager.debug('presets', `Preset ${presetName}: Failed to resolve Spotify URL ${resolvedPreset.uri}`);
             } else if (resolvedPreset.uri.startsWith('placeholder:')) {
               // Invalid preset (no content)
               stats.invalidFormat++;
@@ -302,42 +308,76 @@ export class PresetLoader {
   }
 
   private async resolveFavorites(preset: Preset, presetName: string): Promise<Preset> {
-    // Only resolve if we have discovery and this is a favorite URI
-    if (!this.discovery || !preset.uri.startsWith('favorite:')) {
+    // Handle different URI types that need resolution
+    if (!this.discovery) {
       return preset;
     }
 
-    const favoriteName = preset.uri.substring(9); // Remove 'favorite:' prefix
-    debugManager.debug('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
+    // Handle favorite: URIs
+    if (preset.uri.startsWith('favorite:')) {
+      const favoriteName = preset.uri.substring(9); // Remove 'favorite:' prefix
+      debugManager.debug('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
 
-    try {
-      // Get any device to query favorites (they should be system-wide)
-      const devices = this.discovery.getAllDevices();
-      if (devices.length === 0) {
-        debugManager.debug('favorites', `No devices available to resolve favorite: ${favoriteName}`);
-        return preset;
+      try {
+        // Get any device to query favorites (they should be system-wide)
+        const devices = this.discovery.getAllDevices();
+        if (devices.length === 0) {
+          debugManager.debug('favorites', `No devices available to resolve favorite: ${favoriteName}`);
+          return preset;
+        }
+
+        const device = devices[0]; // Use first available device
+        const { FavoritesManager } = await import('./actions/favorites.js');
+        const favoritesManager = new FavoritesManager();
+        const favorite = await favoritesManager.findFavoriteByName(device!, favoriteName);
+
+        if (favorite) {
+          debugManager.debug('favorites', `Resolved favorite "${favoriteName}" to URI: ${favorite.uri}`);
+          return {
+            ...preset,
+            uri: favorite.uri,
+            metadata: favorite.metadata || preset.metadata,
+            _originalFavorite: favoriteName // Keep track of original for debugging
+          } as Preset & { _originalFavorite?: string };
+        } else {
+          debugManager.debug('favorites', `Could not resolve favorite "${favoriteName}" for preset ${presetName}`);
+          return preset; // Return unchanged if we can't resolve
+        }
+      } catch (error) {
+        debugManager.debug('favorites', `Error resolving favorite "${favoriteName}" for preset ${presetName}:`, error);
+        return preset; // Return unchanged if there's an error
       }
+    }
+    
+    // Handle spotifyUrl: URIs
+    if (preset.uri.startsWith('spotifyUrl:')) {
+      const spotifyUrl = preset.uri.substring(11); // Remove 'spotifyUrl:' prefix
+      debugManager.debug('presets', `Resolving Spotify URL for preset ${presetName}: ${spotifyUrl}`);
 
-      const device = devices[0]; // Use first available device
-      const { FavoritesManager } = await import('./actions/favorites.js');
-      const favoritesManager = new FavoritesManager();
-      const favorite = await favoritesManager.findFavoriteByName(device!, favoriteName);
-
-      if (favorite) {
-        debugManager.debug('favorites', `Resolved favorite "${favoriteName}" to URI: ${favorite.uri}`);
+      try {
+        // Use SpotifyService to parse the URL and generate URI
+        const sonosUri = SpotifyService.parseSpotifyUrlToUri(spotifyUrl);
+        
+        if (!sonosUri) {
+          logger.warn(`Failed to parse Spotify URL for preset ${presetName}: ${spotifyUrl}`);
+          return preset;
+        }
+        
+        debugManager.debug('presets', `Resolved Spotify URL to URI: ${sonosUri}`);
+        
         return {
           ...preset,
-          uri: favorite.uri,
-          metadata: favorite.metadata || preset.metadata,
-          _originalFavorite: favoriteName // Keep track of original for debugging
-        } as Preset & { _originalFavorite?: string };
-      } else {
-        debugManager.debug('favorites', `Could not resolve favorite "${favoriteName}" for preset ${presetName}`);
-        return preset; // Return unchanged if we can't resolve
+          uri: sonosUri,
+          metadata: '', // Spotify doesn't need metadata
+          _originalSpotifyUrl: spotifyUrl // Keep track of original for debugging
+        } as Preset & { _originalSpotifyUrl?: string };
+      } catch (error) {
+        logger.error(`Error resolving Spotify URL for preset ${presetName}:`, error);
+        return preset; // Return unchanged if there's an error
       }
-    } catch (error) {
-      debugManager.debug('favorites', `Error resolving favorite "${favoriteName}" for preset ${presetName}:`, error);
-      return preset; // Return unchanged if there's an error
     }
+
+    // No resolution needed
+    return preset;
   }
 }

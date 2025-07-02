@@ -1,6 +1,8 @@
 import logger from './logger.js';
 import { XMLParser } from 'fast-xml-parser';
 import type { SonosDiscovery } from '../discovery.js';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 interface ServiceInfo {
   id: number;
@@ -34,6 +36,9 @@ export class ServicesCache {
     logger.info('Initializing services cache...');
     await this.refresh();
     
+    // Write cache to file for debugging
+    await this.writeCacheToFile();
+    
     // Set up automatic refresh timer
     this.scheduleNextRefresh();
   }
@@ -47,7 +52,8 @@ export class ServicesCache {
     // Schedule next refresh
     this.refreshTimer = setTimeout(() => {
       logger.info('Performing scheduled services cache refresh');
-      this.refresh().then(() => {
+      this.refresh().then(async () => {
+        await this.writeCacheToFile();
         this.scheduleNextRefresh();
       }).catch(error => {
         logger.error('Failed to refresh services cache:', error);
@@ -76,20 +82,61 @@ export class ServicesCache {
     logger.info('Refreshing services cache...');
     
     try {
+      // Preserve any discovered services before refresh
+      const discoveredServices: Record<string, ServiceInfo> = {};
+      if (this.cache) {
+        Object.entries(this.cache).forEach(([id, service]) => {
+          if ((service as any).isDiscovered) {
+            discoveredServices[id] = service;
+          }
+        });
+      }
+      
       const services = await this.fetchServicesFromDevices();
-      this.cache = services;
+      
+      // Merge discovered services back in
+      this.cache = { ...services, ...discoveredServices };
       this.lastRefresh = new Date();
       
-      const serviceCount = Object.keys(services).length;
-      logger.info(`Services cache refreshed successfully with ${serviceCount} services`);
+      const serviceCount = Object.keys(this.cache).length;
+      logger.info(`Services cache refreshed successfully with ${serviceCount} services (including ${Object.keys(discoveredServices).length} discovered)`);
       
       // Log some interesting services for debugging
-      const tuneInServices = Object.values(services).filter(s => s.isTuneIn);
-      const personalizedServices = Object.values(services).filter(s => s.isPersonalized);
+      const tuneInServices = Object.values(this.cache).filter(s => s.isTuneIn);
+      const personalizedServices = Object.values(this.cache).filter(s => s.isPersonalized);
       logger.debug(`Found ${tuneInServices.length} TuneIn services, ${personalizedServices.length} personalized services`);
     } catch (error) {
       logger.error('Failed to refresh services cache:', error);
       throw error;
+    }
+  }
+
+  private async writeCacheToFile(): Promise<void> {
+    if (!this.cache) {
+      logger.warn('Cannot write cache to file: cache is null');
+      return;
+    }
+    
+    try {
+      const dataDir = path.resolve(process.cwd(), 'data');
+      await fs.mkdir(dataDir, { recursive: true });
+      
+      const filePath = path.join(dataDir, 'services-cache.json');
+      const cacheData = {
+        lastRefresh: this.lastRefresh,
+        serviceCount: Object.keys(this.cache).length,
+        services: this.cache
+      };
+      
+      // Write to a temp file first then rename for atomicity
+      const tempPath = `${filePath}.tmp`;
+      await fs.writeFile(tempPath, JSON.stringify(cacheData, null, 2));
+      await fs.rename(tempPath, filePath);
+      
+      logger.info(`Services cache written to ${filePath} (${Object.keys(this.cache).length} services)`);
+    } catch (error) {
+      logger.error('Failed to write services cache to file:', error);
+      throw error; // Re-throw to ensure caller knows it failed
     }
   }
 
@@ -276,6 +323,54 @@ export class ServicesCache {
       serviceCount: this.cache ? Object.keys(this.cache).length : 0,
       isStale: this.isStale()
     };
+  }
+
+  /**
+   * Add a discovered service ID mapping for an existing service.
+   * This is used when we find favorites with different service IDs than what's in the device list.
+   * For example, Spotify might be ID 12 in the device list but ID 3079 in an old favorite.
+   * 
+   * @param discoveredId - The service ID found in a favorite
+   * @param canonicalServiceName - The service name to map to (e.g., "Spotify")
+   */
+  async addDiscoveredServiceId(discoveredId: string, canonicalServiceName: string): Promise<void> {
+    if (!this.cache) {
+      await this.refresh();
+    }
+
+    // Find the canonical service entry
+    const canonicalEntry = Object.values(this.cache!).find(
+      service => service.name.toLowerCase() === canonicalServiceName.toLowerCase()
+    );
+
+    if (!canonicalEntry) {
+      logger.warn(`Cannot add discovered service ID ${discoveredId}: service ${canonicalServiceName} not found`);
+      return;
+    }
+
+    // Check if this ID already exists
+    if (this.cache![discoveredId]) {
+      // If it already points to the same service, we're good
+      if (this.cache![discoveredId].name === canonicalEntry.name) {
+        return;
+      }
+      logger.warn(`Service ID ${discoveredId} already exists for ${this.cache![discoveredId].name}, not overwriting with ${canonicalServiceName}`);
+      return;
+    }
+
+    // Clone the canonical entry with the discovered ID
+    this.cache![discoveredId] = {
+      ...canonicalEntry,
+      id: parseInt(discoveredId, 10),
+      internalName: `${canonicalEntry.internalName} (App)`,
+      // Mark as a discovered mapping
+      isDiscovered: true
+    } as ServiceInfo & { isDiscovered?: boolean };
+
+    logger.info(`Added discovered service mapping: ${discoveredId} -> ${canonicalServiceName}`);
+    
+    // Update the cache file
+    await this.writeCacheToFile();
   }
 
   destroy(): void {

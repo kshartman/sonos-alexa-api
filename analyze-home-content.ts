@@ -89,7 +89,8 @@ async function generateContentAnalysis(): Promise<string> {
     'x-rincon-mp3radio': 'MP3 Internet radio stream (legacy format)',
     'x-rincon-stream': 'Internal stream (often Line-In or TV audio rebroadcast)',
     'x-sonos-http': 'Direct HTTP stream from arbitrary URL (e.g., nature sounds)',
-    'x-sonosapi-hls-static': 'Static HLS content (e.g., Calm app, Sonos Radio)'
+    'x-sonosapi-hls-static': 'Static HLS content (e.g., Calm app, Sonos Radio)',
+    'x-sonos-spotify': 'Spotify tracks played directly'
   };
   
   let typeIndex = 1;
@@ -134,6 +135,8 @@ async function generateContentAnalysis(): Promise<string> {
       service = 'MP3 Radio Stream';
     } else if (uriType === 'file') {
       service = 'Local File (Unsupported)';
+    } else if (uriType === 'x-sonos-spotify') {
+      service = 'Spotify';
     } else if (uriType === 'x-sonosapi-stream') {
       // x-sonosapi-stream without metadata is typically TuneIn
       service = 'TuneIn';
@@ -153,11 +156,11 @@ async function generateContentAnalysis(): Promise<string> {
           }
         } else {
           // Fall back to hardcoded mappings for legacy/common services
+          // Note: Spotify IDs are handled dynamically through discovered service IDs
           service = {
             '204': 'Sonos Radio',
             '254': 'TuneIn',
             '236': 'Pandora',
-            '9': 'Spotify',
             '13': 'Amazon Music',
             '368': 'YouTube Music',
             '7': 'Deezer',

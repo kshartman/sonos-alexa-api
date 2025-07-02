@@ -1057,7 +1057,8 @@ export class SonosDevice extends EventEmitter {
               title: container['dc:title'],
               itemType: 'container',
               uri: container.res ? container.res['#text'] || container.res : '',
-              metadata: result.Result // Store original DIDL-Lite for playback
+              metadata: result.Result, // Store original DIDL-Lite for playback
+              desc: container.desc || container['r:description'] || container['desc'] // Extract desc field
             });
           }
         }
@@ -1073,7 +1074,8 @@ export class SonosDevice extends EventEmitter {
               artist: item['dc:creator'],
               album: item['upnp:album'],
               uri: item.res ? (item.res['#text'] || item.res) : '',
-              metadata: result.Result // Store original DIDL-Lite for playback
+              metadata: result.Result, // Store original DIDL-Lite for playback
+              desc: item.desc || item['r:description'] || item['desc'] // Extract desc field
             });
           }
         }
@@ -1115,6 +1117,17 @@ export class SonosDevice extends EventEmitter {
       numberReturned: result.numberReturned,
       totalMatches: result.totalMatches
     };
+  }
+
+  /**
+   * List all music service accounts configured on the device
+   * @deprecated Not supported on S2 systems - returns 405 Method Not Allowed
+   * Use favorites-based account extraction instead (see AccountService)
+   * @returns Empty array (method kept for backwards compatibility)
+   */
+  async listAccounts(): Promise<any[]> {
+    logger.warn(`${this.roomName}: Status:ListAccounts is not supported on S2 systems`);
+    return [];
   }
 
 }

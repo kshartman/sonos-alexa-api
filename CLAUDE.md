@@ -7,6 +7,7 @@ This file helps maintain context across Claude sessions for the Sonos Alexa API 
 - Designed for Alexa skill compatibility with minimal dependencies (winston, pino, fast-xml-parser)
 - Uses native Node.js APIs (requires Node 18+)
 - No HTTP framework - just built-in `http` module
+- **S2 Systems Only** - S1 systems are not supported (no /status/accounts or Status:ListAccounts)
 
 ## Key User Preferences
 - **NO proactive file creation** - Only create files when explicitly asked
@@ -127,6 +128,10 @@ CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
 - `settings.json` - Main config (host, port, auth, TTS, default room/service)
 - `data/default-settings.json` - Persisted defaults (room, music service)
 - `presets/` - Preset files in JSON format
+
+## Generated Data Files
+- `data/services-cache.json` - Cached music services from Sonos system (generated at startup, auto-refreshes every 24 hours)
+- `data/music-library.cache` - Indexed music library data (generated at startup, refreshes based on library.reindexInterval setting)
 
 ## Configuration Architecture (v1.4.0+)
 - **Single Source of Truth**: Config loader reads ALL environment variables
@@ -407,7 +412,11 @@ When ready to publish a new Docker image:
 - Unit tests would be valuable for reliability
 - Docker health check endpoint exists at /health
 - SiriusXM could be implemented if needed (channel list exists in legacy repo)
-- Spotify could be implemented but requires OAuth2 and developer account
+- Spotify phase 1 complete (v1.5.0) - Direct playback and SpotifyUrl presets work. Search requires OAuth2
+- **Spotify Requirements**:
+  - Premium account required (free accounts can't be controlled via API)
+  - Account must be linked in Sonos app
+  - Must add Spotify favorites (track, album, playlist) for account extraction
 - Amazon Music search is impossible without reverse engineering (no public API)
 - Deezer not implemented (would need API access)
 - Consider adding more path files to complete the OpenAPI documentation

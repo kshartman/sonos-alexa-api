@@ -241,9 +241,37 @@ GET /station/{query}            # Search stations (Apple Music)
 ```
 
 Parameters:
-- `service`: `library`, `apple`, `pandora`
+- `service`: `library`, `apple`, `spotify`, `pandora`
 - `type`: `song`, `album`, `station`, `artist`
 - `query`: Search term (URL encoded)
+
+## Service-Specific Endpoints
+
+### Apple Music
+```
+GET /{room}/applemusic/{action}/{id}
+```
+- `action`: `now`, `next`, `queue`
+- `id`: Apple Music ID
+
+### Spotify
+```
+GET /{room}/spotify/play/{id}     # Play Spotify content by ID
+```
+- `id`: Spotify URI (e.g., `spotify:track:123`, `spotify:album:456`, `spotify:playlist:789`)
+
+### Pandora
+```
+GET /{room}/pandora/play/{name}   # Play Pandora station
+GET /{room}/pandora/stations      # List Pandora stations
+GET /{room}/pandora/thumbsup      # Thumbs up current track
+GET /{room}/pandora/thumbsdown    # Thumbs down current track
+```
+
+### SiriusXM
+```
+GET /{room}/siriusxm/{name}       # Play SiriusXM channel (NOT IMPLEMENTED)
+```
 
 ## Queue Management
 

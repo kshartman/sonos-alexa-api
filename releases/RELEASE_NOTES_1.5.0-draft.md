@@ -3,57 +3,79 @@
 ## Release Date: TBD
 
 ## Overview
-Version 1.5.0 focuses on [TO BE DETERMINED - describe main theme of this release].
+Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integration capabilities, and improves service discovery functionality.
 
 ## New Features
 
-### Feature 1 (Tentative)
-- Description of feature
-- Key capabilities
-- Use cases
+### Spotify URL Support in Presets
+- **Direct Spotify Links**: Use Spotify share URLs directly in preset files
+- **Automatic URI Conversion**: System automatically converts Spotify URLs to Sonos-compatible URIs
+- **Multiple Content Types**: Support for tracks, albums, playlists, and artists
+- **Example**:
+  ```json
+  {
+    "players": [{ "roomName": "Office", "volume": 30 }],
+    "spotifyUrl": "https://open.spotify.com/track/3n3Ppam7vgaVa1iaRUc9Lp"
+  }
+  ```
 
-### Feature 2 (Tentative)
-- Description of feature
-- Benefits
-- Implementation details
+### Enhanced Spotify Integration
+- **Account Extraction**: Automatically extracts Spotify account information from favorites (S2 compatible)
+- **Multiple Account Support**: Handles multiple Spotify accounts with separate prefixes
+- **Direct ID Playback**: Play any Spotify content with known IDs via `/spotify/play/{id}`
+- **Dynamic Flags System**: Smart flag selection based on content type and context
+- **S2 Compatibility**: Removed dependency on deprecated S1 endpoints
+
+### Service Discovery Improvements
+- **Service ID Extraction**: Gets current Spotify service ID from Sonos system
+- **Dynamic Service Resolution**: No longer relies on hardcoded service IDs
+- **Better Error Handling**: Clear messages when Spotify isn't configured
 
 ## Technical Improvements
 
 ### Code Quality
-- TypeScript type safety improvements
-- Error handling enhancements
-- Performance optimizations
+- **Spotify Service Architecture**: Clean separation of concerns for Spotify functionality
+- **Token Extraction**: Improved parsing of Spotify tokens from favorite metadata
+- **URI Generation**: Robust URI construction for different Spotify content types
 
 ### Documentation
-- API documentation updates
-- README improvements
-- Example usage scenarios
+- **New SPOTIFY.md**: Comprehensive guide to Spotify integration
+- **New PRESETS.md**: Detailed preset configuration documentation
+- **API.md Updates**: Added service-specific endpoints documentation
+- **Examples**: Multiple preset examples demonstrating SpotifyUrl feature
 
 ## Bug Fixes
-- Fix description 1
-- Fix description 2
-
-## Architecture & Performance
-
-### Improvements
-- Architecture improvements
-- Performance enhancements
-- Resource optimization
+- Fixed Spotify favorites with old service ID (3079) not playing correctly
+- Resolved issue with token extraction from r:resMD metadata field
+- Fixed mutual exclusivity validation for preset content sources
 
 ## Breaking Changes
-None - This release maintains backward compatibility with v1.4.0
+- **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies
+- **Spotify Favorites Required**: For Spotify to work, you MUST add at least one track, album, and playlist to Sonos favorites
 
 ## Migration Guide
-No migration required. All changes are backward compatible.
+
+### For S1 System Users
+This version requires a Sonos S2 system. S1 systems are no longer supported.
+
+### For Spotify Users
+Ensure you have added the following to your Sonos favorites:
+1. At least one Spotify track
+2. At least one Spotify album
+3. At least one Spotify playlist
+
+These favorites are required for the system to extract Spotify account information on S2 systems.
 
 ## Known Issues
-- Issue 1
-- Issue 2
+- Spotify search functionality requires OAuth credentials (not yet implemented)
+- SP:12 browsing fails without Spotify authorization
+- Metadata (title, artist, album) may not populate immediately for Spotify content
 
 ## Future Enhancements
-- Enhancement 1
-- Enhancement 2
-- Enhancement 3
+- OAuth2 implementation for Spotify search capabilities
+- Automatic token refresh for Spotify credentials
+- Support for more Spotify content types (podcasts, audiobooks)
+- Enhanced metadata retrieval for playing content
 
 ## Acknowledgments
 Thanks to all contributors and users who provided feedback for this release.

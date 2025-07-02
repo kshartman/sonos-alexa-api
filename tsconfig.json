@@ -23,6 +23,9 @@
     "allowUnreachableCode": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
+    // TODO: Enable these stricter options in future phases
+    // "exactOptionalPropertyTypes": true,
+    // "noPropertyAccessFromIndexSignature": true
   },
   "include": [
     "src/**/*"

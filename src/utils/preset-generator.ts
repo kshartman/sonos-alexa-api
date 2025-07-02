@@ -121,11 +121,14 @@ export class PresetGenerator {
 
         const preset: GeneratedPreset = {
           uri: playlist.uri,
-          metadata: playlist.metadata,
           volume: 30,
           roomName: defaultRoom,
           generatedBy: 'auto-generator'
         };
+        
+        if (playlist.metadata) {
+          preset.metadata = playlist.metadata;
+        }
 
         await this.savePreset(presetName, preset);
         count++;
@@ -167,11 +170,14 @@ export class PresetGenerator {
 
               const preset: GeneratedPreset = {
                 uri: station.uri,
-                metadata: station.metadata,
                 volume: 30,
                 roomName: defaultRoom,
                 generatedBy: 'auto-generator'
               };
+              
+              if (station.metadata) {
+                preset.metadata = station.metadata;
+              }
 
               await this.savePreset(presetName, preset);
               count++;

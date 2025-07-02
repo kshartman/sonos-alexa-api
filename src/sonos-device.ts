@@ -7,6 +7,15 @@ import { errorMessageIncludes } from './utils/error-helper.js';
 import type { DeviceInfo, SonosState, SonosTrack, SonosService, Preset, BrowseResult, BrowseItem } from './types/sonos.js';
 import type { PresetWithLegacy } from './utils/preset-converter.js';
 import type { SonosDiscovery } from './discovery.js';
+import type { 
+  TransportInfo, 
+  PositionInfo, 
+  MediaInfo,
+  TransportSettings, 
+  CrossfadeMode,
+  VolumeResponse,
+  MuteResponse
+} from './types/soap-responses.js';
 
 const SERVICES: Record<string, SonosService> = {
   AVTransport: {
@@ -323,7 +332,7 @@ export class SonosDevice extends EventEmitter {
     }
   }
 
-  private parseTrackInfo(positionInfo: Record<string, unknown>): SonosTrack | null {
+  private parseTrackInfo(positionInfo: PositionInfo): SonosTrack | null {
     if (!positionInfo.TrackMetaData || positionInfo.TrackMetaData === 'NOT_IMPLEMENTED') {
       logger.debug(`${this.roomName}: No track metadata available (TrackMetaData: ${positionInfo.TrackMetaData})`);
       return null;
@@ -520,27 +529,31 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  // ANY IS CORRECT: These methods return varying SOAP response structures
-  async getTransportInfo(): Promise<any> {
+  async getTransportInfo(): Promise<TransportInfo> {
     return this.soap('AVTransport', 'GetTransportInfo', {
       InstanceID: 0
     });
   }
 
-  async getPositionInfo(): Promise<any> {
+  async getPositionInfo(): Promise<PositionInfo> {
     return this.soap('AVTransport', 'GetPositionInfo', {
       InstanceID: 0
     });
   }
 
-  async getTransportSettings(): Promise<any> {
+  async getMediaInfo(): Promise<MediaInfo> {
+    return this.soap('AVTransport', 'GetMediaInfo', {
+      InstanceID: 0
+    });
+  }
+
+  async getTransportSettings(): Promise<TransportSettings> {
     return this.soap('AVTransport', 'GetTransportSettings', {
       InstanceID: 0
     });
   }
 
-  async getCrossfadeMode(): Promise<any> {
+  async getCrossfadeMode(): Promise<CrossfadeMode> {
     return this.soap('AVTransport', 'GetCrossfadeMode', {
       InstanceID: 0
     });
@@ -562,14 +575,12 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  async getVolume(): Promise<any> { // ANY IS CORRECT: SOAP returns dynamic XML response structure
+  async getVolume(): Promise<VolumeResponse> {
     return this.soap('RenderingControl', 'GetVolume', {
       InstanceID: 0,
       Channel: 'Master'
     });
   }
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   /**
    * Sets the mute state.
@@ -584,14 +595,12 @@ export class SonosDevice extends EventEmitter {
     });
   }
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  async getMute(): Promise<any> { // ANY IS CORRECT: SOAP returns dynamic XML response structure
+  async getMute(): Promise<MuteResponse> {
     return this.soap('RenderingControl', 'GetMute', {
       InstanceID: 0,
       Channel: 'Master'
     });
   }
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   // Group management - these will be overridden by discovery system
   getCoordinator(): SonosDevice {

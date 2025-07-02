@@ -1,6 +1,8 @@
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import logger from './logger.js';
 import { debugManager } from './debug-manager.js';
+import { SOAPError, UPnPError } from '../errors/sonos-errors.js';
+import { retry, SOAP_RETRY_OPTIONS, type RetryOptions } from './retry.js';
 
 const xmlBuilder = new XMLBuilder({
   ignoreAttributes: false,
@@ -68,7 +70,7 @@ export function createSoapEnvelope(serviceType: string, action: string, body: Re
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parseSoapResponse(xml: string): any { // ANY IS CORRECT: SOAP responses have dynamic structure based on service/action
+export function parseSoapResponse(xml: string, url?: string, action?: string): any { // ANY IS CORRECT: SOAP responses have dynamic structure based on service/action
   try {
     const parsed = xmlParser.parse(xml) as ParsedSoapResponse;
     const envelope = parsed['s:Envelope'] || parsed['SOAP-ENV:Envelope'];
@@ -84,13 +86,25 @@ export function parseSoapResponse(xml: string): any { // ANY IS CORRECT: SOAP re
     // Check for fault
     const fault = body['s:Fault'] || body['SOAP-ENV:Fault'];
     if (fault) {
-      const error = new Error(fault.faultstring || 'SOAP fault') as Error & {
-        code?: string;
-        detail?: unknown;
-      };
-      error.code = fault.faultcode;
-      error.detail = fault.detail;
-      throw error;
+      // Extract service from URL if provided
+      let service = 'Unknown';
+      if (url) {
+        const urlParts = url.split('/');
+        service = urlParts[urlParts.length - 2] || 'Unknown';
+      }
+      
+      // Check for UPnP error details
+      const upnpError = (fault.detail as any)?.UPnPError;
+      if (upnpError && upnpError.errorCode) {
+        throw new UPnPError(
+          service,
+          action || 'Unknown',
+          upnpError.errorCode,
+          upnpError.errorDescription
+        );
+      }
+      
+      throw SOAPError.fromFault(service, action || 'Unknown', fault);
     }
 
     // Return the first element in body (the response)
@@ -130,7 +144,7 @@ export async function soapRequest(url: string, serviceType: string, action: stri
       throw new Error(`SOAP request failed: ${response.status} ${response.statusText}`);
     }
 
-    const result = parseSoapResponse(responseText);
+    const result = parseSoapResponse(responseText, url, action);
     
     // Log detailed SOAP response at trace level (for massive XML responses)
     debugManager.trace('soap', `SOAP Response from ${url}`, { action, result });
@@ -143,4 +157,28 @@ export async function soapRequest(url: string, serviceType: string, action: stri
     logger.error(`SOAP request error for ${action}:`, error);
     throw error;
   }
+}
+
+/**
+ * Execute a SOAP request with retry logic
+ * @param url - The SOAP endpoint URL
+ * @param serviceType - The service type URN
+ * @param action - The SOAP action to perform
+ * @param body - The request body parameters
+ * @param retryOptions - Optional retry configuration
+ * @returns The parsed SOAP response
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function soapRequestWithRetry(
+  url: string, 
+  serviceType: string, 
+  action: string, 
+  body: Record<string, unknown> = {},
+  retryOptions?: RetryOptions
+): Promise<any> { // ANY IS CORRECT: Returns dynamic SOAP response data
+  return retry(
+    () => soapRequest(url, serviceType, action, body),
+    retryOptions || SOAP_RETRY_OPTIONS,
+    `SOAP ${action}`
+  );
 }

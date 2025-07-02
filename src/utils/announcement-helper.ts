@@ -22,24 +22,27 @@ export async function playAnnouncement(
 ): Promise<void> {
   // First, get the current transport info AND volume BEFORE any changes
   let transportInfo;
+  let mediaInfo;
   let positionInfo;
   let currentVolume;
   try {
     // Get all current state in parallel
-    const [transport, position, volumeResult] = await Promise.all([
+    const [transport, media, position, volumeResult] = await Promise.all([
       device.getTransportInfo(),
+      device.getMediaInfo(),
       device.getPositionInfo(),
       device.getVolume()
     ]);
     
     transportInfo = transport;
+    mediaInfo = media;
     positionInfo = position;
     currentVolume = volumeResult.CurrentVolume;
     
     logger.debug(`Transport info for ${device.roomName}:`, {
-      CurrentURI: transportInfo.CurrentURI,
+      CurrentURI: mediaInfo.CurrentURI,
       CurrentTransportState: transportInfo.CurrentTransportState,
-      CurrentURIMetaData: transportInfo.CurrentURIMetaData?.substring(0, 100),
+      CurrentURIMetaData: mediaInfo.CurrentURIMetaData?.substring(0, 100),
       CurrentVolume: currentVolume
     });
   } catch (error) {
@@ -51,7 +54,7 @@ export async function playAnnouncement(
   // Save current state
   const state = device.state;
   const backup: BackupState = {
-    volume: currentVolume || state.volume, // Use fetched volume, fallback to state
+    volume: typeof currentVolume === 'string' ? parseInt(currentVolume, 10) : (currentVolume || state.volume), // Ensure it's a number
     // Use transport info for accurate playback state
     playbackState: transportInfo?.CurrentTransportState === 'PAUSED_PLAYBACK' ? 'PAUSED_PLAYBACK' :
       transportInfo?.CurrentTransportState === 'PLAYING' ? 'PLAYING' : 
@@ -60,10 +63,10 @@ export async function playAnnouncement(
   };
 
   // Save transport details for restoration
-  if (transportInfo?.CurrentURI && !transportInfo.CurrentURI.includes('/tts/')) {
-    // Use transport info if it's not a TTS URL
-    backup.uri = transportInfo.CurrentURI;
-    backup.metadata = transportInfo.CurrentURIMetaData;
+  if (mediaInfo?.CurrentURI && !mediaInfo.CurrentURI.includes('/tts/')) {
+    // Use media info if it's not a TTS URL
+    backup.uri = mediaInfo.CurrentURI;
+    backup.metadata = mediaInfo.CurrentURIMetaData;
     
     // Only save position for non-streaming sources
     if (!isStreamingSource(backup.uri) && positionInfo) {

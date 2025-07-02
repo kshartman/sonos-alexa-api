@@ -35,9 +35,9 @@ export class MusicLibraryCache {
   private indexingProgress: number = 0;
   private cacheFile: string;
   private libraryService: MusicLibraryService;
-  private reindexTimer?: NodeJS.Timeout;
+  private reindexTimer?: NodeJS.Timeout | undefined;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private onStatsUpdate?: (stats: any) => void; // ANY IS CORRECT: stats object contains dynamic properties
+  private onStatsUpdate?: ((stats: any) => void) | undefined; // ANY IS CORRECT: stats object contains dynamic properties
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(deviceIP: string, cacheDir: string = './cache', onStatsUpdate?: (stats: any) => void) { // ANY IS CORRECT: stats object contains dynamic properties
@@ -231,11 +231,14 @@ export class MusicLibraryCache {
               artist: track.artist || 'Unknown Artist',
               album: track.album || 'Unknown Album',
               uri: track.res,
-              albumArtURI: track.albumArtURI,
               titleLower: track.title.toLowerCase(),
               artistLower: (track.artist || '').toLowerCase(),
               albumLower: (track.album || '').toLowerCase()
             };
+            
+            if (track.albumArtURI) {
+              cachedTrack.albumArtURI = track.albumArtURI;
+            }
 
             newTracks.set(track.id, cachedTrack);
 

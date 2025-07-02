@@ -104,13 +104,16 @@ export class AppleMusicService extends MusicService {
       title = track.artistName || '';
     }
     
-    return {
+    const result: MusicSearchResult = {
       id,
-      title,
-      artist: track.artistName,
-      album: track.collectionName,
-      duration: track.trackTimeMillis,
+      title
     };
+    
+    if (track.artistName) result.artist = track.artistName;
+    if (track.collectionName) result.album = track.collectionName;
+    if (track.trackTimeMillis) result.duration = track.trackTimeMillis;
+    
+    return result;
   }
 
   /**

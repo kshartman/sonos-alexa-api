@@ -20,16 +20,16 @@ export function isLegacyPreset(preset: unknown): preset is LegacyPreset {
   
   const obj = preset as Record<string, unknown>;
   
-  if (!('players' in obj) || !Array.isArray(obj.players) || obj.players.length === 0) {
+  if (!('players' in obj) || !Array.isArray(obj['players']) || obj['players'].length === 0) {
     return false;
   }
   
-  const firstPlayer = obj.players[0];
+  const firstPlayer = obj['players'][0];
   if (typeof firstPlayer !== 'object' || firstPlayer === null) {
     return false;
   }
   
-  return 'roomName' in firstPlayer && typeof (firstPlayer as Record<string, unknown>).roomName === 'string';
+  return 'roomName' in firstPlayer && typeof (firstPlayer as Record<string, unknown>)['roomName'] === 'string';
 }
 
 export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): PresetWithLegacy {
@@ -105,7 +105,7 @@ export function tryConvertPreset(data: unknown, presetName: string): Preset | Pr
   const presetData = data as Record<string, unknown>;
   
   // Check if it's already in the new format
-  if (typeof presetData.uri === 'string') {
+  if (typeof presetData['uri'] === 'string') {
     debugManager.debug('presets', `Preset ${presetName} is already in new format`);
     return presetData as unknown as Preset;
   }

@@ -196,7 +196,7 @@ export class PandoraAPI {
         headers: {
           'Content-Type': 'application/json'
         },
-        body
+        body: body || undefined
       });
 
       const data: PandoraResponse = await response.json();

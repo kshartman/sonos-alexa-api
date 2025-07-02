@@ -799,7 +799,7 @@ export class ApiRouter {
     const allPresets = { ...configPresets, ...folderPresets };
     
     // Check if this is a detailed request (path contains 'detailed')
-    const isDetailed = params.detailed === 'detailed';
+    const isDetailed = params['detailed'] === 'detailed';
     
     if (isDetailed) {
       // Return full preset objects with metadata
@@ -850,7 +850,7 @@ export class ApiRouter {
       let crossfade = false;
       try {
         const crossfadeMode = await coordinator.getCrossfadeMode();
-        crossfade = crossfadeMode.CrossfadeMode === '1' || crossfadeMode.CrossfadeMode === 1;
+        crossfade = crossfadeMode.CrossfadeMode === '1';
       } catch (_e) {
         // Some devices might not support crossfade
         logger.debug(`Crossfade not supported for ${room}`);
@@ -878,7 +878,7 @@ export class ApiRouter {
       // Parse time format "0:00:00" to seconds
       if (positionInfo.RelTime && positionInfo.RelTime !== 'NOT_IMPLEMENTED') {
         const parts = positionInfo.RelTime.split(':');
-        relTime = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+        relTime = parseInt(parts[0] || '0') * 3600 + parseInt(parts[1] || '0') * 60 + parseInt(parts[2] || '0');
       }
       trackNo = parseInt(positionInfo.Track) || 0;
       
@@ -2759,8 +2759,8 @@ export class ApiRouter {
         body: { 
           status: 'success',
           title: result.title,
-          artist: result.artist,
-          album: result.album,
+          artist: result.artist || '',
+          album: result.album || '',
           service: service
         } 
       };

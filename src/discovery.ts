@@ -32,9 +32,9 @@ export declare interface SonosDiscovery {
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging, no-redeclare
 export class SonosDiscovery extends EventEmitter {
   public readonly devices = new Map<string, SonosDevice>();
-  private socket?: dgram.Socket;
+  private socket?: dgram.Socket | undefined;
   private xmlParser: XMLParser;
-  private searchInterval?: NodeJS.Timeout;
+  private searchInterval?: NodeJS.Timeout | undefined;
   private subscriber?: UPnPSubscriber;
   public topologyManager: TopologyManager;
   private topologyDevices = new Set<string>();  // Track which devices we've subscribed to for topology

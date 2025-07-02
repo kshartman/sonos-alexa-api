@@ -13,7 +13,7 @@ interface SpotifyExtractedValues {
 
 export class AccountService {
   private accountCache = new Map<string, ServiceAccount>();
-  private servicesCache?: ServicesCache;
+  private servicesCache?: ServicesCache | undefined;
   // Per-account Spotify cache - keyed by accountId
   private spotifyPrefixCache = new Map<string, SpotifyExtractedValues>();
   

@@ -327,9 +327,9 @@ export class PandoraService {
 
       // Check if it's a Pandora track
       const positionInfo = await device.getPositionInfo();
-      const trackUri = positionInfo.trackUri || currentTrack.uri || '';
+      const trackUri = positionInfo.TrackURI || currentTrack.uri || '';
       
-      logger.debug(`Checking Pandora track - positionInfo.trackUri: ${positionInfo.trackUri}`);
+      logger.debug(`Checking Pandora track - positionInfo.TrackURI: ${positionInfo.TrackURI}`);
       logger.debug(`Current track URI: ${currentTrack.uri}`);
       logger.debug(`Using trackUri: ${trackUri}`);
       

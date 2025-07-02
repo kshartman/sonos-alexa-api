@@ -31,11 +31,11 @@ interface PresetLoadResult {
 export class PresetLoader {
   private presetDir: string;
   private presets: PresetCollection = {};
-  private watchTimeout?: NodeJS.Timeout;
-  private watcher?: ReturnType<typeof watchFs>;
-  private discovery?: SonosDiscovery;
-  private onStatsUpdate?: (stats: PresetLoadResult) => void;
-  private config?: Config;
+  private watchTimeout?: NodeJS.Timeout | undefined;
+  private watcher?: ReturnType<typeof watchFs> | undefined;
+  private discovery?: SonosDiscovery | undefined;
+  private onStatsUpdate?: ((stats: PresetLoadResult) => void) | undefined;
+  private config?: Config | undefined;
 
   constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void, config?: Config) {
     this.presetDir = presetDir;

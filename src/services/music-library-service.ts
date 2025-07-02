@@ -72,14 +72,21 @@ export class MusicLibraryService {
       }
       
       // Convert to search results format
-      return results.slice(0, maxResults).map(item => ({
-        id: item.id,
-        title: item.title,
-        artist: item.artist || '',
-        album: item.album || '',
-        uri: item.res || '',
-        albumArtURI: item.albumArtURI
-      }));
+      return results.slice(0, maxResults).map(item => {
+        const result: MusicSearchResult = {
+          id: item.id,
+          title: item.title,
+          artist: item.artist || '',
+          album: item.album || '',
+          uri: item.res || ''
+        };
+        
+        if (item.albumArtURI) {
+          result.albumArtURI = item.albumArtURI;
+        }
+        
+        return result;
+      });
     } catch (error) {
       logger.error('Music library search failed:', error);
       throw new Error('Failed to search music library');

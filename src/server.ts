@@ -84,7 +84,7 @@ discovery.on('device-state-change', (device, state, previousState) => {
       room: device.roomName,
       deviceId: device.id,
       state: serializableState,
-      previousState: previousState || undefined
+      ...(previousState ? { previousState } : {})
     }
   };
 

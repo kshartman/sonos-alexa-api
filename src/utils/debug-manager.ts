@@ -16,7 +16,6 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'wall'; /
 
 class DebugManager {
   private categories: DebugCategories;
-  private logLevel: LogLevel;
   private wallDeprecationWarned = false;
 
   constructor(config?: Config) {
@@ -31,7 +30,6 @@ class DebugManager {
       api: true,        // API request logging (always on by default)
       sse: false        // Server-Sent Events for webhooks
     };
-    this.logLevel = 'info';
 
     // Initialize from config
     if (config) {
@@ -43,8 +41,9 @@ class DebugManager {
     // Set log level from config
     if (config.logLevel && this.isValidLogLevel(config.logLevel)) {
       // Normalize 'wall' to 'trace'
-      this.logLevel = config.logLevel.toLowerCase() === 'wall' ? 'trace' : config.logLevel as LogLevel;
-      logger.info(`Log level set to '${this.logLevel}' from configuration`);
+      const normalized = config.logLevel.toLowerCase() === 'wall' ? 'trace' : config.logLevel as LogLevel;
+      logger.level = normalized;
+      logger.info(`Log level set to '${logger.level}' from configuration`);
     }
 
     // Set debug categories from config
@@ -67,7 +66,7 @@ class DebugManager {
 
     // Log the debug configuration
     logger.info('Debug configuration:', {
-      logLevel: this.logLevel,
+      logLevel: logger.level,
       categories: Object.entries(this.categories)
         .filter(([_, enabled]) => enabled)
         .map(([category]) => category)
@@ -77,7 +76,8 @@ class DebugManager {
 
 
   private isValidLogLevel(level: string): boolean {
-    return ['error', 'warn', 'info', 'debug', 'trace', 'wall'].includes(level.toLowerCase());
+    // Only check normalized levels (no 'wall')
+    return ['error', 'warn', 'info', 'debug', 'trace'].includes(level.toLowerCase());
   }
 
   private isValidCategory(category: string): boolean {
@@ -96,16 +96,23 @@ class DebugManager {
   setLogLevel(level: LogLevel): void {
     // Normalize 'wall' to 'trace'
     const normalized = level === 'wall' ? 'trace' : level;
-    this.logLevel = normalized;
     
-    // IMPORTANT: Also update the winston logger level!
+    // Validate the normalized level
+    if (!this.isValidLogLevel(normalized)) {
+      throw new Error(`Invalid log level: ${level}`);
+    }
+    
+    // Simply delegate to logger
     logger.level = normalized;
     
-    logger.info(`Log level set to: ${this.logLevel} (winston logger.level also set to: ${logger.level})`);
+    // Also update the process environment variable for consistency
+    process.env['LOG_LEVEL'] = normalized;
+    
+    logger.info(`Log level set to: ${normalized}`);
   }
 
   getLogLevel(): LogLevel {
-    return this.logLevel;
+    return logger.level as LogLevel;
   }
 
   getCategories(): DebugCategories {
@@ -182,7 +189,8 @@ class DebugManager {
     const levels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace'];
     // Normalize 'wall' to 'trace' for comparison
     const normalizedLevel = level === 'wall' ? 'trace' : level;
-    const currentLevelIndex = levels.indexOf(this.logLevel);
+    // logger.level is always normalized (never 'wall')
+    const currentLevelIndex = levels.indexOf(logger.level as LogLevel);
     const messageLevelIndex = levels.indexOf(normalizedLevel);
     return messageLevelIndex <= currentLevelIndex;
   }
@@ -205,5 +213,11 @@ export const debugManager = new Proxy({} as DebugManager, {
       throw new Error('DebugManager accessed before initialization. Call initializeDebugManager(config) first.');
     }
     return Reflect.get(debugManagerInstance, prop, receiver);
+  },
+  set(_target, prop, value, receiver) {
+    if (!debugManagerInstance) {
+      throw new Error('DebugManager accessed before initialization. Call initializeDebugManager(config) first.');
+    }
+    return Reflect.set(debugManagerInstance, prop, value, receiver);
   }
 });

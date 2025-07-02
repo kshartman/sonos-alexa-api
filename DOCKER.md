@@ -38,12 +38,12 @@ All configuration can be done via environment variables:
 
 ### Core Settings
 - `PORT` - API server port (default: 5005)
-- `LOG_LEVEL` - Log level: error, warn, info, debug (default: info)
+- `LOG_LEVEL` - Log level: error, warn, info, debug, trace (default: info)
 - `LOGGER` - Logger type: winston or pino (default: winston for dev, pino for prod)
 - `NODE_ENV` - Environment: development or production (default: production in Docker)
 
 ### Debug Settings
-- `DEBUG_LEVEL` - Debug verbosity: error, warn, info, debug, wall (default: info)
+- `DEBUG_LEVEL` - Debug verbosity: error, warn, info, debug, trace (default: info) - Note: This is now effectively the same as LOG_LEVEL
 - `DEBUG_CATEGORIES` - Debug categories: soap, topology, discovery, favorites, presets, upnp, api, sse, or "all"
 
 ### Default Configuration

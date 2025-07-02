@@ -53,6 +53,13 @@ Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integr
   - All SOAP operations centralized in SonosDevice class
   - Services no longer make direct device calls
 
+### Logging Improvements
+- **Trace Level Support**: Fixed trace log level for both `/loglevel/trace` and `/debug/level/trace` endpoints
+- **Unified Log Level Management**: DEBUG_LEVEL and LOG_LEVEL now control the same underlying logger
+  - Eliminates synchronization issues between debugManager and logger
+  - Simplifies configuration and runtime behavior
+- **Environment Variable Consistency**: Process environment updated when log level changes dynamically
+
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration
 - **New PRESETS.md**: Detailed preset configuration documentation

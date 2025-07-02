@@ -435,10 +435,10 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - **TTS_HOST_IP**: Override auto-detected IP for TTS (useful in Docker)
 
 ### Logging
-- **LOG_LEVEL**: Log level (error, warn, info, debug)
+- **LOG_LEVEL**: Log level (error, warn, info, debug, trace)
 - **LOGGER**: Logger type - winston or pino (default: winston for dev, pino for prod)
 - **LOG_FORMAT**: DEPRECATED - use LOGGER instead
-- **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, trace)
+- **DEBUG_LEVEL**: Debug verbosity (error, warn, info, debug, trace) - Note: This is now effectively the same as LOG_LEVEL
 - **DEBUG_CATEGORIES**: Comma-separated debug categories (api, discovery, soap, topology, favorites, presets, upnp, sse, or "all")
 - **NODE_ENV**: Environment (development or production)
 

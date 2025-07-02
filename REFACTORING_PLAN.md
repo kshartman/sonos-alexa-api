@@ -1,7 +1,15 @@
 # SOAP Architecture Refactoring Plan
 
+## Status Summary
+- **Phase 1**: ✅ COMPLETED - All SOAP operations centralized in SonosDevice
+- **Phase 2**: ✅ COMPLETED - Comprehensive error handling and retry logic implemented
+- **Phase 3**: 📅 DEFERRED - API Router refactoring for dependency injection
+- **Phase 4**: 📅 DEFERRED - Special case services refactoring
+
 ## Overview
 This document outlines a plan to refactor the Sonos API codebase to properly separate concerns and confine all SOAP/device communication to the SonosDevice class.
+
+**Note**: Phases 1 and 2 have been successfully completed. Phases 3 and 4 are deferred as future enhancements since the current architecture is working well and meeting all requirements.
 
 ## Current Problems
 
@@ -364,21 +372,23 @@ Test the full flow through API router with mocked SonosDevice.
 - ✅ All unit tests passing
 - ✅ All integration tests passing
 
-### Phase 3: Update API Router 🔄 IN PLANNING
-**Status**: Not started
+### Phase 3: Update API Router 📅 DEFERRED
+**Status**: Deferred as future enhancement
 - Router still manages some service initialization
 - Need to implement dependency injection pattern
 - Need to create service factory
+- **Note**: While Phase 3 would improve testability and separation of concerns, the current architecture is working well. This phase is deferred until there's a specific need for the improvements it would bring.
 
-### Phase 4: Special Cases 📅 PLANNED
-**Status**: Not started
+### Phase 4: Special Cases 📅 DEFERRED
+**Status**: Deferred as future enhancement
 - Music library HTTP requests
 - Pandora service refactoring
 - TTS service cleanup
+- **Note**: Depends on Phase 3 completion. These special case refactorings are deferred along with Phase 3.
 
 ## Next Steps
 
-1. **Phase 3 Planning**: Design dependency injection approach for API router
-2. **Documentation Updates**: Update all affected documentation
-3. **Performance Testing**: Ensure retry logic doesn't impact performance
-4. **Error Monitoring**: Set up proper error tracking for new error types
+1. **Documentation Updates**: Update all affected documentation for completed phases
+2. **Performance Testing**: Ensure retry logic doesn't impact performance
+3. **Error Monitoring**: Set up proper error tracking for new error types
+4. **Future Consideration**: Revisit Phase 3 & 4 when there's a specific need for improved testability or when adding new services that would benefit from the architectural changes

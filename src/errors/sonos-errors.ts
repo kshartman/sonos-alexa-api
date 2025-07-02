@@ -260,20 +260,20 @@ export function getErrorStatusCode(error: unknown): number {
   if (error instanceof UPnPError) {
     // Map common UPnP errors to HTTP status codes
     switch (error.errorCode) {
-      case UPnPError.ErrorCodes.INVALID_ARGS:
-      case UPnPError.ErrorCodes.ARGUMENT_VALUE_INVALID:
-      case UPnPError.ErrorCodes.ARGUMENT_VALUE_OUT_OF_RANGE:
-        return 400;
-      case UPnPError.ErrorCodes.ACTION_NOT_AUTHORIZED:
-      case UPnPError.ErrorCodes.NOT_LOGGED_IN:
-        return 401;
-      case UPnPError.ErrorCodes.RESOURCE_NOT_FOUND:
-        return 404;
-      case UPnPError.ErrorCodes.TRANSITION_NOT_AVAILABLE:
-      case UPnPError.ErrorCodes.NO_CONTENTS:
-        return 409;
-      default:
-        return 500;
+    case UPnPError.ErrorCodes.INVALID_ARGS:
+    case UPnPError.ErrorCodes.ARGUMENT_VALUE_INVALID:
+    case UPnPError.ErrorCodes.ARGUMENT_VALUE_OUT_OF_RANGE:
+      return 400;
+    case UPnPError.ErrorCodes.ACTION_NOT_AUTHORIZED:
+    case UPnPError.ErrorCodes.NOT_LOGGED_IN:
+      return 401;
+    case UPnPError.ErrorCodes.RESOURCE_NOT_FOUND:
+      return 404;
+    case UPnPError.ErrorCodes.TRANSITION_NOT_AVAILABLE:
+    case UPnPError.ErrorCodes.NO_CONTENTS:
+      return 409;
+    default:
+      return 500;
     }
   }
   return 500;

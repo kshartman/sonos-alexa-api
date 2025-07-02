@@ -37,6 +37,7 @@ export interface CreateObjectResponse {
   Result: string; // DIDL-Lite XML string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DestroyObjectResponse {
   // Empty response on success
 }
@@ -98,6 +99,7 @@ export interface RemoveTrackRangeFromQueueResponse {
   NewUpdateID: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ReorderTracksInQueueResponse {
   // Empty response on success
 }
@@ -142,6 +144,7 @@ export interface AddMembersToGroupResponse {
   VolumeAVTransportURI?: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface RemoveMembersFromGroupResponse {
   // Empty response on success
 }

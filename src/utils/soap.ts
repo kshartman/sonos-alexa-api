@@ -94,7 +94,7 @@ export function parseSoapResponse(xml: string, url?: string, action?: string): a
       }
       
       // Check for UPnP error details
-      const upnpError = (fault.detail as any)?.UPnPError;
+      const upnpError = (fault.detail as { UPnPError?: { errorCode: string; errorDescription?: string } })?.UPnPError;
       if (upnpError && upnpError.errorCode) {
         throw new UPnPError(
           service,
@@ -168,13 +168,14 @@ export async function soapRequest(url: string, serviceType: string, action: stri
  * @param retryOptions - Optional retry configuration
  * @returns The parsed SOAP response
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function soapRequestWithRetry(
   url: string, 
   serviceType: string, 
   action: string, 
   body: Record<string, unknown> = {},
   retryOptions?: RetryOptions
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> { // ANY IS CORRECT: Returns dynamic SOAP response data
   return retry(
     () => soapRequest(url, serviceType, action, body),

@@ -558,7 +558,7 @@ export class SonosDevice extends EventEmitter {
       InstanceID: 0
     });
   }
-  /* eslint-enable @typescript-eslint/no-explicit-any */
+   
 
   // RenderingControl actions
   /**

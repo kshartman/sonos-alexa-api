@@ -146,18 +146,18 @@ export async function retry<T>(
 /**
  * Create a retryable version of an async function
  */
-export function makeRetryable<T extends (...args: any[]) => Promise<any>>(
-  fn: T,
+export function makeRetryable<TArgs extends unknown[], TReturn>(
+  fn: (...args: TArgs) => Promise<TReturn>,
   defaultOptions?: RetryOptions,
   operationName?: string
-): T {
-  return (async (...args: Parameters<T>) => {
+): (...args: TArgs) => Promise<TReturn> {
+  return async (...args: TArgs) => {
     return retry(
       () => fn(...args),
       defaultOptions,
       operationName || fn.name || 'operation'
     );
-  }) as T;
+  };
 }
 
 /**

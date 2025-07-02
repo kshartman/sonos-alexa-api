@@ -96,9 +96,12 @@ class DebugManager {
   setLogLevel(level: LogLevel): void {
     // Normalize 'wall' to 'trace'
     const normalized = level === 'wall' ? 'trace' : level;
-    logger.info(`Setting log level from '${this.logLevel}' to '${normalized}'`);
     this.logLevel = normalized;
-    logger.info(`Log level is now: ${this.logLevel}`);
+    
+    // IMPORTANT: Also update the winston logger level!
+    logger.level = normalized;
+    
+    logger.info(`Log level set to: ${this.logLevel} (winston logger.level also set to: ${logger.level})`);
   }
 
   getLogLevel(): LogLevel {

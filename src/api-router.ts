@@ -1517,6 +1517,7 @@ export class ApiRouter {
       throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
     }
 
+    // Note: This now sets both debugManager and winston logger levels to keep them in sync
     debugManager.setLogLevel(level as LogLevel);
     return { status: 200, body: { status: 'success', logLevel: level } };
   }

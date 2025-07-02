@@ -149,6 +149,44 @@ This is a modern TypeScript implementation of a Sonos HTTP API designed for Alex
 - LOG_LEVEL, DEBUG_CATEGORIES
 - Legacy support: NODE_OPTIONS='--openssl-legacy-provider'
 
+## Error Handling Architecture
+
+### Error Class Hierarchy
+The system uses a comprehensive error class hierarchy for consistent error handling:
+
+1. **Base Classes**
+   - `SonosError` - Base class for all Sonos-related errors
+   - `SOAPError` - For SOAP request failures with service/action context
+   - `UPnPError` - For specific UPnP error codes with proper mapping
+
+2. **Specific Error Types**
+   - `DeviceNotFoundError` - When a room/device cannot be found (404)
+   - `AuthenticationError` - For authentication failures (401)
+   - `ValidationError` - For input validation errors (400)
+   - `NotSupportedError` - For unsupported operations (501)
+   - `TimeoutError` - For operation timeouts (504)
+   - `InvalidPresetError` - For preset validation failures
+   - `MusicServiceError` - For music service operation failures
+
+3. **HTTP Status Mapping**
+   - Automatic HTTP status code assignment based on error type
+   - UPnP error codes mapped to appropriate HTTP statuses
+   - Consistent error responses across all endpoints
+
+### Retry Logic
+- Configurable retry system with exponential backoff
+- Smart retry decisions based on error types
+- Network errors and transient failures are retried
+- Client errors (4xx) are not retried
+- Specific UPnP errors handled appropriately
+
+### SOAP Response Types
+All SOAP operations now return typed responses:
+- `TransportInfo`, `PositionInfo`, `MediaInfo`
+- `VolumeResponse`, `MuteResponse`
+- `BrowseResponse`, `SearchResponse`
+- And many more...
+
 ## Recent Enhancements
 
 1. **Music Library Integration**

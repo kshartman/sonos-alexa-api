@@ -33,10 +33,25 @@ Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integr
 
 ## Technical Improvements
 
+### Enhanced Type Safety and Error Handling
+- **Comprehensive Error Classes**: New error hierarchy with specific error types for better debugging
+  - `SonosError`, `SOAPError`, `UPnPError`, `DeviceNotFoundError`, and more
+  - Proper HTTP status code mapping for all error types
+- **SOAP Response Type Definitions**: All SOAP operations now return typed responses
+  - Eliminated most `any` types in favor of proper interfaces
+  - Better IntelliSense support and compile-time error detection
+- **Retry Logic**: Automatic retry with exponential backoff for transient failures
+  - Configurable retry policies for different operation types
+  - Smart retry decisions based on UPnP error codes
+- **TypeScript Improvements**: Significantly reduced type safety warnings
+
 ### Code Quality
 - **Spotify Service Architecture**: Clean separation of concerns for Spotify functionality
 - **Token Extraction**: Improved parsing of Spotify tokens from favorite metadata
 - **URI Generation**: Robust URI construction for different Spotify content types
+- **SOAP Architecture Refactoring**: Phase 1 and 2 completed
+  - All SOAP operations centralized in SonosDevice class
+  - Services no longer make direct device calls
 
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration

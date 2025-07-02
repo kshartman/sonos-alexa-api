@@ -9,11 +9,12 @@ This is a complete TypeScript rewrite of the original [node-sonos-http-api](http
 - ⚡ **Lightning fast** - Near-instant response times using native Node.js HTTP
 - 🎯 **Alexa-ready** - Drop-in replacement for jishi's node-sonos-http-api  
 - 📦 **Minimal dependencies** - Just 2 runtime dependencies vs 50+ in legacy
-- 🔍 **TypeScript** - Full type safety and modern JavaScript features
+- 🔍 **TypeScript** - Full type safety with comprehensive error handling
 - 🐳 **Docker-first** - Production-ready container with health checks
 - 🎵 **Music services** - Apple Music, Pandora, local library search
 - 🔊 **TTS support** - Multiple text-to-speech providers
 - 🏠 **Group control** - Manage speaker groups and stereo pairs
+- 🛡️ **Robust error handling** - Typed errors with automatic retry logic
 - 📊 **96% test coverage** - Comprehensive test suite
 - 🔐 **Secure** - Optional authentication with trusted network support
 

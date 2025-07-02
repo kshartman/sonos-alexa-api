@@ -19,6 +19,7 @@ interface ServiceInfo {
   type: string;
   isTuneIn: boolean;
   isPersonalized: boolean;
+  isDiscovered?: boolean; // Flag for services discovered via alternate methods
 }
 
 export class ServicesCache {
@@ -86,7 +87,7 @@ export class ServicesCache {
       const discoveredServices: Record<string, ServiceInfo> = {};
       if (this.cache) {
         Object.entries(this.cache).forEach(([id, service]) => {
-          if ((service as any).isDiscovered) {
+          if (service.isDiscovered) {
             discoveredServices[id] = service;
           }
         });
@@ -365,7 +366,7 @@ export class ServicesCache {
       internalName: `${canonicalEntry.internalName} (App)`,
       // Mark as a discovered mapping
       isDiscovered: true
-    } as ServiceInfo & { isDiscovered?: boolean };
+    };
 
     logger.info(`Added discovered service mapping: ${discoveredId} -> ${canonicalServiceName}`);
     

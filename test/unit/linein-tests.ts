@@ -4,6 +4,7 @@ import { MockDevice, MockDiscovery, createMockDiscovery, createMockConfig, MockD
 import { ApiRouter } from '../../src/api-router.js';
 import type { Config } from '../../src/types/sonos.js';
 import { testEndpoint } from '../helpers/test-helpers.js';
+import { initializeDebugManager } from '../../src/utils/debug-manager.js';
 
 describe('Line-In Unit Tests', () => {
   let mockDiscovery: MockDiscovery;
@@ -17,6 +18,10 @@ describe('Line-In Unit Tests', () => {
     bedroomDevice = mockDiscovery.getDeviceByName('Bedroom')!;
     kitchenDevice = mockDiscovery.getDeviceByName('Kitchen')!;
     config = createMockConfig();
+    
+    // Initialize debug manager before creating router
+    initializeDebugManager(config);
+    
     const mockDefaultRoomManager = new MockDefaultRoomManager(config);
     const mockTTSService = new MockTTSService();
     const mockPresetLoader = new MockPresetLoader();

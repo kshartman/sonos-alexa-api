@@ -46,51 +46,24 @@ export class PandoraBrowser {
       // Browse the stations container
       const objectId = stationsContainer.id;
       
-      // Make SOAP request directly
-      const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
-                    s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-          <s:Body>
-            <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
-              <ObjectID>${objectId}</ObjectID>
-              <BrowseFlag>BrowseDirectChildren</BrowseFlag>
-              <Filter>*</Filter>
-              <StartingIndex>0</StartingIndex>
-              <RequestedCount>100</RequestedCount>
-              <SortCriteria></SortCriteria>
-            </u:Browse>
-          </s:Body>
-        </s:Envelope>`;
-      
-      const response = await fetch(`${device.baseUrl}/MediaServer/ContentDirectory/Control`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset="utf-8"',
-          'SOAPACTION': '"urn:schemas-upnp-org:service:ContentDirectory:1#Browse"'
-        },
-        body: soapBody
-      });
-      
-      const responseText = await response.text();
-      const responseData = this.xmlParser.parse(responseText);
-      
-      // Check for SOAP fault
-      const fault = responseData['s:Envelope']?.['s:Body']?.['s:Fault'];
-      if (fault) {
-        const errorCode = fault.detail?.UPnPError?.errorCode;
-        if (errorCode === '701') {
+      // Use device's browse method
+      try {
+        const browseResponse = await device.browseRaw(objectId, 'BrowseDirectChildren', '*', 0, 100);
+        
+        // Extract the Result from the response
+        const result = browseResponse.Result;
+        if (!result) {
+          return [];
+        }
+        
+        return this.parseStations(result);
+      } catch (error: unknown) {
+        // Check for specific error codes
+        if (error instanceof Error && error.message?.includes('701')) {
           throw new Error('Pandora not logged in. Please use the Sonos app to log into Pandora first.');
         }
-        throw new Error(`Pandora error ${errorCode}: ${fault.faultstring}`);
+        throw error;
       }
-      
-      // Extract the Result from the SOAP response
-      const result = responseData['s:Envelope']?.['s:Body']?.['u:BrowseResponse']?.Result;
-      if (!result) {
-        return [];
-      }
-      
-      return this.parseStations(result);
     } catch (error) {
       logger.error('Error browsing Pandora stations:', error);
       throw error;
@@ -102,30 +75,9 @@ export class PandoraBrowser {
    */
   private static async getPandoraServiceId(device: SonosDevice): Promise<string | null> {
     try {
-      // Make SOAP request to ListAvailableServices
-      const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
-                    s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-          <s:Body>
-            <u:ListAvailableServices xmlns:u="urn:schemas-upnp-org:service:MusicServices:1">
-            </u:ListAvailableServices>
-          </s:Body>
-        </s:Envelope>`;
+      const response = await device.listAvailableServices();
       
-      const response = await fetch(`${device.baseUrl}/MusicServices/Control`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset="utf-8"',
-          'SOAPACTION': '"urn:schemas-upnp-org:service:MusicServices:1#ListAvailableServices"'
-        },
-        body: soapBody
-      });
-      
-      const text = await response.text();
-      const data = this.xmlParser.parse(text);
-      
-      // Navigate through the SOAP response
-      const services = data['s:Envelope']?.['s:Body']?.['u:ListAvailableServicesResponse']?.AvailableServiceDescriptorList;
+      const services = response.AvailableServiceDescriptorList;
       if (!services) return null;
       
       // Parse the XML list of services - it's HTML-encoded XML within XML
@@ -201,42 +153,9 @@ export class PandoraBrowser {
    */
   private static async browseRoot(device: SonosDevice, serviceId: string): Promise<Array<{id: string, title: string}>> {
     try {
-      const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
-                    s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-          <s:Body>
-            <u:Browse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1">
-              <ObjectID>S:${serviceId}</ObjectID>
-              <BrowseFlag>BrowseDirectChildren</BrowseFlag>
-              <Filter>*</Filter>
-              <StartingIndex>0</StartingIndex>
-              <RequestedCount>100</RequestedCount>
-              <SortCriteria></SortCriteria>
-            </u:Browse>
-          </s:Body>
-        </s:Envelope>`;
+      const browseResponse = await device.browseRaw(`S:${serviceId}`, 'BrowseDirectChildren', '*', 0, 100);
       
-      const response = await fetch(`${device.baseUrl}/MediaServer/ContentDirectory/Control`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml; charset="utf-8"',
-          'SOAPACTION': '"urn:schemas-upnp-org:service:ContentDirectory:1#Browse"'
-        },
-        body: soapBody
-      });
-      
-      const responseText = await response.text();
-      const responseData = this.xmlParser.parse(responseText);
-      
-      // Check for SOAP fault
-      const fault = responseData['s:Envelope']?.['s:Body']?.['s:Fault'];
-      if (fault) {
-        const errorCode = fault.detail?.UPnPError?.errorCode;
-        logger.error(`Error browsing Pandora root: ${errorCode} - ${fault.faultstring}`);
-        return [];
-      }
-      
-      const result = responseData['s:Envelope']?.['s:Body']?.['u:BrowseResponse']?.Result;
+      const result = browseResponse.Result;
       if (!result) {
         return [];
       }

@@ -556,29 +556,29 @@ export class SpotifyService extends MusicService {
     enhanced = false
   ): number {
     switch (type) {
-      case 'track':
-        // 8224 = streamable + queueable
-        // 8232 = same + some favorites include bit 3 (enhanced actions)
-        return enhanced ? 8232 : 8224;
+    case 'track':
+      // 8224 = streamable + queueable
+      // 8232 = same + some favorites include bit 3 (enhanced actions)
+      return enhanced ? 8232 : 8224;
 
-      case 'album':
-        // 108 = standard for container (album/playlist)
-        return 108;
+    case 'album':
+      // 108 = standard for container (album/playlist)
+      return 108;
 
-      case 'playlist':
-        // If observed from favorite with 10348, respect that
-        if (source === 'favorite' && enhanced) return 10348;
-        // 1034 = curated playlists
-        if (source === 'search') return 1034;
-        // Default to common user playlist flag
-        return 108;
+    case 'playlist':
+      // If observed from favorite with 10348, respect that
+      if (source === 'favorite' && enhanced) return 10348;
+      // 1034 = curated playlists
+      if (source === 'search') return 1034;
+      // Default to common user playlist flag
+      return 108;
 
-      case 'artist':
-        // 8200 = artist radio (non-seekable stream)
-        return 8200;
+    case 'artist':
+      // 8200 = artist radio (non-seekable stream)
+      return 8200;
 
-      default:
-        throw new Error(`Unknown Spotify type: ${type}`);
+    default:
+      throw new Error(`Unknown Spotify type: ${type}`);
     }
   }
 

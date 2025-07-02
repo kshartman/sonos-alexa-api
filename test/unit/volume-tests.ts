@@ -5,6 +5,7 @@ import { ApiRouter } from '../../src/api-router.js';
 import type { Config } from '../../src/types/sonos.js';
 import { testEndpoint } from '../helpers/test-helpers.js';
 import { createMockConfig, MockDefaultRoomManager, MockTTSService, MockPresetLoader } from '../helpers/mock-factory.js';
+import { initializeDebugManager } from '../../src/utils/debug-manager.js';
 
 describe('Volume Control Unit Tests', () => {
   let mockDiscovery: MockDiscovery;
@@ -16,6 +17,10 @@ describe('Volume Control Unit Tests', () => {
     mockDiscovery = createMockDiscovery('Bedroom', 'Kitchen', 'Living Room');
     mockDevice = mockDiscovery.getDeviceByName('Bedroom')!;
     config = createMockConfig();
+    
+    // Initialize debug manager before creating router
+    initializeDebugManager(config);
+    
     const mockDefaultRoomManager = new MockDefaultRoomManager(config);
     const mockTTSService = new MockTTSService();
     const mockPresetLoader = new MockPresetLoader();

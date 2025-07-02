@@ -1016,16 +1016,28 @@ export class SonosDevice extends EventEmitter {
     await this.play();
   }
 
-  // Browse ContentDirectory for items
-  async browse(objectId: string, startIndex = 0, limit = 100): Promise<BrowseResult> {
-    const result = await this.soap('ContentDirectory', 'Browse', {
+  // Browse ContentDirectory for items - returns raw SOAP response
+  async browseRaw(
+    objectId: string,
+    browseFlag: 'BrowseDirectChildren' | 'BrowseMetadata' = 'BrowseDirectChildren',
+    filter = '*',
+    startIndex = 0,
+    limit = 100,
+    sortCriteria = ''
+  ): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return this.soap('ContentDirectory', 'Browse', {
       ObjectID: objectId,
-      BrowseFlag: 'BrowseDirectChildren',
-      Filter: '*',
+      BrowseFlag: browseFlag,
+      Filter: filter,
       StartingIndex: startIndex,
       RequestedCount: limit,
-      SortCriteria: ''
+      SortCriteria: sortCriteria
     });
+  }
+
+  // Browse ContentDirectory for items - returns parsed BrowseResult
+  async browse(objectId: string, startIndex = 0, limit = 100): Promise<BrowseResult> {
+    const result = await this.browseRaw(objectId, 'BrowseDirectChildren', '*', startIndex, limit, '');
 
     // Parse the DIDL-Lite XML response
     const items: BrowseItem[] = [];
@@ -1125,9 +1137,236 @@ export class SonosDevice extends EventEmitter {
    * Use favorites-based account extraction instead (see AccountService)
    * @returns Empty array (method kept for backwards compatibility)
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async listAccounts(): Promise<any[]> {
     logger.warn(`${this.roomName}: Status:ListAccounts is not supported on S2 systems`);
     return [];
+  }
+
+
+  /**
+   * Search the content directory
+   * @param containerId - Container to search in
+   * @param searchCriteria - Search criteria string
+   * @param filter - Which metadata to return (* for all)
+   * @param startingIndex - Starting index for pagination
+   * @param requestedCount - Number of items to return
+   * @param sortCriteria - Sort criteria
+   * @returns SOAP response containing Result XML and counts
+   */
+  async searchContentDirectory(
+    containerId: string,
+    searchCriteria: string,
+    filter = '*',
+    startingIndex = 0,
+    requestedCount = 100,
+    sortCriteria = ''
+  ): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return this.soap('ContentDirectory', 'Search', {
+      ContainerID: containerId,
+      SearchCriteria: searchCriteria,
+      Filter: filter,
+      StartingIndex: startingIndex,
+      RequestedCount: requestedCount,
+      SortCriteria: sortCriteria
+    });
+  }
+
+  /**
+   * Delete a content directory object (e.g., favorite)
+   * @param objectId - The object ID to delete
+   * @returns SOAP response
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async destroyObject(objectId: string): Promise<any> {
+    return this.soap('ContentDirectory', 'DestroyObject', {
+      ObjectID: objectId
+    });
+  }
+
+  /**
+   * Create a new object in the content directory
+   * @param containerId - Container to create object in
+   * @param elements - Object metadata
+   * @returns SOAP response with new object ID and result
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async createObject(containerId: string, elements: string): Promise<any> {
+    return this.soap('ContentDirectory', 'CreateObject', {
+      ContainerID: containerId,
+      Elements: elements
+    });
+  }
+
+
+  /**
+   * Add multiple URIs to queue
+   * @param uris - Array of URIs to add
+   * @param metadatas - Array of metadata strings
+   * @param containerId - Container ID for the items
+   * @param desiredFirstTrackNumber - Position in queue (0 = end)
+   * @param enqueueAsNext - Whether to add as next items
+   * @returns SOAP response with new queue info
+   */
+  async addMultipleURIsToQueue(
+    uris: string[],
+    metadatas: string[],
+    containerId: string,
+    desiredFirstTrackNumber = 0,
+    enqueueAsNext = true
+  ): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return this.soap('AVTransport', 'AddMultipleURIsToQueue', {
+      InstanceID: 0,
+      UpdateID: 0,
+      NumberOfURIs: uris.length,
+      EnqueuedURIs: uris.join(' '),
+      EnqueuedURIsMetaData: metadatas.join(' '),
+      ContainerURI: containerId,
+      ContainerMetaData: '',
+      DesiredFirstTrackNumberEnqueued: desiredFirstTrackNumber,
+      EnqueueAsNext: enqueueAsNext ? 1 : 0
+    });
+  }
+
+  /**
+   * Remove tracks from queue
+   * @param startingIndex - Starting position (1-based)
+   * @param numberOfTracks - Number of tracks to remove
+   * @returns SOAP response
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async removeTrackRangeFromQueue(startingIndex: number, numberOfTracks: number): Promise<any> {
+    return this.soap('AVTransport', 'RemoveTrackRangeFromQueue', {
+      InstanceID: 0,
+      UpdateID: 0,
+      StartingIndex: startingIndex,
+      NumberOfTracks: numberOfTracks
+    });
+  }
+
+  /**
+   * Reorder tracks in queue
+   * @param startingIndex - Starting position of tracks to move (1-based)
+   * @param numberOfTracks - Number of tracks to move
+   * @param insertBefore - Position to insert before (1-based)
+   * @returns SOAP response
+   */
+  async reorderTracksInQueue(
+    startingIndex: number,
+    numberOfTracks: number,
+    insertBefore: number
+  ): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+    return this.soap('AVTransport', 'ReorderTracksInQueue', {
+      InstanceID: 0,
+      UpdateID: 0,
+      StartingIndex: startingIndex,
+      NumberOfTracks: numberOfTracks,
+      InsertBefore: insertBefore
+    });
+  }
+
+  /**
+   * Save current queue as a Sonos playlist
+   * @param title - Playlist title
+   * @returns SOAP response with assigned object ID
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async saveQueue(title: string): Promise<any> {
+    return this.soap('AVTransport', 'SaveQueue', {
+      InstanceID: 0,
+      Title: title,
+      ObjectID: ''
+    });
+  }
+
+  // RenderingControl extended methods
+  /**
+   * Get bass level
+   * @returns SOAP response with CurrentBass value
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getBass(): Promise<any> {
+    return this.soap('RenderingControl', 'GetBass', {
+      InstanceID: 0,
+      Channel: 'Master'
+    });
+  }
+
+  /**
+   * Set bass level
+   * @param level - Bass level (-10 to +10)
+   * @returns SOAP response
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async setBass(level: number): Promise<any> {
+    return this.soap('RenderingControl', 'SetBass', {
+      InstanceID: 0,
+      DesiredBass: Math.max(-10, Math.min(10, level))
+    });
+  }
+
+  /**
+   * Get treble level
+   * @returns SOAP response with CurrentTreble value
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getTreble(): Promise<any> {
+    return this.soap('RenderingControl', 'GetTreble', {
+      InstanceID: 0,
+      Channel: 'Master'
+    });
+  }
+
+  /**
+   * Set treble level
+   * @param level - Treble level (-10 to +10)
+   * @returns SOAP response
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async setTreble(level: number): Promise<any> {
+    return this.soap('RenderingControl', 'SetTreble', {
+      InstanceID: 0,
+      DesiredTreble: Math.max(-10, Math.min(10, level))
+    });
+  }
+
+  /**
+   * Get loudness setting
+   * @returns SOAP response with CurrentLoudness value
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getLoudness(): Promise<any> {
+    return this.soap('RenderingControl', 'GetLoudness', {
+      InstanceID: 0,
+      Channel: 'Master'
+    });
+  }
+
+  /**
+   * Set loudness on/off
+   * @param enabled - Whether loudness is enabled
+   * @returns SOAP response
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async setLoudness(enabled: boolean): Promise<any> {
+    return this.soap('RenderingControl', 'SetLoudness', {
+      InstanceID: 0,
+      Channel: 'Master',
+      DesiredLoudness: enabled ? 1 : 0
+    });
+  }
+
+  // MusicServices methods
+  /**
+   * List available music services
+   * @returns SOAP response with AvailableServiceDescriptorList
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async listAvailableServices(): Promise<any> {
+    // Note: MusicServices doesn't have a pre-defined service constant
+    // We need to make a direct SOAP call
+    const url = `${this.baseUrl}/MusicServices/Control`;
+    return soapRequest(url, 'urn:schemas-upnp-org:service:MusicServices:1', 'ListAvailableServices', {});
   }
 
 }

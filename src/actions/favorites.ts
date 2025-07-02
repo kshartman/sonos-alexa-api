@@ -29,14 +29,7 @@ export class FavoritesManager {
       debugManager.debug('favorites', `Fetching favorites for device ${device.roomName}`);
       
       // Get favorites from Sonos device
-      const result = await device.soap('ContentDirectory', 'Browse', {
-        ObjectID: 'FV:2',
-        BrowseFlag: 'BrowseDirectChildren',
-        Filter: '*',
-        StartingIndex: 0,
-        RequestedCount: 200,
-        SortCriteria: ''
-      });
+      const result = await device.browseRaw('FV:2', 'BrowseDirectChildren', '*', 0, 200);
 
       const favorites = await this.parseFavoritesResponse(result);
       

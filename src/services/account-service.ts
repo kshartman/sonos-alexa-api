@@ -59,7 +59,7 @@ export class AccountService {
     try {
       // Note: /status/accounts and Status:ListAccounts are not supported on S2 systems
       // We extract account info from favorites instead
-      logger.debug(`Account extraction from /status/accounts not supported on S2 - using favorites`);
+      logger.debug('Account extraction from /status/accounts not supported on S2 - using favorites');
       
       // Always use fallback logic for S2 systems
       logger.debug(`Using fallback logic for service: ${serviceName}`);
@@ -264,8 +264,8 @@ export class AccountService {
           if (!item.uri?.includes('spotify')) continue;
           
           logger.debug(`Found Spotify favorite: ${item.title}, URI: ${item.uri}`);
-          if ((item as any).desc) {
-            logger.debug(`  desc field: ${(item as any).desc}`);
+          if (item.desc) {
+            logger.debug(`  desc field: ${item.desc}`);
           }
 
           const snMatch = item.uri.match(/sn=(\d+)/);

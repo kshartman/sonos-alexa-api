@@ -11,6 +11,7 @@ import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
 import { SpotifyService } from './services/spotify-service.js';
 import { AccountService } from './services/account-service.js';
+import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
 import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
@@ -2320,8 +2321,10 @@ export class ApiRouter {
     }
     
     logger.info(`Using Spotify account - SID: ${account.sid}, SN: ${account.serialNumber}`);
-    if ((account as any).spotifyAccountId) {
-      logger.info(`Spotify account ID: ${(account as any).spotifyAccountId}`);
+    // Account service extends ServiceAccount with Spotify-specific fields
+    const spotifyAccount = account as ServiceAccount & { spotifyAccountId?: string };
+    if (spotifyAccount.spotifyAccountId) {
+      logger.info(`Spotify account ID: ${spotifyAccount.spotifyAccountId}`);
     }
     
     this.spotifyService.setAccount(account);
@@ -2877,11 +2880,13 @@ export class ApiRouter {
         // Get Spotify account
         const account = await this.accountService.getServiceAccount(device, 'spotify');
         if (account) {
+          // Account service extends ServiceAccount with Spotify-specific fields
+          const spotifyAccount = account as ServiceAccount & { spotifyAccountId?: string };
           accountInfo = {
             id: account.id,
             sid: account.sid,
             serialNumber: account.serialNumber,
-            spotifyAccountId: (account as any).spotifyAccountId
+            spotifyAccountId: spotifyAccount.spotifyAccountId
           };
           
           this.spotifyService.setAccount(account);
@@ -2890,7 +2895,7 @@ export class ApiRouter {
             parsed.id
           );
         }
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors, this is just for debugging
       }
     }

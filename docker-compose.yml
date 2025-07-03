@@ -45,14 +45,25 @@ services:
       # Pandora Integration
       - PANDORA_USERNAME=${PANDORA_USERNAME:-}
       - PANDORA_PASSWORD=${PANDORA_PASSWORD:-}
+      
+      # Spotify Integration
+      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
+      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
+      - SPOTIFY_REDIRECT_URI=${SPOTIFY_REDIRECT_URI:-}
+      - SPOTIFY_REFRESH_TOKEN=${SPOTIFY_REFRESH_TOKEN:-}
+      
+      # Music Library
+      - LIBRARY_RANDOM_QUEUE_LIMIT=${LIBRARY_RANDOM_QUEUE_LIMIT:-100}
     
     # Volume mounts
     volumes:
       # Preset files (read-only by default)
       - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
       
-      # Optional persistent data (uncomment if you want to persist defaults)
-      # - ${DATA_PATH:-./data}:/app/data
+      # Persistent data directory (RECOMMENDED for production)
+      # Stores: Spotify tokens, default room/service, music library cache
+      # Uncomment the next line to enable data persistence
+      # - ${HOST_DATA_PATH:-./data}:/app/data
       
       # Optional: Mount custom settings.json (env vars take precedence)
       # - ./settings.json:/app/settings.json:ro

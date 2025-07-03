@@ -118,9 +118,18 @@ CREATE_DEFAULT_PRESETS=false      # Auto-generate presets from favorites
 # TTS
 TTS_PROVIDER=google
 TTS_LANG=en-US
+
+# Spotify OAuth (for search functionality)
+SPOTIFY_CLIENT_ID=your-client-id
+SPOTIFY_CLIENT_SECRET=your-client-secret
+SPOTIFY_REDIRECT_URI=http://localhost:5005/spotify/callback
+SPOTIFY_REFRESH_TOKEN=your-refresh-token  # Optional - obtained after OAuth flow
+
+# Music Library
+LIBRARY_RANDOM_QUEUE_LIMIT=100
 ```
 
-See `example.env` for all available options.
+See `.env.example` for all available options.
 
 ### Command Line Overrides
 
@@ -213,6 +222,72 @@ For reference, the settings.json format is:
 
 See the [API documentation](./API.md) for a complete list of endpoints.
 
+## Spotify Setup
+
+The API supports Spotify search and playback through OAuth2 authentication. There are two ways to configure Spotify:
+
+### Option 1: Pre-configured Refresh Token (Recommended for Production)
+
+If you already have a Spotify refresh token:
+
+```bash
+# Add to your .env file
+SPOTIFY_CLIENT_ID=your-client-id
+SPOTIFY_CLIENT_SECRET=your-client-secret
+SPOTIFY_REFRESH_TOKEN=your-refresh-token
+```
+
+### Option 2: OAuth Flow
+
+1. **Create a Spotify App**
+   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   - Create a new app
+   - Add your redirect URI to the app settings:
+     - For local development: `http://localhost:5005/spotify/callback`
+     - For production: `https://your-domain.com/spotify/callback`
+   - Copy the Client ID and Client Secret
+
+2. **Configure the API**
+   ```bash
+   # Add to your .env file
+   SPOTIFY_CLIENT_ID=your-client-id
+   SPOTIFY_CLIENT_SECRET=your-client-secret
+   SPOTIFY_REDIRECT_URI=http://localhost:5005/spotify/callback
+   ```
+
+3. **Authenticate**
+   - **Option A - Browser**: Visit `http://localhost:5005/spotify/auth` and follow the flow
+   - **Option B - Headless**: Use the setup script:
+     ```bash
+     ./scripts/spotify-auth-setup.sh
+     ```
+     This script will guide you through manual authentication and help you obtain a refresh token.
+
+4. **Multi-Instance Support**
+   
+   For multiple deployments (e.g., different homes):
+   ```bash
+   # Set a unique instance ID
+   INSTANCE_ID=home-name
+   ```
+   
+   Each instance maintains its own token storage in `data/spotify-tokens-{instance-id}.json`
+
+### Public Proxy Configuration
+
+For headless deployments, configure your proxy to handle OAuth callbacks:
+
+**nginx example:**
+```nginx
+location /spotify/callback {
+    proxy_pass http://localhost:5005;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+See the `deploy/` directory for complete proxy configuration examples.
+
 ## Credits
 
 This project is built on the excellent foundation of:
@@ -232,7 +307,7 @@ This rewrite maintains full API compatibility while modernizing the codebase wit
 - ✅ Apple Music (via iTunes Search API)
 - ✅ Pandora (with account)
 - ✅ Line-In playback
-- ⚡ Spotify (Phase 1: Direct playback ✅, Search requires OAuth2)
+- ✅ Spotify (Direct playback + OAuth2 search)
 - ❌ SiriusXM (no public API)
 - ❌ Amazon Music (no public API)
 - ❌ Deezer (not implemented)

@@ -1,0 +1,78 @@
+{
+  "host": "0.0.0.0",
+  "port": 5005,
+  "announceVolume": 40,
+  
+  "auth": {
+    "username": "admin",
+    "password": "changeme",
+    "rejectUnauthorized": true,
+    "trustedNetworks": ["192.168.1.0/24", "10.0.0.0/8"]
+  },
+  
+  "tts": {
+    "provider": "google",
+    "lang": "en-US",
+    "voice": "",
+    "endpoint": "",
+    "apiKey": ""
+  },
+  
+  "macSay": {
+    "voice": "Samantha",
+    "rate": 175
+  },
+  
+  "pandora": {
+    "username": "your-pandora-email@example.com",
+    "password": "your-pandora-password"
+  },
+  
+  "spotify": {
+    "clientId": "your-spotify-client-id",
+    "clientSecret": "your-spotify-client-secret",
+    "redirectUri": "http://localhost:5005/spotify/callback",
+    "scopes": [
+      "user-read-private",
+      "user-read-email", 
+      "playlist-read-private",
+      "playlist-read-collaborative",
+      "user-library-read",
+      "user-top-read",
+      "user-read-recently-played"
+    ],
+    "refreshToken": ""
+  },
+  
+  "library": {
+    "randomQueueLimit": 100,
+    "reindexInterval": "1 week"
+  },
+  
+  "webhooks": [
+    {
+      "type": "volume",
+      "url": "http://example.com/volume-webhook"
+    },
+    {
+      "type": "transport", 
+      "url": "http://example.com/transport-webhook"
+    },
+    {
+      "type": "topology",
+      "url": "http://example.com/topology-webhook"
+    }
+  ],
+  
+  "presetDir": "./presets",
+  "cacheDir": "./cache",
+  "dataDir": "./data",
+  
+  "logLevel": "info",
+  "debugCategories": ["api", "discovery"],
+  
+  "disableDiscovery": false,
+  "discoveryTimeout": 5000,
+  "httpTimeout": 10000,
+  "createDefaultPresets": false
+}

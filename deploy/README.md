@@ -59,6 +59,19 @@ Synology DSM-specific setup guide:
 4. **Keep security headers enabled** - All configs include modern security headers
 5. **Monitor access logs** - Watch for suspicious activity
 
+## Spotify OAuth Configuration
+
+All proxy configurations include special handling for the Spotify OAuth callback endpoint (`/spotify/callback`). This endpoint must be publicly accessible for the OAuth flow to work properly. The configurations ensure:
+
+- `/spotify/callback` bypasses IP restrictions that apply to other endpoints
+- The endpoint is accessible via HTTPS (required by Spotify)
+- Proper headers are passed through for the OAuth flow
+
+When configuring Spotify OAuth:
+1. Set your redirect URI to `https://yourdomain.com/spotify/callback` in your Spotify app settings
+2. Ensure this matches the `SPOTIFY_REDIRECT_URI` in your environment configuration
+3. The callback endpoint will be publicly accessible even if you have authentication enabled
+
 ## Common Customizations
 
 ### Changing the API port

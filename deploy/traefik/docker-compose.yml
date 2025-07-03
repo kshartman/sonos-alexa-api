@@ -77,6 +77,13 @@ services:
       - "traefik.http.routers.sonos-events.middlewares=debug-whitelist,sonos-headers"
       - "traefik.http.routers.sonos-events.service=sonos-api"
       
+      # Route for Spotify OAuth callback - must be publicly accessible
+      - "traefik.http.routers.sonos-spotify.rule=Host(`sonosapi.yourdomain.com`) && Path(`/spotify/callback`)"
+      - "traefik.http.routers.sonos-spotify.entrypoints=websecure"
+      - "traefik.http.routers.sonos-spotify.tls=true"
+      - "traefik.http.routers.sonos-spotify.middlewares=sonos-headers"
+      - "traefik.http.routers.sonos-spotify.service=sonos-api"
+      
       # Apply headers to main router
       - "traefik.http.routers.sonos.middlewares=sonos-headers"
       

@@ -1,27 +1,34 @@
 #!/usr/bin/env bash
-# setup-local-enhanced.sh [settings-name] [--create-default-presets]
+# setup-local-enhanced.sh [home]
 #
-# Enhanced version that selects presets based on IP address when no argument given
+# Sets up environment based on network location or explicit home parameter
 #
-# The purpose of this script is to copy the appropriate presets and
-# settings for this host into the project directory.  These are the
-# presets and settings that will be present in the final
-# container. Since I have two homes, there is a host in each home that
-# runs the alexa skill support.  Each home has a different sonos
-# system with some shared presets but many are unique, particularly
-# the room parameters.  It also copies in the correct settings.json
-# for the host. If no argument, it determines based on IP address.
+# Homes: worf, talon, mbpro4
 #
-# This assumes you have ../private/settings-{HOSTNAME}.json and ../presets/presets-${HOSTNAME}/
+# Algorithm:
+# - If no argument: determine home from network (worf/talon), default to mbpro4
+# - If argument provided: must be worf, talon, or mbpro4
+# - For worf/talon: use .env-mbpro4-enhanced-{home}
+# - For mbpro4: use .env-mbpro4-enhanced
 #
-# Options:
-#   --create-default-presets  Empty presets folder and set CREATE_DEFAULT_PRESETS=true
+# Always copies:
+# - ../private/.env-* to ./.env
+# - ../private/presets-{home}/ to ./presets/
+# - ../private/data-{home}/ to ./data/
 #
 
 # Function to get current IP address
 get_ip_address() {
-    # Try to get IP from active interface (usually en0 on Mac)
-    ifconfig en0 2>/dev/null | grep "inet " | awk '{print $2}' | head -1
+    # Try ifconfig first (macOS, BSD)
+    if command -v ifconfig >/dev/null 2>&1; then
+        ifconfig | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | head -1
+    # Fallback to ip command (modern Linux)
+    elif command -v ip >/dev/null 2>&1; then
+        ip route get 1 | awk '/src/ {print $7}'
+    else
+        # No network commands available
+        echo ""
+    fi
 }
 
 # Function to check if IP is in a subnet
@@ -39,52 +46,41 @@ ip_in_subnet() {
     return 1
 }
 
-# Parse command line arguments
-CREATE_DEFAULT_PRESETS=false
-SETTINGS_ARG=""
-
-for arg in "$@"; do
-    if [[ "$arg" == "--create-default-presets" ]]; then
-        CREATE_DEFAULT_PRESETS=true
-    else
-        SETTINGS_ARG="$arg"
-    fi
-done
-
-if [[ -n "$SETTINGS_ARG" ]]; then
-   SETTINGS_HOST="$SETTINGS_ARG"
-   PRESETS_HOST="$SETTINGS_ARG"
-else
-    # Get hostname
-    LOCAL_HOST=$(echo "${HOSTNAME%%.*}" | tr '[:upper:]' '[:lower:]')
+# Determine home based on argument or network
+if [[ -n "$1" ]]; then
+    # Home explicitly specified
+    HOME_NAME="$1"
     
-    # Get current IP
+    # Validate home name
+    if [[ "$HOME_NAME" != "worf" && "$HOME_NAME" != "talon" && "$HOME_NAME" != "mbpro4" ]]; then
+        echo "Error: Invalid home '$HOME_NAME'. Must be one of: worf, talon, mbpro4"
+        exit 1
+    fi
+    echo "Using specified home: $HOME_NAME"
+else
+    # Determine home from network
     CURRENT_IP=$(get_ip_address)
     echo "Current IP: ${CURRENT_IP}"
-    echo "Local host: ${LOCAL_HOST}"
     
-    # Determine presets based on network
-    if ip_in_subnet "$CURRENT_IP" "192.168.4.0/24"; then
-        PRESETS_HOST="talon"
-        echo "Detected talon network (192.168.4.0/24) - will use talon presets"
-    elif ip_in_subnet "$CURRENT_IP" "192.168.11.0/24"; then
-        PRESETS_HOST="worf"
-        echo "Detected worf network (192.168.11.0/24) - will use worf presets"
+    if [[ -n "$CURRENT_IP" ]]; then
+        if ip_in_subnet "$CURRENT_IP" "192.168.11.0/24"; then
+            HOME_NAME="worf"
+            echo "Detected worf network (192.168.11.0/24)"
+        elif ip_in_subnet "$CURRENT_IP" "192.168.4.0/24"; then
+            HOME_NAME="talon"
+            echo "Detected talon network (192.168.4.0/24)"
+        else
+            HOME_NAME="mbpro4"
+            echo "Not on worf or talon network, defaulting to mbpro4"
+        fi
     else
-        PRESETS_HOST="${LOCAL_HOST}"
-        echo "Other network - will use ${LOCAL_HOST} presets"
+        HOME_NAME="mbpro4"
+        echo "Could not determine IP, defaulting to mbpro4"
     fi
-    
-    # Settings/env always based on hostname
-    SETTINGS_HOST="${LOCAL_HOST}"
-fi    
-
-echo "Using settings/env for: ${SETTINGS_HOST}"
-if [ "$CREATE_DEFAULT_PRESETS" = true ]; then
-    echo "Will use auto-generated default presets"
-else
-    echo "Using presets for: ${PRESETS_HOST}"
 fi
+
+echo ""
+echo "Setting up for home: $HOME_NAME"
 echo ""
 
 # Remove settings.json if it exists (using env vars instead)
@@ -94,156 +90,99 @@ if [ -f settings.json ]; then
 fi
 
 # Clean up any settings symlinks
-rm -f settings-${SETTINGS_HOST}.json 2>/dev/null || true
+rm -f settings-*.json 2>/dev/null || true
 
-# Environment file - try enhanced version first, fall back to regular
-if [ -f ../private/.env-${SETTINGS_HOST}-enhanced ]; then
-    rm -f .env
-    cp ../private/.env-${SETTINGS_HOST}-enhanced .env
-    rm -f .env-${SETTINGS_HOST} 2>/dev/null || true
-    ln -s ../private/.env-${SETTINGS_HOST}-enhanced .env-${SETTINGS_HOST}
-    echo "✓ Copied .env-${SETTINGS_HOST}-enhanced"
-elif [ -f ../private/.env-${SETTINGS_HOST} ]; then
-    rm -f .env
-    cp ../private/.env-${SETTINGS_HOST} .env
-    rm -f .env-${SETTINGS_HOST} 2>/dev/null || true
-    ln -s ../private/.env-${SETTINGS_HOST} .
-    echo "✓ Copied .env-${SETTINGS_HOST}"
+# Copy environment file based on home
+rm -f .env
+if [ "$HOME_NAME" = "mbpro4" ]; then
+    ENV_FILE="../private/.env-mbpro4-enhanced"
 else
-    echo "! No .env-${SETTINGS_HOST} found, using example.env as template"
-    rm -f .env
-    if [ -f example.env ]; then
-        cp example.env .env
+    ENV_FILE="../private/.env-mbpro4-enhanced-${HOME_NAME}"
+fi
+
+if [ -f "$ENV_FILE" ]; then
+    cp "$ENV_FILE" .env
+    echo "✓ Copied $ENV_FILE to .env"
+else
+    echo "! Error: $ENV_FILE not found"
+    exit 1
+fi
+
+# Copy presets directory
+PRESETS_SOURCE="../presets/presets-${HOME_NAME}"
+
+# Remove existing presets
+if [ -L ./presets ]; then
+    rm ./presets
+elif [ -d ./presets ]; then
+    rm -rf ./presets
+elif [ -f ./presets ]; then
+    rm ./presets
+fi
+
+# Copy presets (create empty if source doesn't exist)
+if [ -d "$PRESETS_SOURCE" ]; then
+    mkdir ./presets
+    if [ -n "$(ls -A "$PRESETS_SOURCE" 2>/dev/null)" ]; then
+        (cd "$PRESETS_SOURCE" && tar cf - .) | (cd ./presets && tar xf -)
+        echo "✓ Copied $PRESETS_SOURCE to ./presets"
     else
-        touch .env
+        echo "✓ Created empty ./presets (source was empty)"
     fi
-fi
-
-# Check if mbpro4 presets folder is empty
-if [ "$PRESETS_HOST" = "mbpro4" ] && [ -d ../presets/presets-mbpro4 ]; then
-    # Check if directory is empty (no files)
-    if [ -z "$(ls -A ../presets/presets-mbpro4 2>/dev/null)" ]; then
-        echo "✓ Detected empty mbpro4 presets folder - enabling auto-generation"
-        CREATE_DEFAULT_PRESETS=true
-    fi
-fi
-
-# Presets directory
-if [ "$CREATE_DEFAULT_PRESETS" = true ]; then
-    # Empty the presets folder when using --create-default-presets
-    echo "✓ CREATE_DEFAULT_PRESETS enabled"
-    if [ -L ./presets ]; then
-        rm ./presets 
-    elif [ -d ./presets ]; then
-        rm -rf ./presets
-    elif [ -f ./presets ]; then
-        rm ./presets
-    fi
+else
     mkdir -p ./presets
-    echo "✓ Created empty presets directory for auto-generation"
+    echo "✓ Created empty ./presets (no source found)"
+fi
+
+# For mbpro4, check if presets are empty and add CREATE_DEFAULT_PRESETS if needed
+if [ "$HOME_NAME" = "mbpro4" ] && [ -z "$(ls -A ./presets 2>/dev/null)" ]; then
+    echo "✓ Empty presets detected for mbpro4, adding CREATE_DEFAULT_PRESETS=true"
+    
+    # Add CREATE_DEFAULT_PRESETS to .env
+    if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
+        echo "" >> .env
+    fi
+    echo "" >> .env
+    echo "# Auto-generate presets from favorites since presets folder is empty" >> .env
+    echo "CREATE_DEFAULT_PRESETS=true" >> .env
+    echo "" >> .env
+fi
+
+
+# Copy data directory
+DATA_SOURCE="../private/data-${HOME_NAME}"
+
+# Remove existing data directory or symlink
+if [ -L ./data ]; then
+    rm ./data
+elif [ -d ./data ]; then
+    rm -rf ./data
+elif [ -f ./data ]; then
+    rm ./data
+fi
+
+# Copy data (create empty if source doesn't exist)
+if [ -d "$DATA_SOURCE" ]; then
+    mkdir ./data
+    if [ -n "$(ls -A "$DATA_SOURCE" 2>/dev/null)" ]; then
+        (cd "$DATA_SOURCE" && tar cf - .) | (cd ./data && tar xf -)
+        echo "✓ Copied $DATA_SOURCE to ./data"
+        
+        # Check for compressed cache files and decompress them
+        if [ -f ./data/music-library.cache.gz ]; then
+            echo "✓ Decompressing music-library.cache.gz"
+            gunzip ./data/music-library.cache.gz
+        fi
+        if [ -f ./data/services-cache.json.gz ]; then
+            echo "✓ Decompressing services-cache.json.gz"
+            gunzip ./data/services-cache.json.gz
+        fi
+    else
+        echo "✓ Created empty ./data (source was empty)"
+    fi
 else
-    # Normal preset copying behavior
-    if [ -d ../presets/presets-${PRESETS_HOST} ]; then
-        if [ -L ./presets ]; then
-            rm ./presets 
-        elif [ -d ./presets ]; then
-            rm -rf ./presets
-        elif [ -f ./presets ]; then
-            rm ./presets
-        fi
-        mkdir ./presets
-        (cd ../presets/presets-${PRESETS_HOST} && tar cf - .) | (cd ./presets && tar xf -)
-        echo "✓ Copied presets-${PRESETS_HOST}"
-    else
-        echo "! No presets-${PRESETS_HOST} found, creating empty presets directory"
-        rm -rf ./presets 2>/dev/null || true
-        mkdir -p ./presets
-    fi
-fi
-
-# For mbpro4, adjust DEFAULT_ROOM based on network in both .env and settings.json
-if [ "$SETTINGS_HOST" = "mbpro4" ]; then
-    if [ -n "$CURRENT_IP" ]; then
-        if ip_in_subnet "$CURRENT_IP" "192.168.4.0/24"; then
-            # Talon network - use ShanesOfficeSpeakers
-            echo "✓ Setting DEFAULT_ROOM=ShanesOfficeSpeakers for talon network"
-            
-            # Update .env file
-            if [ -f .env ]; then
-                if grep -q "^DEFAULT_ROOM=" .env; then
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' 's/^DEFAULT_ROOM=.*/DEFAULT_ROOM=ShanesOfficeSpeakers/' .env
-                    else
-                        sed -i 's/^DEFAULT_ROOM=.*/DEFAULT_ROOM=ShanesOfficeSpeakers/' .env
-                    fi
-                else
-                    if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
-                        echo "" >> .env
-                    fi
-                    echo "DEFAULT_ROOM=ShanesOfficeSpeakers" >> .env
-                fi
-            fi
-            
-# Settings.json removed - using env vars only
-        elif ip_in_subnet "$CURRENT_IP" "192.168.11.0/24"; then
-            # Worf network - use OfficeSpeakers
-            echo "✓ Setting DEFAULT_ROOM=OfficeSpeakers for worf network"
-            
-            # Update .env file
-            if [ -f .env ]; then
-                if grep -q "^DEFAULT_ROOM=" .env; then
-                    if [[ "$OSTYPE" == "darwin"* ]]; then
-                        sed -i '' 's/^DEFAULT_ROOM=.*/DEFAULT_ROOM=OfficeSpeakers/' .env
-                    else
-                        sed -i 's/^DEFAULT_ROOM=.*/DEFAULT_ROOM=OfficeSpeakers/' .env
-                    fi
-                else
-                    if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
-                        echo "" >> .env
-                    fi
-                    echo "DEFAULT_ROOM=OfficeSpeakers" >> .env
-                fi
-            fi
-            
-# Settings.json removed - using env vars only
-        else
-            # Other network - remove DEFAULT_ROOM
-            echo "✓ Removing DEFAULT_ROOM for unknown network"
-            
-            # Remove from .env file
-            if [ -f .env ]; then
-                if [[ "$OSTYPE" == "darwin"* ]]; then
-                    sed -i '' '/^DEFAULT_ROOM=/d' .env
-                else
-                    sed -i '/^DEFAULT_ROOM=/d' .env
-                fi
-            fi
-            
-# Settings.json removed - using env vars only
-        fi
-    fi
-fi
-
-# If CREATE_DEFAULT_PRESETS is true, ensure it's set in the .env file
-if [ "$CREATE_DEFAULT_PRESETS" = true ] && [ -f .env ]; then
-    # Check if CREATE_DEFAULT_PRESETS exists in .env
-    if grep -q "^CREATE_DEFAULT_PRESETS=" .env; then
-        # Update existing value
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            # macOS
-            sed -i '' 's/^CREATE_DEFAULT_PRESETS=.*/CREATE_DEFAULT_PRESETS=true/' .env
-        else
-            # Linux
-            sed -i 's/^CREATE_DEFAULT_PRESETS=.*/CREATE_DEFAULT_PRESETS=true/' .env
-        fi
-    else
-        # Add the setting with a newline if file doesn't end with one
-        if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
-            echo "" >> .env
-        fi
-        echo "CREATE_DEFAULT_PRESETS=true" >> .env
-    fi
-    echo "✓ Set CREATE_DEFAULT_PRESETS=true in .env"
+    mkdir -p ./data
+    echo "✓ Created empty ./data (no source found)"
 fi
 
 # Update test/.env with DEFAULT_ROOM from main .env
@@ -283,9 +222,10 @@ fi
 
 echo ""
 echo "Setup complete!"
-echo "- Environment: ${SETTINGS_HOST}"
-if [ "$CREATE_DEFAULT_PRESETS" = true ]; then
-    echo "- Presets: AUTO-GENERATED"
-else
-    echo "- Presets: ${PRESETS_HOST}"
+echo "- Home: ${HOME_NAME}"
+echo "- Environment: ${ENV_FILE##*/}"
+echo "- Presets: presets-${HOME_NAME}"
+echo "- Data: data-${HOME_NAME}"
+if [ "$HOME_NAME" = "mbpro4" ] && [ -z "$(ls -A ./presets 2>/dev/null)" ]; then
+    echo "- Auto-presets: ENABLED (empty presets folder)"
 fi

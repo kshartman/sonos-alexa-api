@@ -39,8 +39,8 @@ Use Spotify share links directly in preset files:
 }
 ```
 
-### 4. Music Search (Requires OAuth)
-When OAuth credentials are configured:
+### 4. Music Search (OAuth Required)
+Full search functionality is now available with OAuth authentication:
 ```bash
 # Search and play songs
 curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/song/Yesterday"
@@ -48,8 +48,11 @@ curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/song/Yesterday"
 # Search and play albums
 curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/album/Abbey%20Road"
 
-# Search and play playlists/stations
-curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/station/Today's%20Top%20Hits"
+# Search and play artists (plays artist radio)
+curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/artist/The%20Beatles"
+
+# Search and play stations (same as artist)
+curl "http://localhost:5005/OfficeSpeakers/musicsearch/spotify/station/Beatles"
 ```
 
 ## Requirements
@@ -71,21 +74,40 @@ These favorites are used to extract authentication tokens and service configurat
 - Known Spotify IDs or share URLs
 - Spotify content saved as Sonos favorites
 
-### Full Search Functionality (OAuth Required)
+### Full Search Functionality (OAuth)
+OAuth authentication is now fully implemented. There are two ways to configure it:
+
+#### Option 1: Pre-configured Refresh Token (Production)
+If you already have a refresh token from a previous OAuth flow:
+```bash
+# Add to .env file
+SPOTIFY_CLIENT_ID=your-client-id
+SPOTIFY_CLIENT_SECRET=your-client-secret
+SPOTIFY_REFRESH_TOKEN=your-refresh-token
+```
+
+#### Option 2: OAuth Flow Setup
 1. **Create Spotify App**:
    - Go to https://developer.spotify.com/dashboard
    - Create new app (takes 2 minutes)
-   - No redirect URI needed for Client Credentials flow
+   - Add redirect URI to app settings:
+     - Local: `http://localhost:5005/spotify/callback`
+     - Production: `https://your-domain.com/spotify/callback`
 
-2. **Add Credentials to settings.json**:
-   ```json
-   {
-     "spotify": {
-       "clientId": "your-client-id",
-       "clientSecret": "your-client-secret"
-     }
-   }
+2. **Add Credentials**:
+   ```bash
+   # Add to .env file
+   SPOTIFY_CLIENT_ID=your-client-id
+   SPOTIFY_CLIENT_SECRET=your-client-secret
+   SPOTIFY_REDIRECT_URI=http://localhost:5005/spotify/callback
    ```
+
+3. **Authenticate**:
+   - **Browser**: Visit `http://localhost:5005/spotify/auth`
+   - **Headless**: Use the setup script:
+     ```bash
+     ./scripts/spotify-auth-setup.sh
+     ```
 
 ## Technical Details
 
@@ -125,6 +147,25 @@ The system supports multiple Spotify accounts:
 - Accounts identified by unique account ID
 - First account used by default if none specified
 
+## OAuth API Endpoints
+
+### Authentication Endpoints
+```bash
+# Start OAuth flow (opens browser)
+GET /spotify/auth
+
+# OAuth callback (handled automatically)
+GET /spotify/callback?code={code}&state={state}
+
+# Submit callback URL manually (for headless auth)
+POST /spotify/callback-url
+Body: { "callbackUrl": "http://localhost:8888/callback?code=..." }
+
+# Check authentication status
+GET /spotify/status
+Response: { "authenticated": true/false, "expiresIn": seconds }
+```
+
 ## Limitations
 
 ### Without OAuth
@@ -133,12 +174,12 @@ The system supports multiple Spotify accounts:
 3. **No Metadata**: Track/album details not available from API
 4. **ID Required**: Must know Spotify IDs or have favorites
 
-### With OAuth (Not Yet Implemented)
-The following features are ready but await OAuth implementation:
+### With OAuth (Implemented)
+The following features are now available:
 - Search by track/album/artist name
-- Retrieve track metadata
-- Market availability filtering
-- Full catalog browsing
+- Automatic token refresh
+- Market availability filtering (defaults to US)
+- Multi-instance support with separate token storage
 
 ### General Limitations
 1. **Premium Required**: Spotify Premium required for API playback control
@@ -180,25 +221,43 @@ Simply copy the share link and use as `spotifyUrl`:
 - Check if content is available in your region
 - Ensure Spotify account is properly linked in Sonos
 
-### Search Returns No Results (with OAuth)
-- Verify credentials in settings.json
-- Check if token is expired (1-hour lifetime)
+### Search Returns No Results
+- Check authentication status: `curl http://localhost:5005/spotify/status`
+- Verify credentials in .env file
+- Tokens auto-refresh, but check if refresh token is valid
 - Ensure search terms are properly URL-encoded
+- Re-authenticate if needed: `curl http://localhost:5005/spotify/auth`
+
+## OAuth Implementation Details
+
+### Token Management
+- Automatic token refresh before expiration
+- Tokens stored in `data/spotify-tokens-{instance-id}.json`
+- Support for multiple instances with unique instance IDs
+- Secure token storage with file system persistence
+
+### Authentication Flow
+1. User initiates OAuth: `/spotify/auth`
+2. Redirected to Spotify authorization
+3. Callback handled at `/spotify/callback`
+4. Tokens stored and auto-refreshed
+5. For headless: Manual callback URL submission via `/spotify/callback-url`
+
+### Multi-Instance Support
+```bash
+# Set unique instance ID for each deployment
+INSTANCE_ID=talon  # or worf, home-1, etc.
+```
 
 ## Future Enhancements
 
-### Planned OAuth Implementation
-- Automatic token management
-- Full search functionality
-- Metadata retrieval
-- Browse capabilities
-
 ### Potential Features
+- Browse capabilities (playlists, categories)
 - Artist top tracks
 - Related artists
 - New releases
-- User playlists (requires user auth)
-- Recently played (requires user auth)
+- User playlists (requires user authorization scope)
+- Recently played (requires user authorization scope)
 
 ## Examples
 

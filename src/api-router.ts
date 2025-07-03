@@ -10,6 +10,7 @@ import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
 import { SpotifyService } from './services/spotify-service.js';
+import { spotifyAuthService } from './services/spotify-auth-service.js';
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
@@ -17,7 +18,7 @@ import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, 
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
 
-type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams) => Promise<ApiResponse>;
+type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams, body?: string) => Promise<ApiResponse>;
 
 /**
  * Main API router that handles all HTTP requests for the Sonos API.
@@ -248,6 +249,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/musicsearch/{service}/album/{name}', this.musicSearchAlbum.bind(this));
     this.routes.set('GET /{room}/musicsearch/{service}/song/{query}', this.musicSearchSong.bind(this));
     this.routes.set('GET /{room}/musicsearch/{service}/station/{name}', this.musicSearchStation.bind(this));
+    this.routes.set('GET /{room}/musicsearch/{service}/artist/{name}', this.musicSearchArtist.bind(this));
     
     // Service-specific routes
     this.routes.set('GET /{room}/siriusxm/{name}', this.siriusXM.bind(this));
@@ -256,6 +258,13 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
     this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
     this.routes.set('GET /{room}/spotify/play/{id}', this.spotifyPlay.bind(this));
+    
+    // Spotify OAuth routes
+    this.routes.set('GET /spotify/auth', this.spotifyGetAuthUrl.bind(this));
+    this.routes.set('GET /spotify/auth-url', this.spotifyGetAuthUrl.bind(this));
+    this.routes.set('GET /spotify/callback', this.spotifyCallback.bind(this));
+    this.routes.set('POST /spotify/callback-url', this.spotifySubmitCallbackUrl.bind(this));
+    this.routes.set('GET /spotify/status', this.spotifyAuthStatus.bind(this));
     
     // Queue management routes
     this.routes.set('GET /{room}/queue', this.getQueue.bind(this));
@@ -318,6 +327,7 @@ export class ApiRouter {
     this.routes.set('GET /song/{query}', this.musicSearchSongDefault.bind(this));
     this.routes.set('GET /album/{name}', this.musicSearchAlbumDefault.bind(this));
     this.routes.set('GET /station/{name}', this.musicSearchStationDefault.bind(this));
+    this.routes.set('GET /artist/{name}', this.musicSearchArtistDefault.bind(this));
     
     // Debug endpoint for subscription status
     this.routes.set('GET /debug/subscriptions', this.debugSubscriptions.bind(this));
@@ -341,8 +351,12 @@ export class ApiRouter {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Content-Type', 'application/json');
     
+    // Skip auth for specific endpoints
+    const authExemptPaths = ['/spotify/callback', '/health'];
+    const isAuthExempt = authExemptPaths.some(exempt => path === exempt);
+    
     // Basic auth check if configured
-    if (this.config.auth && this.config.auth.username && this.config.auth.password) {
+    if (this.config.auth && this.config.auth.username && this.config.auth.password && !isAuthExempt) {
       // Skip auth check if rejectUnauthorized is false
       if (this.config.auth.rejectUnauthorized === false) {
         debugManager.debug('api', 'Auth configured but rejectUnauthorized=false, skipping auth check');
@@ -407,10 +421,27 @@ export class ApiRouter {
       return;
     }
 
+    // Parse POST body if needed
+    let body = '';
+    if (method === 'POST') {
+      body = await new Promise<string>((resolve) => {
+        let data = '';
+        req.on('data', chunk => data += chunk);
+        req.on('end', () => resolve(data));
+      });
+    }
+
     try {
-      const result = await this.routeRequest(method || 'GET', path!, queryParams);
+      const result = await this.routeRequest(method || 'GET', path!, queryParams, body);
       res.statusCode = result.status || 200;
-      res.end(JSON.stringify(result.body || { status: 'success' }));
+      
+      // Handle HTML responses for OAuth callbacks
+      if (typeof result.body === 'string' && result.body.includes('<html>')) {
+        res.setHeader('Content-Type', 'text/html');
+        res.end(result.body);
+      } else {
+        res.end(JSON.stringify(result.body || { status: 'success' }));
+      }
     } catch (error) {
       debugManager.error('api', 'Request error:', error);
       res.statusCode = getErrorStatus(error) || 500;
@@ -434,9 +465,10 @@ export class ApiRouter {
    * @param method - HTTP method (GET, POST, etc.)
    * @param path - Request path
    * @param queryParams - Optional query string parameters
+   * @param body - Optional request body for POST requests
    * @returns API response with status and body
    */
-  private async routeRequest(method: string, path: string, queryParams?: URLSearchParams): Promise<ApiResponse> {
+  private async routeRequest(method: string, path: string, queryParams?: URLSearchParams, body?: string): Promise<ApiResponse> {
     // Try exact match first
     let handler = this.routes.get(`${method} ${path}`);
     let params: RouteParams = {};
@@ -461,7 +493,7 @@ export class ApiRouter {
       throw { status: 404, message: 'Not found' };
     }
 
-    return handler(params, queryParams);
+    return handler(params, queryParams, body);
   }
 
   /**
@@ -1748,6 +1780,17 @@ export class ApiRouter {
     
     return this.performMusicSearch(room, service, 'station', name);
   }
+
+  private async musicSearchArtistDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!name) throw { status: 400, message: 'Artist name is required' };
+    
+    const room = this.defaultRoomManager.getRoom();
+    if (!room) throw { status: 400, message: 'No default room set' };
+    
+    const service = this.defaultRoomManager.getMusicService();
+    
+    return this.performMusicSearch(room, service, 'artist', name);
+  }
   
   // Music search endpoints
   private async musicSearchAlbum({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -1772,6 +1815,14 @@ export class ApiRouter {
     if (!name) throw { status: 400, message: 'Station name is required' };
     
     return this.performMusicSearch(room, service, 'station', name);
+  }
+
+  private async musicSearchArtist({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!service) throw { status: 400, message: 'Service parameter is required' };
+    if (!name) throw { status: 400, message: 'Artist name is required' };
+    
+    return this.performMusicSearch(room, service, 'artist', name);
   }
   
   // Music library search endpoints
@@ -2593,7 +2644,7 @@ export class ApiRouter {
   /**
    * Perform music search and play results
    */
-  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station', term: string): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string): Promise<ApiResponse<MusicSearchSuccessResponse>> {
     const device = this.getDevice(roomName);
     if (!device) {
       throw { status: 404, message: `Room '${roomName}' not found` };
@@ -2607,20 +2658,20 @@ export class ApiRouter {
 
     // Check supported services and types
     const serviceLower = service.toLowerCase();
-    if (serviceLower === 'pandora' && type !== 'station') {
+    if (serviceLower === 'pandora' && type !== 'station' && type !== 'artist') {
       throw { status: 400, message: `Pandora only supports station search, not ${type}` };
     }
     if (serviceLower === 'library' && type === 'station') {
-      throw { status: 400, message: 'Library does not support station search, only song and album' };
+      throw { status: 400, message: 'Library does not support station search, only song, album, and artist' };
     }
     if (serviceLower !== 'apple' && serviceLower !== 'spotify' && serviceLower !== 'pandora' && serviceLower !== 'library') {
       throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'spotify', 'pandora', and 'library' are supported.` };
     }
 
     try {
-      // Handle Pandora station search differently
+      // Handle Pandora - both artist and station search for stations
       if (serviceLower === 'pandora') {
-        logger.info(`Searching Pandora for station: ${term}`);
+        logger.info(`Searching Pandora for ${type}: ${term}`);
         
         // Use the existing pandoraPlay logic
         const decodedTerm = decodeURIComponent(term);
@@ -2644,6 +2695,58 @@ export class ApiRouter {
           throw { status: 503, message: 'Music library not yet indexed' };
         }
         
+        // Handle artist search differently - queue multiple tracks
+        if (type === 'artist') {
+          const results = await this.musicLibraryCache.search(term, 'artist', 1000); // Get more results for artist
+          
+          if (results.length === 0) {
+            throw { status: 404, message: `No songs found for artist: ${term}` };
+          }
+          
+          // Get randomQueueLimit from config (default 100)
+          const limit = this.config.library?.randomQueueLimit || 100;
+          
+          // Shuffle the results
+          const shuffled = [...results].sort(() => Math.random() - 0.5);
+          const tracksToQueue = shuffled.slice(0, Math.min(limit, shuffled.length));
+          
+          logger.info(`Found ${results.length} tracks for artist "${term}", queueing ${tracksToQueue.length} tracks`);
+          
+          // Clear queue and add tracks
+          await coordinator.clearQueue();
+          const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+          await coordinator.setAVTransportURI(queueURI, '');
+          
+          // Add all tracks to queue
+          for (let i = 0; i < tracksToQueue.length; i++) {
+            const track = tracksToQueue[i]!;
+            const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
+            <item id="library-${track.id}" parentID="library" restricted="true">
+              <dc:title>${track.title}</dc:title>
+              <upnp:artist>${track.artist}</upnp:artist>
+              <upnp:album>${track.album}</upnp:album>
+              <upnp:class>object.item.audioItem.musicTrack</upnp:class>
+              <res>${track.uri}</res>
+            </item></DIDL-Lite>`;
+            
+            await coordinator.addURIToQueue(track.uri, metadata, true, 0); // Add to end of queue
+          }
+          
+          // Start playback
+          await coordinator.play();
+          
+          return {
+            status: 200,
+            body: {
+              status: 'success',
+              title: `${tracksToQueue.length} tracks by ${term}`,
+              artist: term,
+              service: 'library'
+            }
+          };
+        }
+        
+        // For song and album, use existing single-track logic
         const searchType = type === 'album' ? 'album' : 'title';
         const results = await this.musicLibraryCache.search(term, searchType, 50);
         
@@ -2690,15 +2793,19 @@ export class ApiRouter {
       let musicService: typeof this.appleMusicService | typeof this.spotifyService;
       if (serviceLower === 'spotify') {
         this.spotifyService.setAccount(account);
+        this.spotifyService.setDevice(coordinator);
         musicService = this.spotifyService;
       } else {
         this.appleMusicService.setAccount(account);
         musicService = this.appleMusicService;
       }
 
+      // For artist search, convert to station (artist radio) for Spotify/Apple
+      const searchType = type === 'artist' ? 'station' : type;
+      
       // Perform search
       logger.info(`Searching ${service} for ${type}: ${term}`);
-      const results = await musicService.search(type, term);
+      const results = await musicService.search(searchType as 'album' | 'song' | 'station', term);
       
       if (results.length === 0) {
         throw { status: 404, message: `No ${type}s found for: ${term}` };
@@ -2709,17 +2816,40 @@ export class ApiRouter {
       if (!result) {
         throw { status: 404, message: `No valid ${type} found for: ${term}` };
       }
+      
+      // Special handling for Spotify artist search
+      if (serviceLower === 'spotify' && (type === 'station' || type === 'artist')) {
+        const result = await this.spotifyService.playArtistTopTracks(coordinator, term);
+        
+        if (!result.success) {
+          throw { status: 404, message: result.message };
+        }
+        
+        // Update default room
+        this.defaultRoomManager.setDefaults(roomName);
+        
+        return { 
+          status: 200, 
+          body: { 
+            status: 'success',
+            title: `${result.artistName} - Top ${result.trackCount} Tracks`,
+            artist: result.artistName || term,
+            album: '(Spotify Top Tracks)',
+            service: service,
+            message: result.message
+          } 
+        };
+      }
+      
+      // Generate URI and metadata for non-Spotify artist cases
       logger.info(`Found ${type}: ${result.title} by ${result.artist || 'Unknown'}`);
-
-      // Generate URI and metadata
-      const uri = musicService.generateURI(type, result);
-      const metadata = musicService.generateMetadata(type, result);
-
+      const uri = musicService.generateURI(searchType as 'album' | 'song' | 'station', result);
+      const metadata = musicService.generateMetadata(searchType as 'album' | 'song' | 'station', result);
       logger.debug(`Generated URI: ${uri}`);
-
+      
       // Play the content
-      if (type === 'station') {
-        // Stations play directly
+      if (type === 'station' || type === 'artist') {
+        // Stations and artist radio play directly
         await coordinator.setAVTransportURI(uri, metadata);
         await coordinator.play();
       } else if (type === 'album') {
@@ -2984,6 +3114,147 @@ export class ApiRouter {
         }
       };
     }
+  }
+
+  // Spotify OAuth handlers
+  private async spotifyGetAuthUrl(): Promise<ApiResponse> {
+    try {
+      const { authUrl, state } = spotifyAuthService.generateAuthUrl();
+      
+      return {
+        status: 200,
+        body: {
+          authUrl,
+          state,
+          instructions: [
+            '1. Copy the URL above and paste in your browser',
+            '2. Authorize the app with Spotify',
+            '3. You will be redirected to the callback URL',
+            '4. If running locally without a callback server, copy the FULL redirect URL',
+            '5. POST the redirect URL to /spotify/callback-url'
+          ].join('\n')
+        }
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        body: {
+          error: getErrorMessage(error),
+          message: 'Failed to generate Spotify auth URL'
+        }
+      };
+    }
+  }
+
+  private async spotifyCallback(_params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
+    try {
+      const code = queryParams?.get('code');
+      const state = queryParams?.get('state');
+      const error = queryParams?.get('error');
+      
+      if (error) {
+        // Return HTML response for browser
+        return {
+          status: 400,
+          body: `<html><body><h1>Authorization Failed</h1><p>${error}</p></body></html>`
+        };
+      }
+      
+      if (!code || !state) {
+        return {
+          status: 400,
+          body: '<html><body><h1>Invalid Request</h1><p>Missing code or state parameter</p></body></html>'
+        };
+      }
+      
+      // Construct callback URL from request
+      const callbackUrl = `http://localhost:8888/callback?code=${code}&state=${state}`;
+      await spotifyAuthService.processCallbackUrl(callbackUrl);
+      
+      // Return success HTML for browser
+      return {
+        status: 200,
+        body: `
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Spotify Authorization Successful</title>
+          </head>
+          <body>
+            <h1>Authorization Successful!</h1>
+            <p>Spotify has been connected to your Sonos API.</p>
+            <p><strong>Important:</strong> If your data folder is not persisted (e.g., in Docker), 
+            you should save the refresh token to your .env file to avoid re-authenticating:</p>
+            <pre>SPOTIFY_REFRESH_TOKEN=&lt;check data/spotify-tokens-*.json for the token&gt;</pre>
+            <p>You can close this window and return to your application.</p>
+            <script>
+              setTimeout(() => {
+                if (window.opener) {
+                  window.close();
+                }
+              }, 10000);
+            </script>
+          </body>
+          </html>
+        `
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        body: `<html><body><h1>Error</h1><p>${getErrorMessage(error)}</p></body></html>`
+      };
+    }
+  }
+
+  private async spotifySubmitCallbackUrl(_params: RouteParams, _queryParams?: URLSearchParams, body?: string): Promise<ApiResponse> {
+    try {
+      if (!body) {
+        throw { status: 400, message: 'Request body is required' };
+      }
+      
+      const data = JSON.parse(body);
+      const callbackUrl = data.callbackUrl;
+      
+      if (!callbackUrl) {
+        throw { status: 400, message: 'callbackUrl is required in request body' };
+      }
+      
+      await spotifyAuthService.processCallbackUrl(callbackUrl);
+      
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          message: 'Spotify authorization successful',
+          note: 'Add SPOTIFY_REFRESH_TOKEN to your .env for future deployments'
+        }
+      };
+    } catch (error) {
+      return {
+        status: getErrorStatus(error) || 500,
+        body: {
+          error: getErrorMessage(error),
+          message: 'Failed to process Spotify callback URL'
+        }
+      };
+    }
+  }
+
+  private async spotifyAuthStatus(): Promise<ApiResponse> {
+    const isAuthenticated = spotifyAuthService.isAuthenticated();
+    const instanceId = process.env.INSTANCE_ID || 'default';
+    
+    return {
+      status: 200,
+      body: {
+        authenticated: isAuthenticated,
+        instanceId,
+        hasRefreshToken: !!this.config.spotify?.refreshToken,
+        message: isAuthenticated 
+          ? 'Spotify is authenticated and ready' 
+          : 'Spotify authentication required. Visit /spotify/auth to connect.'
+      }
+    };
   }
 
 }

@@ -245,6 +245,11 @@ Parameters:
 - `type`: `song`, `album`, `station`, `artist`
 - `query`: Search term (URL encoded)
 
+**Note**: `artist` search behavior varies by service:
+- **Spotify/Apple**: Plays artist radio station
+- **Pandora**: Searches for Pandora stations (not limited to artists)
+- **Library**: Queues random tracks by artist (up to `LIBRARY_RANDOM_QUEUE_LIMIT`)
+
 ## Service-Specific Endpoints
 
 ### Apple Music
@@ -255,10 +260,28 @@ GET /{room}/applemusic/{action}/{id}
 - `id`: Apple Music ID
 
 ### Spotify
+
+#### Playback
 ```
 GET /{room}/spotify/play/{id}     # Play Spotify content by ID
 ```
 - `id`: Spotify URI (e.g., `spotify:track:123`, `spotify:album:456`, `spotify:playlist:789`)
+
+#### Authentication
+```
+GET /spotify/auth               # Start OAuth flow (browser-based)
+GET /spotify/callback           # OAuth callback (handled automatically)
+POST /spotify/callback-url      # Submit callback URL (headless auth)
+GET /spotify/status             # Check authentication status
+```
+
+#### Search (requires authentication)
+```
+GET /{room}/musicsearch/spotify/song/{query}    # Search songs
+GET /{room}/musicsearch/spotify/album/{query}   # Search albums
+GET /{room}/musicsearch/spotify/artist/{query}  # Search artists (plays artist radio)
+GET /{room}/musicsearch/spotify/station/{query} # Search stations (same as artist)
+```
 
 ### Pandora
 ```

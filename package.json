@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsc",
     "start": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- node dist/server.js",
-    "start:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- node dist/server.js 2>&1 | tee logs/server.log",
+    "start:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" dotenv -- node dist/server.js 2>&1 > logs/server.log",
     "dev": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=debug DEBUG_CATEGORIES=all dotenv -- tsx watch src/server.ts",
     "dev:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=debug DEBUG_CATEGORIES=all dotenv -- tsx watch src/server.ts 2>&1 | tee logs/server.log",
     "lint": "eslint src/",

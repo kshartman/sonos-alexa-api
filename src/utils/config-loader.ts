@@ -18,6 +18,9 @@ const defaultConfig: Partial<Config> = {
   tts: {
     provider: 'google',
     lang: 'en-US'
+  },
+  library: {
+    randomQueueLimit: 100
   }
 };
 
@@ -126,9 +129,14 @@ export function loadConfiguration(): Config {
   if (process.env.DEFAULT_SERVICE) config.defaultMusicService = process.env.DEFAULT_SERVICE;
   
   // Music library
-  if (process.env.LIBRARY_REINDEX_INTERVAL) {
+  if (process.env.LIBRARY_REINDEX_INTERVAL || process.env.LIBRARY_RANDOM_QUEUE_LIMIT) {
     config.library = config.library || {};
-    config.library.reindexInterval = process.env.LIBRARY_REINDEX_INTERVAL;
+    if (process.env.LIBRARY_REINDEX_INTERVAL) {
+      config.library.reindexInterval = process.env.LIBRARY_REINDEX_INTERVAL;
+    }
+    if (process.env.LIBRARY_RANDOM_QUEUE_LIMIT) {
+      config.library.randomQueueLimit = parseInt(process.env.LIBRARY_RANDOM_QUEUE_LIMIT, 10);
+    }
   }
   
   // Service credentials
@@ -143,7 +151,7 @@ export function loadConfiguration(): Config {
     if (process.env.PANDORA_PASSWORD) config.pandora.password = process.env.PANDORA_PASSWORD;
   }
   
-  if (process.env.SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_SECRET || process.env.SPOTIFY_REFRESH_TOKEN) {
+  if (process.env.SPOTIFY_CLIENT_ID || process.env.SPOTIFY_CLIENT_SECRET || process.env.SPOTIFY_REFRESH_TOKEN || process.env.SPOTIFY_REDIRECT_URI || process.env.SPOTIFY_SCOPES) {
     if (!config.spotify) {
       config.spotify = {
         clientId: process.env.SPOTIFY_CLIENT_ID || '',
@@ -153,6 +161,8 @@ export function loadConfiguration(): Config {
     if (process.env.SPOTIFY_CLIENT_ID) config.spotify.clientId = process.env.SPOTIFY_CLIENT_ID;
     if (process.env.SPOTIFY_CLIENT_SECRET) config.spotify.clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
     if (process.env.SPOTIFY_REFRESH_TOKEN) config.spotify.refreshToken = process.env.SPOTIFY_REFRESH_TOKEN;
+    if (process.env.SPOTIFY_REDIRECT_URI) config.spotify.redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+    if (process.env.SPOTIFY_SCOPES) config.spotify.scopes = process.env.SPOTIFY_SCOPES.split(',').map(s => s.trim());
   }
   
   // Webhooks
@@ -210,7 +220,10 @@ export function loadConfiguration(): Config {
   logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
   logger.always(`📅 Build Date: ${buildDate}`);
   
-  logger.info(`Configuration loaded from: ${configSources.join(' → ')}`);
+  const configMessage = envOverrides.length > 0 
+    ? `Configuration loaded from: ${configSources.join(' → ')} (${envOverrides.join(', ')})`
+    : `Configuration loaded from: ${configSources.join(' → ')}`;
+  logger.info(configMessage);
   
   // Add computed environment helpers and version
   const finalConfig = config as Config;
@@ -251,9 +264,9 @@ function getEnvironmentOverrides(): string[] {
     'TTS_PROVIDER', 'TTS_LANG', 'TTS_VOICE', 'TTS_ENDPOINT', 'TTS_API_KEY',
     'TTS_MACOS_VOICE', 'TTS_MACOS_RATE',
     'DEFAULT_ROOM', 'DEFAULT_SERVICE',
-    'LIBRARY_REINDEX_INTERVAL',
+    'LIBRARY_REINDEX_INTERVAL', 'LIBRARY_RANDOM_QUEUE_LIMIT',
     'PANDORA_USERNAME', 'PANDORA_PASSWORD',
-    'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN',
+    'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN', 'SPOTIFY_REDIRECT_URI', 'SPOTIFY_SCOPES',
     'WEBHOOKS_VOLUME_URL', 'WEBHOOKS_TRANSPORT_URL', 'WEBHOOKS_TOPOLOGY_URL',
     'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT', 'CACHE_DIR',
     'CREATE_DEFAULT_PRESETS'

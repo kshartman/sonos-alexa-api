@@ -10,6 +10,11 @@
         X-Frame-Options DENY
     }
 
+    # Spotify OAuth callback
+    handle /spotify/callback {
+        reverse_proxy localhost:5005
+    }
+
     # Proxy all requests
     reverse_proxy localhost:5005
 }

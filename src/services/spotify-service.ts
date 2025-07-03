@@ -1,6 +1,8 @@
 import { MusicService, MusicSearchResult, MusicServiceConfig, ServiceAccount } from './music-service.js';
 import logger from '../utils/logger.js';
 import type { SonosDevice } from '../sonos-device.js';
+import { spotifyAuthService } from './spotify-auth-service.js';
+import { loadConfiguration } from '../utils/config-loader.js';
 
 interface SpotifySearchResponse {
   tracks?: {
@@ -54,6 +56,7 @@ export class SpotifyService extends MusicService {
   private readonly DEFAULT_SPOTIFY_SN = '1';
   private readonly DEFAULT_ALBUM_PREFIX = '1004006c';
   private readonly DEFAULT_PLAYLIST_PREFIX = '1006286c';
+  private readonly appConfig = loadConfiguration();
   
   /*
    * SMAPI Flags Reference Table (undocumented Sonos behavior)
@@ -125,11 +128,36 @@ export class SpotifyService extends MusicService {
     };
     
     super(config);
+    
+    // Initialize OAuth if refresh token is in config
+    this.initializeAuth();
   }
 
   /**
-   * Searches Spotify for content using the public Web API.
-   * No authentication required for basic search operations.
+   * Initialize authentication from config or existing tokens
+   */
+  private async initializeAuth(): Promise<void> {
+    try {
+      // Check if we have a refresh token in config
+      if (this.appConfig.spotify?.refreshToken) {
+        logger.info('Using Spotify refresh token from configuration');
+        // The auth service will handle loading the token
+      }
+      
+      // Check authentication status
+      if (spotifyAuthService.isAuthenticated()) {
+        logger.info('Spotify authentication is ready');
+      } else {
+        logger.warn('Spotify not authenticated. Visit /spotify/auth to connect.');
+      }
+    } catch (error) {
+      logger.error('Failed to initialize Spotify auth:', error);
+    }
+  }
+
+  /**
+   * Searches Spotify for content using the Web API with OAuth authentication.
+   * Note: For 'station' (artist), this returns top tracks since Spotify doesn't expose artist radio via API
    * @param type - Type of content to search for
    * @param term - Search query
    * @param country - Country code for filtering results (default: 'US')
@@ -137,6 +165,15 @@ export class SpotifyService extends MusicService {
    */
   async search(type: 'album' | 'song' | 'station', term: string, country = 'US'): Promise<MusicSearchResult[]> {
     try {
+      // Get access token
+      let accessToken: string;
+      try {
+        accessToken = await spotifyAuthService.getAccessToken();
+      } catch (_error) {
+        logger.warn('Spotify not authenticated. Search requires OAuth authentication.');
+        return [];
+      }
+      
       const searchTerm = this.processSearchTerm(type, term);
       const encodedTerm = encodeURIComponent(searchTerm);
       
@@ -147,45 +184,129 @@ export class SpotifyService extends MusicService {
       
       const response = await fetch(url, {
         headers: {
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
         }
       });
       
       if (!response.ok) {
-        // Check if it's a 401 (requires auth) - this means we need to use token
-        if (response.status === 401) {
-          logger.warn('Spotify API requires authentication. Search not available without auth token.');
-          return [];
-        }
-        
         const errorText = await response.text();
         logger.error(`Spotify API error ${response.status}: ${errorText}`);
+        
+        // If token expired, try to refresh and retry once
+        if (response.status === 401) {
+          logger.info('Access token expired, refreshing...');
+          accessToken = await spotifyAuthService.refreshAccessToken();
+          
+          // Retry the request
+          const retryResponse = await fetch(url, {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            }
+          });
+          
+          if (!retryResponse.ok) {
+            const retryError = await retryResponse.text();
+            logger.error(`Spotify API retry error ${retryResponse.status}: ${retryError}`);
+            throw new Error(`Spotify API error: ${retryResponse.status}`);
+          }
+          
+          const retryData: SpotifySearchResponse = await retryResponse.json();
+          return await this.processSearchResponse(type, retryData, country);
+        }
+        
         throw new Error(`Spotify API error: ${response.status}`);
       }
       
       const data: SpotifySearchResponse = await response.json();
-      
-      // Extract results based on type
-      if (type === 'album' && data.albums) {
-        logger.debug(`Spotify found ${data.albums.items.length} albums`);
-        return data.albums.items
-          .filter(album => this.isAvailableInMarket(album, country))
-          .map(album => this.mapAlbum(album));
-      } else if (type === 'song' && data.tracks) {
-        logger.debug(`Spotify found ${data.tracks.items.length} tracks`);
-        return data.tracks.items
-          .filter(track => this.isAvailableInMarket(track, country))
-          .map(track => this.mapTrack(track));
-      } else if (type === 'station' && data.artists) {
-        logger.debug(`Spotify found ${data.artists.items.length} artists`);
-        return data.artists.items.map(artist => this.mapArtist(artist));
-      }
-      
-      return [];
+      return await this.processSearchResponse(type, data, country);
     } catch (error) {
       logger.error('Spotify search failed:', error);
       throw new Error(`Spotify search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Get top tracks for an artist
+   * @param artistId - Spotify artist ID
+   * @param country - Country code for market
+   * @returns Array of top tracks
+   */
+  private async getArtistTopTracks(artistId: string, country: string): Promise<MusicSearchResult[]> {
+    try {
+      let accessToken: string;
+      try {
+        accessToken = await spotifyAuthService.getAccessToken();
+      } catch (_error) {
+        logger.warn('Spotify not authenticated for top tracks request');
+        return [];
+      }
+
+      const url = `${this.baseUrl}/artists/${artistId}/top-tracks?market=${country}`;
+      logger.debug(`Spotify top tracks request: ${url}`);
+      
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        logger.error(`Spotify top tracks error ${response.status}`);
+        return [];
+      }
+      
+      const data = await response.json();
+      const tracks = data.tracks || [];
+      
+      logger.debug(`Spotify found ${tracks.length} top tracks`);
+      
+      // Return up to 20 tracks for variety
+      return tracks.slice(0, 20).map((track: SpotifyTrack) => this.mapTrack(track));
+    } catch (error) {
+      logger.error('Failed to get artist top tracks:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Process search response data
+   */
+  private async processSearchResponse(type: 'album' | 'song' | 'station', data: SpotifySearchResponse, country: string): Promise<MusicSearchResult[]> {
+    if (type === 'album' && data.albums) {
+      logger.debug(`Spotify found ${data.albums.items.length} albums`);
+      return data.albums.items
+        .filter(album => this.isAvailableInMarket(album, country))
+        .map(album => this.mapAlbum(album));
+    } else if (type === 'song' && data.tracks) {
+      logger.debug(`Spotify found ${data.tracks.items.length} tracks`);
+      return data.tracks.items
+        .filter(track => this.isAvailableInMarket(track, country))
+        .map(track => this.mapTrack(track));
+    } else if (type === 'station' && data.artists) {
+      logger.debug(`Spotify found ${data.artists.items.length} artists`);
+      // For artist/station search, we need to get top tracks since artist radio isn't available
+      if (data.artists.items.length > 0) {
+        const artist = data.artists.items[0];
+        if (artist) {
+          logger.info(`Getting top tracks for artist: ${artist.name} (${artist.id})`);
+          const topTracks = await this.getArtistTopTracks(artist.id, country);
+          
+          // Return the tracks but mark them as being from this artist
+          return topTracks.map(track => ({
+            ...track,
+            // Add artist info to help with response messaging
+            _artistName: artist.name,
+            _isTopTracks: true
+          } as MusicSearchResult & { _artistName?: string; _isTopTracks?: boolean }));
+        }
+      }
+      return [];
+    }
+    
+    return [];
   }
 
   private isAvailableInMarket(item: { available_markets?: string[] }, country: string): boolean {
@@ -216,13 +337,6 @@ export class SpotifyService extends MusicService {
     };
   }
 
-  private mapArtist(artist: SpotifyArtist): MusicSearchResult {
-    return {
-      id: artist.id,
-      title: artist.name,
-      uri: artist.uri
-    };
-  }
 
   /**
    * Generates a Sonos-compatible URI for Spotify content.
@@ -235,19 +349,27 @@ export class SpotifyService extends MusicService {
       throw new Error('Spotify account not configured in Sonos');
     }
     
-    // Using simplified format from reference implementation
-    const spotifyUri = type === 'song' ? `spotify:track:${result.id}` : 
-      type === 'album' ? `spotify:album:${result.id}` :
-        `spotify:artist:${result.id}`;
-    
-    const encodedUri = encodeURIComponent(spotifyUri);
-    
     // Use the actual service ID from the account
-    const sid = this.account.sid; // This comes from services list (e.g., 12 for your system)
-    const sn = this.account.serialNumber || this.DEFAULT_SPOTIFY_SN; // Usually 1, but use account value if available
+    const sid = this.account.sid;
+    const sn = this.account.serialNumber || this.DEFAULT_SPOTIFY_SN;
     
-    // All types use x-sonos-spotify
-    return `x-sonos-spotify:${encodedUri}?sid=${sid}&flags=8224&sn=${sn}`;
+    // Different URI formats for different content types
+    if (type === 'song') {
+      // Songs use x-sonos-spotify
+      const spotifyUri = `spotify:track:${result.id}`;
+      const encodedUri = encodeURIComponent(spotifyUri);
+      return `x-sonos-spotify:${encodedUri}?sid=${sid}&flags=8224&sn=${sn}`;
+    } else if (type === 'album') {
+      // Albums use x-rincon-cpcontainer with album prefix
+      const spotifyUri = `spotify:album:${result.id}`;
+      const encodedUri = encodeURIComponent(spotifyUri);
+      return `x-rincon-cpcontainer:${this.DEFAULT_ALBUM_PREFIX}${encodedUri}?sid=${sid}&flags=108&sn=${sn}`;
+    } else {
+      // Artist radio (station) - for Spotify, use x-sonosprog-spotify format (programmed radio)
+      const spotifyUri = `spotify:artist:${result.id}`;
+      const encodedUri = encodeURIComponent(spotifyUri);
+      return `x-sonosprog-spotify:${encodedUri}?sid=${sid}&flags=8232&sn=${sn}`;
+    }
   }
 
   /**
@@ -275,7 +397,7 @@ export class SpotifyService extends MusicService {
       break;
     case 'station':
       spotifyUri = `spotify:artist:${result.id}`;
-      upnpClass = 'object.item.audioItem.audioBroadcast';
+      upnpClass = 'object.item.audioItem.audioBroadcast.#artistRadio';
       titleHint = result.title || 'Spotify Artist Radio';
       break;
     default:
@@ -411,6 +533,74 @@ export class SpotifyService extends MusicService {
    */
   setDevice(device: SonosDevice): void {
     this.device = device;
+  }
+
+  /**
+   * Play artist top tracks (since Spotify doesn't expose artist radio via API)
+   * @param device - The Sonos device to play on
+   * @param artistName - The artist name to search for
+   * @param country - Country code for market (default: 'US')
+   * @returns Response with status and details
+   */
+  async playArtistTopTracks(device: SonosDevice, artistName: string, country = 'US'): Promise<{
+    success: boolean;
+    message: string;
+    trackCount?: number;
+    artistName?: string;
+  }> {
+    try {
+      // Search for the artist
+      const results = await this.search('station', artistName, country);
+      
+      if (results.length === 0) {
+        return {
+          success: false,
+          message: `No artist found for: ${artistName}`
+        };
+      }
+
+      // Results should be top tracks with metadata
+      const extendedResults = results as Array<MusicSearchResult & { _artistName?: string; _isTopTracks?: boolean }>;
+      const tracks = extendedResults.filter(r => r._isTopTracks);
+      if (tracks.length === 0) {
+        return {
+          success: false,
+          message: `No playable tracks found for artist: ${artistName}`
+        };
+      }
+
+      const artistDisplayName = tracks[0]?._artistName || artistName;
+      logger.info(`Playing ${tracks.length} top tracks for artist: ${artistDisplayName}`);
+
+      // Clear queue and prepare for playback
+      await device.clearQueue();
+      const queueURI = `x-rincon-queue:${device.id.replace('uuid:', '')}#0`;
+      await device.setAVTransportURI(queueURI, '');
+
+      // Add all tracks to queue
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i]!;
+        const trackUri = this.generateURI('song', track);
+        const trackMetadata = this.generateMetadata('song', track);
+        await device.addURIToQueue(trackUri, trackMetadata, true, 0); // Add to end
+      }
+
+      // Start playback
+      await device.play();
+
+      return {
+        success: true,
+        message: `Playing ${tracks.length} top tracks by ${artistDisplayName}. Note: Spotify artist radio is not available via API.`,
+        trackCount: tracks.length,
+        artistName: artistDisplayName
+      };
+    } catch (error) {
+      logger.error('Failed to play artist top tracks:', error);
+      return {
+        success: false,
+        message: `Failed to play artist tracks: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
   }
 
   /**

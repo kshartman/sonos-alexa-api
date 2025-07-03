@@ -3,7 +3,7 @@
 ## Release Date: TBD
 
 ## Overview
-Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integration capabilities, and improves service discovery functionality.
+Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentication, enabling full search functionality alongside the existing URL-based preset support and direct playback capabilities.
 
 ## New Features
 
@@ -19,17 +19,30 @@ Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integr
   }
   ```
 
+### Spotify OAuth2 Authentication
+- **Full Search Support**: Search for songs, albums, artists, and playlists by name
+- **Automatic Token Management**: Tokens refresh automatically before expiration
+- **Multi-Instance Support**: Each deployment maintains separate token storage
+- **Headless Authentication**: Setup script for environments without browser access
+- **Browser-Based Flow**: Simple web-based authentication at `/spotify/auth`
+
 ### Enhanced Spotify Integration
 - **Account Extraction**: Automatically extracts Spotify account information from favorites (S2 compatible)
 - **Multiple Account Support**: Handles multiple Spotify accounts with separate prefixes
 - **Direct ID Playback**: Play any Spotify content with known IDs via `/spotify/play/{id}`
 - **Dynamic Flags System**: Smart flag selection based on content type and context
 - **S2 Compatibility**: Removed dependency on deprecated S1 endpoints
+- **Artist Search**: Added artist as synonym for station in music search endpoints
 
 ### Service Discovery Improvements
 - **Service ID Extraction**: Gets current Spotify service ID from Sonos system
 - **Dynamic Service Resolution**: No longer relies on hardcoded service IDs
 - **Better Error Handling**: Clear messages when Spotify isn't configured
+
+### Music Library Enhancements
+- **Random Queue Limit**: Library artist searches now queue random tracks up to configured limit
+- **Default Limit**: Set to 100 tracks, configurable via `LIBRARY_RANDOM_QUEUE_LIMIT`
+- **Consistent Behavior**: Artist search behavior now consistent across all services
 
 ## Technical Improvements
 
@@ -81,23 +94,29 @@ Version 1.5.0 introduces Spotify URL support in presets, enhances Spotify integr
 This version requires a Sonos S2 system. S1 systems are no longer supported.
 
 ### For Spotify Users
-Ensure you have added the following to your Sonos favorites:
-1. At least one Spotify track
-2. At least one Spotify album
-3. At least one Spotify playlist
+1. **Basic Playback**: Ensure you have added the following to your Sonos favorites:
+   - At least one Spotify track
+   - At least one Spotify album
+   - At least one Spotify playlist
+   
+   These favorites are required for the system to extract Spotify account information on S2 systems.
 
-These favorites are required for the system to extract Spotify account information on S2 systems.
+2. **Search Functionality**: To enable Spotify search:
+   - Create a Spotify app at https://developer.spotify.com/dashboard
+   - Add OAuth credentials to your `.env` file
+   - Run authentication setup using browser or headless script
+   - See SPOTIFY.md for detailed instructions
 
 ## Known Issues
-- Spotify search functionality requires OAuth credentials (not yet implemented)
 - SP:12 browsing fails without Spotify authorization
 - Metadata (title, artist, album) may not populate immediately for Spotify content
+- Spotify OAuth tokens stored in data directory (ensure proper permissions)
 
 ## Future Enhancements
-- OAuth2 implementation for Spotify search capabilities
-- Automatic token refresh for Spotify credentials
+- Spotify browse capabilities for discovering content
 - Support for more Spotify content types (podcasts, audiobooks)
 - Enhanced metadata retrieval for playing content
+- User-specific playlists and recommendations (requires user auth scope)
 
 ## Acknowledgments
 Thanks to all contributors and users who provided feedback for this release.

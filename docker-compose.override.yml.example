@@ -1,0 +1,27 @@
+# Docker Compose Override Example for Data Persistence
+#
+# To enable data persistence:
+# 1. Copy this file to docker-compose.override.yml
+# 2. Uncomment the volumes section below
+# 3. Docker Compose will automatically merge this with docker-compose.yml
+#
+# The data directory will persist:
+# - Spotify OAuth tokens (data/spotify-tokens-*.json)
+# - Default room and service settings (data/default-settings.json)
+# - Music library cache (data/music-library.cache)
+# - Music services cache (data/services-cache.json)
+
+services:
+  sonos-api:
+    volumes:
+      # Preset files (read-only)
+      - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
+      
+      # Persistent data directory
+      - ${HOST_DATA_PATH:-./data}:/app/data
+      
+      # Optional: Mount custom settings.json
+      # - ./settings.json:/app/settings.json:ro
+      
+      # Optional: Mount logs directory for debugging
+      # - ./logs:/app/logs

@@ -118,6 +118,8 @@ export interface Config {
     clientId: string;
     clientSecret: string;
     refreshToken?: string;
+    redirectUri?: string;
+    scopes?: string[];
   };
   library?: {
     randomQueueLimit?: number;
@@ -160,6 +162,7 @@ export interface MusicSearchSuccessResponse {
   artist?: string;
   album?: string;
   service: string;
+  message?: string;
 }
 
 export interface StateChangeEvent {

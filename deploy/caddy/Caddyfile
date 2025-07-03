@@ -48,6 +48,11 @@ sonosapi.yourdomain.com {
         respond 403
     }
 
+    # Spotify OAuth callback - must be publicly accessible
+    handle /spotify/callback {
+        reverse_proxy localhost:5005
+    }
+
     # Debug endpoints with access control
     handle_path /debug* {
         @allowed {

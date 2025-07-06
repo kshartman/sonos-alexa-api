@@ -22,8 +22,8 @@ const customLevels = {
     warn: 'yellow',
     info: 'green',
     debug: 'blue',
-    trace: 'gray',
-    wall: 'gray'
+    trace: 'cyan',
+    wall: 'cyan'
   }
 };
 

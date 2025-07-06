@@ -423,6 +423,12 @@ When ready to publish a new Docker image:
 - Could add rate limiting to music library refresh endpoint
 - Preset validation could be extended to validate favorites exist
 - **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead
+- **Saved Queue (Sonos Playlist) Handling**:
+  - Saved queues use `file:///jffs/settings/savedqueues.rsq#ID` format
+  - They can be played directly with `setAVTransportURI` using proper metadata
+  - The saved queue ID must exist - can enumerate via `/status/playlists` or by browsing `SQ:` container
+  - Not all Sonos APIs (like node-sonos-http-api) support these URIs out of the box
+  - TODO: Consider adding validation for saved queue IDs in preset/favorite validation
 
 ## Environment Variables
 All configuration can now be set via environment variables. `npm start` loads .env files via dotenv:
@@ -463,6 +469,16 @@ All configuration can now be set via environment variables. `npm start` loads .e
 ### Advanced
 - **LIBRARY_REINDEX_INTERVAL**: How often to reindex music library (e.g., "1 week")
 - **HOST_PRESET_PATH**: External preset directory to mount as volume (Docker)
+
+### Test Environment Variables
+- **TEST_ROOM**: Room to use for integration tests (default: first available room)
+- **TEST_SERVICE**: Music service for test content discovery (default: library)
+- **TEST_FAVORITE**: Specific favorite to use in tests
+- **TEST_PLAYLIST**: Specific playlist to use in tests
+- **TEST_PANDORA_STATION**: Pandora station name for tests (default: quickmix)
+- **TEST_SONG_QUERIES**: JSON array of song queries for test content discovery
+- **TEST_ALBUM_QUERIES**: JSON array of album queries for test content discovery
+- **TEST_VOLUME_DEFAULT**: Initial volume level (0-100) to set for all rooms during test setup
 
 ## Architecture Critique & Enhancement Plan
 

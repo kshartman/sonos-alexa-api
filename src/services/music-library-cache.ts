@@ -80,49 +80,365 @@ export class MusicLibraryCache {
     return age > 24 * 60 * 60 * 1000; // 24 hours
   }
 
-  async search(keyword: string, field: 'title' | 'artist' | 'album' = 'title', maxResults: number = 50): Promise<MusicSearchResult[]> {
+  async search(keyword: string, field: 'title' | 'artist' | 'album' = 'title', _maxResults: number = 50): Promise<MusicSearchResult[]> {
     const searchText = keyword.toLowerCase();
     const results: CachedTrack[] = [];
+    const randomQueueLimit = 100; // Default random queue limit
 
-    if (field === 'title') {
-      // Direct search through all tracks
+    // Parse all possible matches
+    let trackMatch = searchText.match(/track:\s*([^:]+?)(?:\s+(?:artist|album):|$)/);
+    let artistMatch = searchText.match(/artist:\s*([^:]+?)(?:\s+(?:track|album):|$)/);
+    let albumMatch = searchText.match(/album:\s*([^:]+?)(?:\s+(?:track|artist):|$)/);
+    let titleMatch = searchText.match(/^\s*([^:]+?)(?:\s+(?:track|artist|album):|$)/);
+    
+    // Extract and trim values - already lowercase since searchText is lowercase
+    let trackQuery = trackMatch?.[1]?.trim() || '';
+    let artistQuery = artistMatch?.[1]?.trim() || '';
+    let albumQuery = albumMatch?.[1]?.trim() || '';
+    let titleQuery = titleMatch?.[1]?.trim() || '';
+    
+    // Field-based prefix handling
+    if (field === 'artist' && !artistMatch) {
+      artistQuery = titleQuery;
+      titleQuery = '';
+    } else if (field === 'album' && !albumMatch) {
+      albumQuery = titleQuery;
+      titleQuery = '';
+    } else if (field === 'title') {
+      if (trackMatch) {
+        titleQuery = '';
+      }
+      // Otherwise leave titleQuery as is
+    }
+    
+    logger.debug(`Library search - field: ${field}, keyword: "${keyword}"`);
+    logger.debug(`Parsed queries - track: "${trackQuery}", artist: "${artistQuery}", album: "${albumQuery}", title: "${titleQuery}"`);
+    
+    // If no matches at all, return random songs
+    if (!trackQuery && !artistQuery && !albumQuery && !titleQuery) {
+      const allTracks = Array.from(this.tracks.values());
+      const shuffled = allTracks.sort(() => Math.random() - 0.5);
+      return shuffled.slice(0, randomQueueLimit).map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        uri: track.uri,
+        type: 'track' as const
+      }));
+    }
+    
+    // If trackMatch and titleMatch, discard titleMatch
+    if (trackQuery && titleQuery) {
+      titleQuery = '';
+    }
+    
+    // If titleMatch and artistMatch and albumMatch, set trackMatch = titleMatch, discard titleMatch
+    if (titleQuery && artistQuery && albumQuery) {
+      trackQuery = titleQuery;
+      titleQuery = '';
+    }
+    
+    // Helper function for artist tail matching
+    const artistMatches = (trackArtist: string, queryArtist: string): boolean => {
+      if (!queryArtist) return true;
+      if (trackArtist.includes(queryArtist)) return true;
+      // Check for tail match (e.g., "The Rolling Stones" matches "Rolling Stones")
+      if (trackArtist.endsWith(queryArtist)) return true;
+      // Also check if removing "the " prefix helps
+      if (trackArtist.startsWith('the ') && trackArtist.substring(4) === queryArtist) return true;
+      return false;
+    };
+    
+    // If trackMatch and artistMatch and albumMatch
+    if (trackQuery && artistQuery && albumQuery) {
       for (const track of this.tracks.values()) {
-        if (track.titleLower.includes(searchText)) {
+        if (track.titleLower.includes(trackQuery) && 
+            artistMatches(track.artistLower, artistQuery) && 
+            track.albumLower.includes(albumQuery)) {
           results.push(track);
-          if (results.length >= maxResults) break;
         }
       }
-    } else if (field === 'artist') {
-      // Use artist index
-      for (const [artist, trackIds] of this.artistIndex.entries()) {
-        if (artist.toLowerCase().includes(searchText)) {
-          for (const trackId of trackIds) {
-            const track = this.tracks.get(trackId);
-            if (track) {
+      return results.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        uri: track.uri,
+        type: 'track' as const
+      }));
+    }
+    
+    // If no titleMatch
+    if (!titleQuery) {
+      if (albumQuery && !trackQuery && !artistQuery) {
+        // Return tracks matching album (first album only)
+        let foundAlbum = '';
+        for (const track of this.tracks.values()) {
+          if (track.albumLower.includes(albumQuery)) {
+            if (!foundAlbum) foundAlbum = track.album;
+            if (track.album === foundAlbum) {
               results.push(track);
-              if (results.length >= maxResults) break;
             }
           }
-          if (results.length >= maxResults) break;
         }
-      }
-    } else if (field === 'album') {
-      // Use album index
-      for (const [album, trackIds] of this.albumIndex.entries()) {
-        if (album.toLowerCase().includes(searchText)) {
-          for (const trackId of trackIds) {
-            const track = this.tracks.get(trackId);
-            if (track) {
-              results.push(track);
-              if (results.length >= maxResults) break;
-            }
+        // If no results found, move albumQuery to titleQuery for fuzzy matching
+        if (results.length === 0) {
+          titleQuery = albumQuery;
+          albumQuery = '';
+          logger.trace(`No exact album matches for "${titleQuery}", trying fuzzy match`);
+          // Fall through to fuzzy matching
+        }
+      } else if (trackQuery && !albumQuery && !artistQuery) {
+        // Return tracks matching track title
+        for (const track of this.tracks.values()) {
+          if (track.titleLower.includes(trackQuery)) {
+            results.push(track);
           }
-          if (results.length >= maxResults) break;
+        }
+      } else if (trackQuery && albumQuery && !artistQuery) {
+        // Return tracks matching both track and album
+        for (const track of this.tracks.values()) {
+          if (track.titleLower.includes(trackQuery) && track.albumLower.includes(albumQuery)) {
+            results.push(track);
+          }
+        }
+      } else if (artistQuery && !trackQuery && !albumQuery) {
+        // Return tracks matching artist
+        for (const track of this.tracks.values()) {
+          if (artistMatches(track.artistLower, artistQuery)) {
+            results.push(track);
+          }
+        }
+        // If no results found, move artistQuery to titleQuery for fuzzy matching
+        if (results.length === 0) {
+          titleQuery = artistQuery;
+          artistQuery = '';
+          logger.trace(`No exact artist matches for "${titleQuery}", trying fuzzy match`);
+          // Fall through to fuzzy matching
+        }
+      } else if (artistQuery && trackQuery) {
+        // Return tracks matching artist and track
+        for (const track of this.tracks.values()) {
+          if (track.titleLower.includes(trackQuery) && artistMatches(track.artistLower, artistQuery)) {
+            results.push(track);
+          }
+        }
+      } else if (artistQuery && albumQuery) {
+        // Return tracks matching artist and album
+        for (const track of this.tracks.values()) {
+          if (track.albumLower.includes(albumQuery) && artistMatches(track.artistLower, artistQuery)) {
+            results.push(track);
+          }
         }
       }
     }
-
-    return results.slice(0, maxResults);
+    
+    // Check if we need to do fuzzy matching (either we had titleQuery from the start or from fallback)
+    if (titleQuery && results.length === 0) {
+      // Specific match logic when we have both titleQuery and other queries
+      if (albumQuery && !artistQuery) {
+        // Return tracks matching album AND where title contains titleMatch
+        let foundAlbum = '';
+        for (const track of this.tracks.values()) {
+          if (track.albumLower.includes(albumQuery) && track.titleLower.includes(titleQuery)) {
+            if (!foundAlbum) foundAlbum = track.album;
+            if (track.album === foundAlbum) {
+              results.push(track);
+            }
+          }
+        }
+      } else if (artistQuery && !albumQuery) {
+        // Return tracks matching artist AND where title contains titleMatch
+        for (const track of this.tracks.values()) {
+          if (artistMatches(track.artistLower, artistQuery) && track.titleLower.includes(titleQuery)) {
+            results.push(track);
+          }
+        }
+      }
+      
+      // If still no results, do fuzzy matching on titleQuery alone
+      if (results.length === 0) {
+        // Do fuzzy matching
+        logger.trace(`Entering fuzzy match logic - titleQuery: "${titleQuery}", field: ${field}`);
+        
+        type MatchResult = {
+          item: CachedTrack;
+          artistMatch: boolean;
+          albumMatch: boolean;
+          titleMatch: boolean;
+        };
+        
+        const matches: MatchResult[] = [];
+        let haveArtistMatch = false;
+        let haveAlbumMatch = false;
+        let haveTitleMatch = false;
+        
+        // When field='album' or we came from album fallback, prefer album matches
+        const preferAlbum = field === 'album';
+        
+        // First pass: look for exact matches
+        const exactMatches: MatchResult[] = [];
+        let haveExactArtistMatch = false;
+        let haveExactAlbumMatch = false;
+        let haveExactTitleMatch = false;
+        
+        for (const item of this.tracks.values()) {
+          const match: MatchResult = {
+            item,
+            artistMatch: false,
+            albumMatch: false,
+            titleMatch: false
+          };
+          
+          let hasAnyMatch = false;
+          
+          // Check for exact matches
+          if (item.artistLower === titleQuery) {
+            match.artistMatch = true;
+            haveExactArtistMatch = true;
+            hasAnyMatch = true;
+          }
+          
+          if (item.albumLower === titleQuery) {
+            match.albumMatch = true;
+            haveExactAlbumMatch = true;
+            hasAnyMatch = true;
+          }
+          
+          if (item.titleLower === titleQuery) {
+            match.titleMatch = true;
+            haveExactTitleMatch = true;
+            hasAnyMatch = true;
+          }
+          
+          if (hasAnyMatch) {
+            exactMatches.push(match);
+          }
+        }
+        
+        // If we have exact matches, use only those
+        if (exactMatches.length > 0) {
+          logger.trace(`Found ${exactMatches.length} exact matches`);
+          matches.push(...exactMatches);
+          haveArtistMatch = haveExactArtistMatch;
+          haveAlbumMatch = haveExactAlbumMatch;
+          haveTitleMatch = haveExactTitleMatch;
+        } else {
+          logger.trace(`No exact matches, doing fuzzy matching`);
+          // No exact matches, do fuzzy matching
+          for (const item of this.tracks.values()) {
+            const match: MatchResult = {
+              item,
+              artistMatch: false,
+              albumMatch: false,
+              titleMatch: false
+            };
+            
+            let hasAnyMatch = false;
+            
+            // Check if artist matches at start of query or query starts with artist
+            if (titleQuery.startsWith(item.artistLower) || item.artistLower.startsWith(titleQuery)) {
+              match.artistMatch = true;
+              haveArtistMatch = true;
+              hasAnyMatch = true;
+            }
+            
+            // Check if album matches at start of query or query starts with album
+            if (titleQuery.startsWith(item.albumLower) || item.albumLower.startsWith(titleQuery)) {
+              match.albumMatch = true;
+              haveAlbumMatch = true;
+              hasAnyMatch = true;
+            }
+            
+            // Check if title matches at start of query or query starts with title
+            if (titleQuery.startsWith(item.titleLower) || item.titleLower.startsWith(titleQuery)) {
+              match.titleMatch = true;
+              haveTitleMatch = true;
+              hasAnyMatch = true;
+            }
+            
+            if (hasAnyMatch) {
+              matches.push(match);
+            }
+          }
+        }
+        
+        logger.trace(`Total matches: ${matches.length}, haveArtist: ${haveArtistMatch}, haveAlbum: ${haveAlbumMatch}, haveTitle: ${haveTitleMatch}`);
+        
+        // Filter results based on what types of matches we found
+        let filteredMatches = matches;
+        
+        if (preferAlbum && haveAlbumMatch) {
+          // When field='album', prioritize album matches
+          if (haveArtistMatch) {
+            // If we have both album and artist matches, prefer items that match both
+            const albumAndArtistMatches = matches.filter(m => m.albumMatch && m.artistMatch);
+            if (albumAndArtistMatches.length > 0) {
+              // Return all tracks from the first matching album
+              const firstAlbum = albumAndArtistMatches[0]!.item.album;
+              filteredMatches = albumAndArtistMatches.filter(m => m.item.album === firstAlbum);
+            } else {
+              // No items match both, just use album matches
+              const albumMatches = matches.filter(m => m.albumMatch);
+              if (albumMatches.length > 0) {
+                const firstAlbum = albumMatches[0]!.item.album;
+                filteredMatches = albumMatches.filter(m => m.item.album === firstAlbum);
+              }
+            }
+          } else {
+            // Only album matches, return tracks from first matching album
+            const albumMatches = matches.filter(m => m.albumMatch);
+            if (albumMatches.length > 0) {
+              const firstAlbum = albumMatches[0]!.item.album;
+              filteredMatches = albumMatches.filter(m => m.item.album === firstAlbum);
+            }
+          }
+        } else {
+          // Original filtering logic for non-album searches
+          if (haveArtistMatch && haveAlbumMatch && haveTitleMatch) {
+            // If we have all three types of matches, only keep items that match all three
+            filteredMatches = matches.filter(m => m.artistMatch && m.albumMatch && m.titleMatch);
+          } else if (haveAlbumMatch && haveTitleMatch) {
+            // If we have album and title matches, keep items that match both
+            filteredMatches = matches.filter(m => m.albumMatch && m.titleMatch);
+          } else if (haveArtistMatch && haveTitleMatch) {
+            // If we have artist and title matches, keep items that match both
+            filteredMatches = matches.filter(m => m.artistMatch && m.titleMatch);
+          } else if (haveArtistMatch && haveAlbumMatch) {
+            // If we have artist and album matches, keep items that match both
+            filteredMatches = matches.filter(m => m.artistMatch && m.albumMatch);
+          }
+          // Otherwise keep all matches as is
+          
+          // If filtering resulted in no matches but we had some, try album-first strategy
+          if (filteredMatches.length === 0 && matches.length > 0 && haveAlbumMatch) {
+            // Get tracks from the first matching album
+            const albumMatches = matches.filter(m => m.albumMatch);
+            if (albumMatches.length > 0) {
+              const firstAlbum = albumMatches[0]!.item.album;
+              filteredMatches = albumMatches.filter(m => m.item.album === firstAlbum);
+            }
+          }
+        }
+        
+        logger.trace(`Filtered matches: ${filteredMatches.length}`);
+        
+        // Add all filtered results (limit will be applied at the end)
+        for (const match of filteredMatches) {
+          results.push(match.item);
+        }
+      }
+    }
+    
+    return results.slice(0, randomQueueLimit).map(track => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      uri: track.uri,
+      type: 'track' as const
+    }));
   }
 
   async searchArtists(keyword: string): Promise<string[]> {

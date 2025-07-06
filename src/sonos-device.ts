@@ -636,6 +636,49 @@ export class SonosDevice extends EventEmitter {
    * @param discovery - Optional discovery instance for coordinator lookup
    */
   async playUri(uri: string, metadata = '', discovery?: SonosDiscovery): Promise<void> {
+    // Handle saved queue URIs (file:///jffs/settings/savedqueues.rsq#ID)
+    // These are Sonos playlists that need to be loaded to the queue
+    if (uri.startsWith('file:///jffs/settings/savedqueues.rsq#')) {
+      logger.debug(`${this.roomName}: handling saved queue URI by loading to queue`);
+      
+      // First ensure we're coordinator if needed
+      const hasTopologyData = discovery && discovery.getZones().length > 0;
+      if (!hasTopologyData) {
+        // Wait briefly for topology data
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (discovery && discovery.getZones().length > 0) break;
+        }
+      }
+      
+      const isCurrentlyCoordinator = discovery ? discovery.isCoordinator(this.id) : true;
+      if (!isCurrentlyCoordinator) {
+        logger.debug(`${this.roomName}: becoming coordinator before queue operation`);
+        try {
+          await this.becomeCoordinatorOfStandaloneGroup();
+        } catch (error) {
+          logger.warn(`${this.roomName}: becomeCoordinatorOfStandaloneGroup failed: ${(error as Error).message}`);
+        }
+      }
+      
+      // Clear the queue
+      logger.debug(`${this.roomName}: clearing queue`);
+      await this.clearQueue();
+      
+      // Add the saved queue to the queue
+      logger.debug(`${this.roomName}: adding saved queue to queue: ${uri}`);
+      await this.addURIToQueue(uri, metadata);
+      
+      // Play from the queue
+      const deviceId = this.id.replace('uuid:', '');
+      const queueUri = `x-rincon-queue:${deviceId}#0`;
+      logger.debug(`${this.roomName}: setting AVTransport to queue: ${queueUri}`);
+      
+      await this.setAVTransportURI(queueUri, '');
+      await this.play();
+      return;
+    }
+    
     // Handle x-rincon-playlist: URIs for music library playlists
     // These need special handling - we browse the playlist and add its contents to the queue
     if (uri.startsWith('x-rincon-playlist:')) {

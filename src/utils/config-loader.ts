@@ -5,6 +5,11 @@ import { applicationVersion } from '../version.js';
 import type { Config, WebhookConfig } from '../types/sonos.js';
 
 /**
+ * Usual debug categories for balanced debugging output
+ */
+const USUAL_DEBUG_CATEGORIES = ['api', 'discovery', 'favorites', 'presets'];
+
+/**
  * Default configuration values
  */
 const defaultConfig: Partial<Config> = {
@@ -86,7 +91,11 @@ export function loadConfiguration(): Config {
     config.logLevel = process.env.LOG_LEVEL || process.env.DEBUG_LEVEL || config.logLevel;
   }
   if (process.env.DEBUG_CATEGORIES) {
-    config.debugCategories = parseArrayEnv(process.env.DEBUG_CATEGORIES);
+    if (process.env.DEBUG_CATEGORIES.toLowerCase() === 'usual') {
+      config.debugCategories = USUAL_DEBUG_CATEGORIES;
+    } else {
+      config.debugCategories = parseArrayEnv(process.env.DEBUG_CATEGORIES);
+    }
   }
   
   // Authentication

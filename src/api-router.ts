@@ -17,6 +17,7 @@ import { MusicLibraryCache } from './services/music-library-cache.js';
 import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
+import { EventManager } from './utils/event-manager.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams, body?: string) => Promise<ApiResponse>;
 
@@ -274,6 +275,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/queue/{limit}/{offset}', this.getQueue.bind(this));
     this.routes.set('GET /{room}/queue/{limit}/{offset}/detailed', this.getQueue.bind(this));
     this.routes.set('GET /{room}/clearqueue', this.clearQueue.bind(this));
+    this.routes.set('POST /{room}/queue', this.addToQueue.bind(this));
     
     // Playback control routes
     this.routes.set('GET /{room}/repeat/{toggle}', this.setRepeat.bind(this));
@@ -300,6 +302,7 @@ export class ApiRouter {
     this.routes.set('GET /debug/spotify/parse/{input}', this.debugSpotifyParse.bind(this));
     this.routes.set('GET /debug/spotify/browse/{room}/{sid}', this.debugBrowseSpotify.bind(this));
     this.routes.set('GET /debug/spotify/account/{room}', this.debugSpotifyAccount.bind(this));
+    this.routes.set('GET /debug/device-health', this.getDeviceHealth.bind(this));
     // Settings route
     this.routes.set('GET /settings', this.getSettings.bind(this));
     
@@ -1614,6 +1617,45 @@ export class ApiRouter {
     };
   }
   
+  private async getDeviceHealth(): Promise<ApiResponse> {
+    const eventManager = EventManager.getInstance();
+    const health = eventManager.getDeviceHealth();
+    
+    // Convert Map to object for JSON serialization
+    const healthData: Record<string, any> = {};
+    for (const [deviceId, status] of health) {
+      // DeviceId might have uuid: prefix or not
+      const device = this.discovery.getDeviceById(deviceId) || 
+                    this.discovery.getDeviceById(deviceId.replace('uuid:', '')) ||
+                    this.discovery.getDeviceById(`uuid:${deviceId}`);
+      healthData[deviceId] = {
+        ...status,
+        roomName: device?.roomName || 'Unknown',
+        modelName: device?.modelName || 'Unknown',
+        ip: device?.ip || 'Unknown'
+      };
+    }
+    
+    // Get stale devices
+    const staleDevices = eventManager.getStaleNotifyDevices();
+    const unhealthyDevices = eventManager.getUnhealthyDevices();
+    
+    return {
+      status: 200,
+      body: {
+        devices: healthData,
+        summary: {
+          totalRegistered: eventManager['registeredDevices'].size,
+          totalWithListeners: eventManager['deviceListeners'].size,
+          staleNotifyCount: staleDevices.length,
+          unhealthyCount: unhealthyDevices.length,
+          staleDeviceIds: staleDevices,
+          unhealthyDeviceIds: unhealthyDevices
+        }
+      }
+    };
+  }
+  
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateStartupInfo(category: string, data: any): void { // ANY IS CORRECT: data can be any type of startup information
@@ -1748,7 +1790,7 @@ export class ApiRouter {
   }
   
   // Default music search endpoints (use default room and service)
-  private async musicSearchSongDefault({ query }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+  private async musicSearchSongDefault({ query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
     if (!query) throw { status: 400, message: 'Query is required' };
     
     const room = this.defaultRoomManager.getRoom();
@@ -1756,7 +1798,7 @@ export class ApiRouter {
     
     const service = this.defaultRoomManager.getMusicService();
     
-    return this.performMusicSearch(room, service, 'song', query);
+    return this.performMusicSearch(room, service, 'song', query, queryParams);
   }
   
   private async musicSearchAlbumDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -1793,20 +1835,20 @@ export class ApiRouter {
   }
   
   // Music search endpoints
-  private async musicSearchAlbum({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+  private async musicSearchAlbum({ room, service, name }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!service) throw { status: 400, message: 'Service parameter is required' };
     if (!name) throw { status: 400, message: 'Album name is required' };
     
-    return this.performMusicSearch(room, service, 'album', name);
+    return this.performMusicSearch(room, service, 'album', name, queryParams);
   }
   
-  private async musicSearchSong({ room, service, query }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
+  private async musicSearchSong({ room, service, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!service) throw { status: 400, message: 'Service parameter is required' };
     if (!query) throw { status: 400, message: 'Query is required' };
     
-    return this.performMusicSearch(room, service, 'song', query);
+    return this.performMusicSearch(room, service, 'song', query, queryParams);
   }
   
   private async musicSearchStation({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -1826,7 +1868,7 @@ export class ApiRouter {
   }
   
   // Music library search endpoints
-  private async musicLibrarySearchSong({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchSong({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -1838,24 +1880,74 @@ export class ApiRouter {
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
     try {
-      const results = await this.musicLibraryCache.search(query, 'title', 50);
+      let results = await this.musicLibraryCache.search(query, 'title', 50);
+      
+      // If the query contains "artist:" but no "track:" or "album:", try album first then track
+      if (results.length === 0 && query.toLowerCase().includes('artist:') && 
+          !query.toLowerCase().includes('track:') && !query.toLowerCase().includes('album:')) {
+        
+        // First try as album search
+        const albumQuery = 'album: ' + query;
+        results = await this.musicLibraryCache.search(albumQuery, 'title', 50);
+        
+        // If no album found, try as track search
+        if (results.length === 0) {
+          const trackQuery = 'track: ' + query;
+          results = await this.musicLibraryCache.search(trackQuery, 'title', 50);
+        }
+      }
       
       if (results.length === 0) {
         throw { status: 404, message: `No songs found matching: ${query}` };
       }
       
-      // Play the first result
-      const track = results[0]!;
-      await coordinator.setAVTransportURI(track.uri, '');
-      await coordinator.play();
+      // Check if play=false to return results only
+      const shouldPlay = queryParams?.get('play') !== 'false';
+      
+      // Clear the queue first
+      await coordinator.clearQueue();
+      
+      // Add the first result to queue
+      await coordinator.addURIToQueue(results[0]!.uri, '');
+      
+      // If play=true (default), start playback
+      if (shouldPlay) {
+        await coordinator.play();
+      }
+      
+      // Add the rest of the results to queue
+      for (let i = 1; i < results.length; i++) {
+        await coordinator.addURIToQueue(results[i]!.uri, '');
+      }
+      
+      // Return results in both cases
+      if (!shouldPlay) {
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            service: 'library',
+            type: 'song',
+            query: query,
+            results: results.map(r => ({
+              title: r.title,
+              artist: r.artist,
+              album: r.album,
+              uri: r.uri,
+              id: r.id,
+              type: 'track'
+            }))
+          } as any
+        };
+      }
       
       return {
         status: 200,
         body: {
           status: 'success',
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
+          title: results[0]!.title,
+          artist: results[0]!.artist,
+          album: results[0]!.album,
           service: 'library'
         }
       };
@@ -1867,7 +1959,7 @@ export class ApiRouter {
     }
   }
   
-  private async musicLibrarySearchArtist({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchArtist({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -1885,10 +1977,48 @@ export class ApiRouter {
         throw { status: 404, message: `No tracks by artist matching: ${query}` };
       }
       
-      // Play the first result
+      // Check if play=false to return results only
+      const shouldPlay = queryParams?.get('play') !== 'false';
+      
+      // Clear the queue first
+      await coordinator.clearQueue();
+      
+      // Add the first result to queue
+      await coordinator.addURIToQueue(results[0]!.uri, '');
+      
+      // If play=true (default), start playback
+      if (shouldPlay) {
+        await coordinator.play();
+      }
+      
+      // Add the rest of the results to queue
+      for (let i = 1; i < results.length; i++) {
+        await coordinator.addURIToQueue(results[i]!.uri, '');
+      }
+      
+      // Return results in both cases
+      if (!shouldPlay) {
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            service: 'library',
+            type: 'artist',
+            query: query,
+            results: results.map(r => ({
+              title: r.title,
+              artist: r.artist,
+              album: r.album,
+              uri: r.uri,
+              id: r.id,
+              type: 'track'
+            }))
+          } as any
+        };
+      }
+      
+      // For play=true, return the first track info
       const track = results[0]!;
-      await coordinator.setAVTransportURI(track.uri, '');
-      await coordinator.play();
       
       return {
         status: 200,
@@ -1908,7 +2038,7 @@ export class ApiRouter {
     }
   }
   
-  private async musicLibrarySearchAlbum({ room, query }: RouteParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchAlbum({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -1926,10 +2056,48 @@ export class ApiRouter {
         throw { status: 404, message: `No tracks from album matching: ${query}` };
       }
       
-      // Play the first result
+      // Check if play=false to return results only
+      const shouldPlay = queryParams?.get('play') !== 'false';
+      
+      // Clear the queue first
+      await coordinator.clearQueue();
+      
+      // Add the first result to queue
+      await coordinator.addURIToQueue(results[0]!.uri, '');
+      
+      // If play=true (default), start playback
+      if (shouldPlay) {
+        await coordinator.play();
+      }
+      
+      // Add the rest of the results to queue
+      for (let i = 1; i < results.length; i++) {
+        await coordinator.addURIToQueue(results[i]!.uri, '');
+      }
+      
+      // Return results in both cases
+      if (!shouldPlay) {
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            service: 'library',
+            type: 'album',
+            query: query,
+            results: results.map(r => ({
+              title: r.title,
+              artist: r.artist,
+              album: r.album,
+              uri: r.uri,
+              id: r.id,
+              type: 'track'
+            }))
+          } as any
+        };
+      }
+      
+      // For play=true, return the first track info
       const track = results[0]!;
-      await coordinator.setAVTransportURI(track.uri, '');
-      await coordinator.play();
       
       return {
         status: 200,
@@ -2074,15 +2242,17 @@ export class ApiRouter {
         throw new Error(`Failed to find complete Pandora station information for '${decodedName}'`);
       }
       
-      // Generate metadata with proper service type
+      // Generate metadata with proper service type for Pandora (SID 2311)
       const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
         xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
         xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"
         xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-        <item id="${stationUri}" parentID="0" restricted="true">
+        <item id="${stationUri}" parentID="pndrradio:" restricted="true">
           <dc:title>${stationTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
-          <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
-          <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON2311_X_#Svc2311-0-Token</desc>
+          <upnp:class>object.container.playlistContainer</upnp:class>
+          <desc id="cd" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">
+            SA_RINCON2311_
+          </desc>
         </item>
       </DIDL-Lite>`;
       
@@ -2267,6 +2437,52 @@ export class ApiRouter {
     
     await coordinator.clearQueue();
     return { status: 200, body: { status: 'success' } };
+  }
+  
+  private async addToQueue({ room }: RouteParams, _queryParams?: URLSearchParams, body?: unknown): Promise<ApiResponse<SuccessResponse>> {
+    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!body) throw { status: 400, message: 'Request body is required' };
+    
+    // Parse body if it's a string
+    let parsedBody: { uri?: string; metadata?: string };
+    if (typeof body === 'string') {
+      try {
+        parsedBody = JSON.parse(body);
+      } catch (e) {
+        throw { status: 400, message: 'Invalid JSON in request body' };
+      }
+    } else if (typeof body === 'object') {
+      parsedBody = body as { uri?: string; metadata?: string };
+    } else {
+      throw { status: 400, message: 'Request body must be JSON' };
+    }
+    
+    const { uri, metadata } = parsedBody;
+    if (!uri) throw { status: 400, message: 'URI is required in request body' };
+    
+    const device = this.getDevice(room);
+    const coordinator = this.discovery.getCoordinator(device.id) || device;
+    
+    // Get current queue position to determine where to add
+    const transportInfo = await coordinator.getTransportInfo();
+    const positionInfo = await coordinator.getPositionInfo();
+    
+    // If something is playing, add as next (position 1)
+    // If nothing is playing or queue is empty, add at position 0
+    const isPlaying = transportInfo.CurrentTransportState === 'PLAYING';
+    const hasQueue = parseInt(positionInfo.Track) > 0;
+    const enqueueAsNext = isPlaying && hasQueue;
+    
+    logger.debug(`${room}: Adding to queue - isPlaying=${isPlaying}, hasQueue=${hasQueue}, enqueueAsNext=${enqueueAsNext}`);
+    
+    await coordinator.addURIToQueue(uri, metadata || '', enqueueAsNext);
+    
+    return { 
+      status: 200, 
+      body: { 
+        status: 'success'
+      } 
+    };
   }
   
   private async setRepeat({ room, toggle }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
@@ -2644,7 +2860,7 @@ export class ApiRouter {
   /**
    * Perform music search and play results
    */
-  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
     const device = this.getDevice(roomName);
     if (!device) {
       throw { status: 404, message: `Room '${roomName}' not found` };
@@ -2655,6 +2871,9 @@ export class ApiRouter {
     if (!coordinator) {
       throw { status: 404, message: `No coordinator found for room '${roomName}'` };
     }
+
+    // Check if play=false to return results only
+    const shouldPlay = queryParams?.get('play') !== 'false';
 
     // Check supported services and types
     const serviceLower = service.toLowerCase();
@@ -2703,6 +2922,27 @@ export class ApiRouter {
             throw { status: 404, message: `No songs found for artist: ${term}` };
           }
           
+          // If play=false, return search results without playing
+          if (!shouldPlay) {
+            return {
+              status: 200,
+              body: {
+                status: 'success',
+                service: 'library',
+                type: type,
+                query: term,
+                results: results.map(r => ({
+                  title: r.title,
+                  artist: r.artist,
+                  album: r.album,
+                  uri: r.uri,
+                  id: r.id,
+                  type: 'track'
+                }))
+              } as any
+            };
+          }
+          
           // Get randomQueueLimit from config (default 100)
           const limit = this.config.library?.randomQueueLimit || 100;
           
@@ -2717,23 +2957,38 @@ export class ApiRouter {
           const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
           await coordinator.setAVTransportURI(queueURI, '');
           
-          // Add all tracks to queue
-          for (let i = 0; i < tracksToQueue.length; i++) {
-            const track = tracksToQueue[i]!;
-            const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-            <item id="library-${track.id}" parentID="library" restricted="true">
-              <dc:title>${track.title}</dc:title>
-              <upnp:artist>${track.artist}</upnp:artist>
-              <upnp:album>${track.album}</upnp:album>
+          // Add first track and start playing immediately
+          if (tracksToQueue.length > 0) {
+            const firstTrack = tracksToQueue[0]!;
+            const firstMetadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
+            <item id="library-${firstTrack.id}" parentID="library" restricted="true">
+              <dc:title>${firstTrack.title}</dc:title>
+              <upnp:artist>${firstTrack.artist}</upnp:artist>
+              <upnp:album>${firstTrack.album}</upnp:album>
               <upnp:class>object.item.audioItem.musicTrack</upnp:class>
-              <res>${track.uri}</res>
+              <res>${firstTrack.uri}</res>
             </item></DIDL-Lite>`;
             
-            await coordinator.addURIToQueue(track.uri, metadata, true, 0); // Add to end of queue
+            await coordinator.addURIToQueue(firstTrack.uri, firstMetadata, true, 0);
+            
+            // Start playback with just the first track
+            await coordinator.play();
+            
+            // Now add the remaining tracks while the first one is playing
+            for (let i = 1; i < tracksToQueue.length; i++) {
+              const track = tracksToQueue[i]!;
+              const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
+              <item id="library-${track.id}" parentID="library" restricted="true">
+                <dc:title>${track.title}</dc:title>
+                <upnp:artist>${track.artist}</upnp:artist>
+                <upnp:album>${track.album}</upnp:album>
+                <upnp:class>object.item.audioItem.musicTrack</upnp:class>
+                <res>${track.uri}</res>
+              </item></DIDL-Lite>`;
+              
+              await coordinator.addURIToQueue(track.uri, metadata, true, 0); // Add to end of queue
+            }
           }
-          
-          // Start playback
-          await coordinator.play();
           
           return {
             status: 200,
@@ -2752,6 +3007,27 @@ export class ApiRouter {
         
         if (results.length === 0) {
           throw { status: 404, message: `No ${type}s found matching: ${term}` };
+        }
+        
+        // If play=false, return search results without playing
+        if (!shouldPlay) {
+          return {
+            status: 200,
+            body: {
+              status: 'success',
+              service: 'library',
+              type: type,
+              query: term,
+              results: results.map(r => ({
+                title: r.title,
+                artist: r.artist,
+                album: r.album,
+                uri: r.uri,
+                id: r.id,
+                type: 'track'
+              }))
+            } as any
+          };
         }
         
         const track = results[0]!;
@@ -2811,6 +3087,27 @@ export class ApiRouter {
         throw { status: 404, message: `No ${type}s found for: ${term}` };
       }
 
+      // If play=false, return search results without playing
+      if (!shouldPlay) {
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            service: service,
+            type: type,
+            query: term,
+            results: results.map(r => ({
+              title: r.title,
+              artist: r.artist,
+              album: r.album,
+              uri: musicService.generateURI(searchType as 'album' | 'song' | 'station', r),
+              id: r.id,
+              type: type
+            }))
+          } as any
+        };
+      }
+
       // Use first result
       const result = results[0];
       if (!result) {
@@ -2860,26 +3157,39 @@ export class ApiRouter {
         await coordinator.addURIToQueue(uri, metadata, true, 1);
         await coordinator.play();
       } else { // song
-        // Songs can be added to current queue or replace it
+        // Songs are added to current queue (matching legacy behavior)
         const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
         
-        // Check if queue is empty
-        const currentState = coordinator.state;
-        const isEmpty = !currentState.currentTrack?.uri || currentState.currentTrack.uri === '';
-        
-        if (isEmpty) {
-          // Empty queue - set up and play
-          await coordinator.setAVTransportURI(queueURI, '');
-          await coordinator.addURIToQueue(uri, metadata, true, 1);
-        } else {
-          // Add after current track
-          const nextTrackNo = 1; // Add as next track
-          await coordinator.addURIToQueue(uri, metadata, true, nextTrackNo);
-          await coordinator.setAVTransportURI(queueURI, '');
-          await coordinator.next();
+        try {
+          // Check if queue is empty by getting the queue
+          logger.trace(`Getting queue to check if empty for ${coordinator.roomName}`);
+          const queueResult = await coordinator.getQueue(0, 1);
+          const isEmpty = queueResult.items.length === 0;
+          logger.trace(`Queue empty check: ${isEmpty}, items: ${queueResult.items.length}`);
+          
+          if (isEmpty) {
+            // Empty queue - add to position 1 and play
+            logger.trace('Empty queue - adding to position 1');
+            await coordinator.addURIToQueue(uri, metadata, true, 1);
+            await coordinator.setAVTransportURI(queueURI, '');
+          } else {
+            // Add after current track - we'll add as next track (position 1)
+            // This matches the legacy behavior
+            const nextTrackNo = 1; // Add as next track
+            logger.trace('Non-empty queue - adding as next track');
+            await coordinator.addURIToQueue(uri, metadata, true, nextTrackNo);
+            logger.trace('Setting transport URI to queue');
+            await coordinator.setAVTransportURI(queueURI, '');
+            logger.trace('Calling next() to skip to added track');
+            await coordinator.next();
+          }
+          
+          logger.trace(`Calling play() on ${coordinator.roomName}`);
+          await coordinator.play();
+        } catch (error) {
+          logger.error('Error in song playback logic:', error);
+          throw error;
         }
-        
-        await coordinator.play();
       }
 
       // Update default room

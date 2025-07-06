@@ -100,9 +100,12 @@ export class PresetLoader {
               const roomValidation = this.validateAndFilterRooms(convertedPreset, presetName);
               if (roomValidation.hasInvalidRooms) {
                 stats.invalidRooms++;
-                invalidRoomNames.push(presetName);
-                logger.warn(`Preset ${presetName}: Removed invalid rooms - ${roomValidation.invalidRooms?.join(', ')}`);
-                debugManager.debug('presets', `Preset ${presetName}: Invalid rooms removed - ${roomValidation.message}`);
+                // Only warn if we haven't already warned about this preset's invalid rooms
+                if (!invalidRoomNames.includes(presetName)) {
+                  invalidRoomNames.push(presetName);
+                  logger.warn(`Preset ${presetName}: Removed invalid rooms - ${roomValidation.invalidRooms?.join(', ')}`);
+                }
+                debugManager.trace('presets', `Preset ${presetName}: Invalid rooms removed - ${roomValidation.message}`);
               }
             }
             
@@ -114,22 +117,22 @@ export class PresetLoader {
               // Favorite was not resolved
               stats.failedResolution++;
               failedResolutionNames.push(presetName);
-              debugManager.debug('presets', `Preset ${presetName}: Failed to resolve favorite ${resolvedPreset.uri}`);
+              debugManager.warn('presets', `Preset ${presetName}: Failed to resolve favorite ${resolvedPreset.uri}`);
             } else if (resolvedPreset.uri.startsWith('spotifyUrl:')) {
               // Spotify URL was not resolved
               stats.failedResolution++;
               failedResolutionNames.push(presetName);
-              debugManager.debug('presets', `Preset ${presetName}: Failed to resolve Spotify URL ${resolvedPreset.uri}`);
+              debugManager.warn('presets', `Preset ${presetName}: Failed to resolve Spotify URL ${resolvedPreset.uri}`);
             } else if (resolvedPreset.uri.startsWith('placeholder:')) {
               // Invalid preset (no content)
               stats.invalidFormat++;
               invalidFormatNames.push(presetName);
-              debugManager.debug('presets', `Preset ${presetName}: No playable content`);
+              debugManager.warn('presets', `Preset ${presetName}: No playable content`);
             } else {
               // Valid preset
               stats.validPresets++;
               validPresetNames.push(presetName);
-              debugManager.debug('presets', `Loaded preset: ${presetName} -> ${resolvedPreset.uri.substring(0, 50)}...`);
+              debugManager.trace('presets', `Loaded preset: ${presetName} -> ${resolvedPreset.uri.substring(0, 50)}...`);
             }
             
             newPresets[presetName] = resolvedPreset;
@@ -137,17 +140,25 @@ export class PresetLoader {
           } catch (conversionError) {
             stats.invalidFormat++;
             invalidFormatNames.push(presetName);
-            debugManager.debug('presets', `Invalid preset format ${file}:`, (conversionError as Error).message);
+            debugManager.warn('presets', `Invalid preset format ${file}:`, (conversionError as Error).message);
           }
         } catch (parseError) {
           const presetName = file.replace(/\.json$/i, '');
           stats.parseErrors++;
           parseErrorNames.push(presetName);
-          debugManager.debug('presets', `Failed to parse preset file ${file}:`, (parseError as Error).message);
+          debugManager.warn('presets', `Failed to parse preset file ${file}:`, (parseError as Error).message);
         }
       }
       
       this.presets = newPresets;
+      
+      // Log all loaded presets at trace level
+      if (debugManager.isLevelEnabled('trace')) {
+        const presetDetails = Object.entries(newPresets).map(([name, preset]) => 
+          `${name}: ${preset.uri.substring(0, 50)}...`
+        );
+        debugManager.trace('presets', `All loaded presets:\n${presetDetails.join('\n')}`);
+      }
       
       // Always log comprehensive summary with colors
       logger.info('Preset loading summary:');
@@ -316,7 +327,7 @@ export class PresetLoader {
     // Handle favorite: URIs
     if (preset.uri.startsWith('favorite:')) {
       const favoriteName = preset.uri.substring(9); // Remove 'favorite:' prefix
-      debugManager.debug('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
+      debugManager.trace('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
 
       try {
         // Get any device to query favorites (they should be system-wide)
@@ -352,7 +363,7 @@ export class PresetLoader {
     // Handle spotifyUrl: URIs
     if (preset.uri.startsWith('spotifyUrl:')) {
       const spotifyUrl = preset.uri.substring(11); // Remove 'spotifyUrl:' prefix
-      debugManager.debug('presets', `Resolving Spotify URL for preset ${presetName}: ${spotifyUrl}`);
+      debugManager.trace('presets', `Resolving Spotify URL for preset ${presetName}: ${spotifyUrl}`);
 
       try {
         // Use SpotifyService to parse the URL and generate URI
@@ -363,7 +374,7 @@ export class PresetLoader {
           return preset;
         }
         
-        debugManager.debug('presets', `Resolved Spotify URL to URI: ${sonosUri}`);
+        debugManager.trace('presets', `Resolved Spotify URL to URI: ${sonosUri}`);
         
         return {
           ...preset,

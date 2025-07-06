@@ -577,16 +577,22 @@ export class SpotifyService extends MusicService {
       const queueURI = `x-rincon-queue:${device.id.replace('uuid:', '')}#0`;
       await device.setAVTransportURI(queueURI, '');
 
-      // Add all tracks to queue
-      for (let i = 0; i < tracks.length; i++) {
+      // Add first track and start playing immediately
+      const firstTrack = tracks[0]!;
+      const firstTrackUri = this.generateURI('song', firstTrack);
+      const firstTrackMetadata = this.generateMetadata('song', firstTrack);
+      await device.addURIToQueue(firstTrackUri, firstTrackMetadata, true, 0);
+      
+      // Start playback with just the first track
+      await device.play();
+      
+      // Now add the remaining tracks while the first one is playing
+      for (let i = 1; i < tracks.length; i++) {
         const track = tracks[i]!;
         const trackUri = this.generateURI('song', track);
         const trackMetadata = this.generateMetadata('song', track);
         await device.addURIToQueue(trackUri, trackMetadata, true, 0); // Add to end
       }
-
-      // Start playback
-      await device.play();
 
       return {
         success: true,

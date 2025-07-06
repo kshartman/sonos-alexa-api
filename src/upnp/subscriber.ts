@@ -1,6 +1,7 @@
 import http from 'http';
 import { networkInterfaces } from 'os';
 import { debugManager } from '../utils/debug-manager.js';
+import { EventManager } from '../utils/event-manager.js';
 
 export interface Subscription {
   id: string;
@@ -157,15 +158,33 @@ export class UPnPSubscriber {
             debugManager.info('upnp', `Initial subscription successful for ${subscription.id}, SID: ${newSid}, timeout: ${subscription.timeout}s`);
           }
           resolve();
+        } else if (res.statusCode === 412) {
+          // 412 Precondition Failed - subscription expired, need to resubscribe
+          const error = new Error(`Subscription expired (412): ${res.statusMessage}`);
+          (error as any).code = 'SUBSCRIPTION_EXPIRED';
+          (error as any).statusCode = 412;
+          reject(error);
         } else {
           reject(new Error(`Subscription failed: ${res.statusCode} ${res.statusMessage}`));
         }
       });
 
-      req.on('error', reject);
+      req.on('error', (err: any) => {
+        // ECONNREFUSED means device is offline
+        if (err.code === 'ECONNREFUSED') {
+          const error = new Error(`Device offline: ${err.message}`);
+          (error as any).code = 'DEVICE_OFFLINE';
+          (error as any).originalError = err;
+          reject(error);
+        } else {
+          reject(err);
+        }
+      });
       req.setTimeout(5000, () => {
         req.destroy();
-        reject(new Error('Subscription timeout'));
+        const error = new Error('Subscription timeout');
+        (error as any).code = 'TIMEOUT';
+        reject(error);
       });
       
       req.end();
@@ -208,17 +227,50 @@ export class UPnPSubscriber {
         await this.performSubscribe(subscription, true); // Pass true for renewal
         this.scheduleRenewal(subscription); // Schedule next renewal
         debugManager.info('upnp', `Renewed subscription to ${subscription.id} (SID: ${subscription.sid})`);
-      } catch (error) {
+        
+        // Notify EventManager of successful renewal
+        if (subscription.deviceId) {
+          const eventManager = EventManager.getInstance();
+          eventManager.handleSubscriptionRenewal(subscription.deviceId);
+        }
+      } catch (error: any) {
         debugManager.error('upnp', `Failed to renew subscription to ${subscription.id}:`, error);
-        // Try to resubscribe from scratch
+        
+        // Handle specific error cases
+        if (error.code === 'DEVICE_OFFLINE' || error.code === 'ECONNREFUSED' || error.code === 'TIMEOUT') {
+          // Device is offline - no point trying to resubscribe
+          debugManager.warn('upnp', `Device appears offline for ${subscription.id}`);
+          this.subscriptions.delete(subscription.id);
+          
+          // Notify EventManager that device is offline
+          if (subscription.deviceId) {
+            const eventManager = EventManager.getInstance();
+            eventManager.handleSubscriptionFailure(subscription.deviceId);
+          }
+          return;
+        }
+        
+        // For 412 or other errors, try to resubscribe from scratch
         try {
           subscription.sid = undefined; // Clear SID to force new subscription
           await this.performSubscribe(subscription, false);
           this.scheduleRenewal(subscription);
           debugManager.info('upnp', `Resubscribed to ${subscription.id} after renewal failure`);
-        } catch (resubError) {
+          
+          // Successful resubscribe - update EventManager
+          if (subscription.deviceId) {
+            const eventManager = EventManager.getInstance();
+            eventManager.handleSubscriptionRenewal(subscription.deviceId);
+          }
+        } catch (resubError: any) {
           debugManager.error('upnp', `Failed to resubscribe to ${subscription.id}:`, resubError);
           this.subscriptions.delete(subscription.id);
+          
+          // Notify EventManager that device is likely offline
+          if (subscription.deviceId) {
+            const eventManager = EventManager.getInstance();
+            eventManager.handleSubscriptionFailure(subscription.deviceId);
+          }
         }
       }
     }, renewalTime);

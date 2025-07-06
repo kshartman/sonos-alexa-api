@@ -26,7 +26,7 @@ export class FavoritesManager {
     }
 
     try {
-      debugManager.debug('favorites', `Fetching favorites for device ${device.roomName}`);
+      debugManager.trace('favorites', `Fetching favorites for device ${device.roomName}`);
       
       // Get favorites from Sonos device
       const result = await device.browseRaw('FV:2', 'BrowseDirectChildren', '*', 0, 200);
@@ -55,12 +55,14 @@ export class FavoritesManager {
     );
     
     if (found) {
-      debugManager.debug('favorites', `Found favorite: "${favoriteName}" -> "${found.title}"`);
+      debugManager.trace('favorites', `Found favorite: "${favoriteName}" -> "${found.title}"`);
     } else {
       debugManager.warn('favorites', `Favorite not found: "${favoriteName}"`);
-      // Log available favorites to help debugging
-      const availableFavorites = favorites.map(f => f.title).sort();
-      debugManager.debug('favorites', `Available favorites: ${availableFavorites.join(', ')}`);
+      if (debugManager.isLevelEnabled('trace')) {
+        // Log available favorites to help debugging
+        const availableFavorites = favorites.map(f => f.title).sort();
+        debugManager.trace('favorites', `Available favorites: ${availableFavorites.join(', ')}`);
+      }
     }
     
     return found || null;

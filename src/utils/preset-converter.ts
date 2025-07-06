@@ -85,7 +85,7 @@ export function convertLegacyPreset(legacy: LegacyPreset, presetName: string): P
     }
   };
 
-  debugManager.debug('presets', `Converted legacy preset ${presetName}:`, {
+  debugManager.trace('presets', `Converted legacy preset ${presetName}:`, {
     originalPlayers: legacy.players.length,
     coordinator: coordinator.roomName,
     hasPlayMode: !!legacy.playMode,

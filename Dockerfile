@@ -49,7 +49,8 @@ ENV BUILD_SOURCE_DATE=${BUILD_SOURCE_DATE}
 
 # Copy package files and install production dependencies
 COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
+# Install production dependencies, explicitly excluding optional dependencies
+RUN npm ci --only=production --no-optional && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist

@@ -8,7 +8,8 @@ import { debugManager } from './utils/debug-manager.js';
 import { SonosDevice } from './sonos-device.js';
 import { UPnPSubscriber } from './upnp/subscriber.js';
 import { TopologyManager } from './topology-manager.js';
-import type { DeviceInfo, Zone, SonosState, SonosTrack } from './types/sonos.js';
+import { EventManager } from './utils/event-manager.js';
+import type { DeviceInfo, Zone, SonosState } from './types/sonos.js';
 import type { ZoneGroup } from './topology-manager.js';
 
 const SSDP_ADDRESS = '239.255.255.250';
@@ -18,10 +19,8 @@ const SONOS_URN = 'urn:schemas-upnp-org:device:ZonePlayer:1';
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface SonosDiscovery {
   on(event: 'device-found', listener: (device: SonosDevice) => void): this;
-  on(event: 'device-state-change', listener: (device: SonosDevice, state: SonosState, previousState?: Partial<SonosState>) => void): this;
   on(event: 'topology-change', listener: (zones: ZoneGroup[]) => void): this;
   on(event: 'content-update', listener: (deviceId: string, containerUpdateIDs: string) => void): this;
-  on(event: 'track-change', listener: (event: { deviceId: string; roomName: string; previousTrack: SonosTrack | null; currentTrack: SonosTrack | null; timestamp: number }) => void): this;
 }
 
 /**
@@ -57,6 +56,17 @@ export class SonosDiscovery extends EventEmitter {
     // Forward topology events
     this.topologyManager.on('topology-change', (event) => {
       this.emit('topology-change', event.zones);
+      // Update EventManager's group cache when topology changes
+      const eventManager = EventManager.getInstance();
+      eventManager.updateGroupMembersCache();
+    });
+    
+    // Listen for devices that need resubscription
+    const eventManager = EventManager.getInstance();
+    eventManager.setDiscovery(this);
+    eventManager.on('devices-need-resubscribe', (deviceIds: string[]) => {
+      logger.debug(`Discovery: ${deviceIds.length} devices need resubscription`);
+      this.handleStaleDevices(deviceIds);
     });
   }
 
@@ -108,8 +118,10 @@ export class SonosDiscovery extends EventEmitter {
     // Stop UPnP subscriber
     this.subscriber?.stop();
     
-    // Unsubscribe from all devices
+    // Unregister all devices from EventManager
+    const eventManager = EventManager.getInstance();
     for (const device of this.devices.values()) {
+      eventManager.unregisterDevice(device.id);
       device.unsubscribe();
     }
     
@@ -177,10 +189,20 @@ export class SonosDiscovery extends EventEmitter {
           const updatedDevice = new SonosDevice(deviceInfo, location);
           // Copy over the existing state
           updatedDevice.state = device.state;
+          
+          // CRITICAL: Copy all event listeners from the old device to the new one
+          const eventNames = device.eventNames();
+          for (const eventName of eventNames) {
+            const listeners = device.listeners(eventName);
+            for (const listener of listeners) {
+              updatedDevice.on(eventName as string, listener as any);
+            }
+          }
+          
           // Replace the device in our map
           this.devices.set(deviceId, updatedDevice);
           device = updatedDevice;
-          debugManager.info('discovery', `Updated device info for ${device.roomName}: model=${deviceInfo.device.modelName}`);
+          debugManager.info('discovery', `Updated device info for ${device.roomName}: model=${deviceInfo.device.modelName}, preserved ${eventNames.length} event types`);
         }
       }
       
@@ -206,10 +228,9 @@ export class SonosDiscovery extends EventEmitter {
       
       this.emit('device-found', device);
       
-      // Start monitoring device
-      device.on('state-change', (state: SonosState, previousState?: Partial<SonosState>) => {
-        this.emit('device-state-change', device, state, previousState);
-      });
+      // Register device with EventManager for state tracking
+      const eventManager = EventManager.getInstance();
+      eventManager.registerDevice(device);
       
       // Subscribe to all UPnP services for this device
       try {
@@ -349,6 +370,35 @@ export class SonosDiscovery extends EventEmitter {
     }
     
     return undefined;
+  }
+
+  // Handle devices with stale NOTIFY subscriptions
+  private async handleStaleDevices(deviceIds: string[]): Promise<void> {
+    for (const deviceId of deviceIds) {
+      const device = this.getDeviceById(deviceId);
+      if (!device) {
+        logger.debug(`Discovery: Device ${deviceId} not found for resubscription`);
+        continue;
+      }
+      
+      try {
+        logger.debug(`Discovery: Attempting to resubscribe ${device.roomName} (${deviceId})`);
+        // Unsubscribe and resubscribe to refresh subscriptions
+        await device.unsubscribe();
+        await device.subscribe();
+        
+        // Notify EventManager that subscription was refreshed
+        const eventManager = EventManager.getInstance();
+        eventManager.handleSubscriptionRenewal(deviceId);
+        
+        logger.info(`Discovery: Successfully resubscribed ${device.roomName}`);
+      } catch (error) {
+        logger.error(`Discovery: Failed to resubscribe ${device.roomName}:`, error);
+        // Device might be offline
+        const eventManager = EventManager.getInstance();
+        eventManager.handleDeviceOffline(deviceId);
+      }
+    }
   }
 
   // Topology-related methods
@@ -493,10 +543,9 @@ export class SonosDiscovery extends EventEmitter {
     try {
       logger.debug(`Initializing stub device ${device.roomName} with device description and event subscriptions`);
       
-      // Start monitoring device - same as SSDP-discovered devices
-      device.on('state-change', (state: SonosState, previousState?: Partial<SonosState>) => {
-        this.emit('device-state-change', device, state, previousState);
-      });
+      // Register device with EventManager for state tracking
+      const eventManager = EventManager.getInstance();
+      eventManager.registerDevice(device);
       
       // Subscribe to all UPnP services for this device
       await device.subscribe();
@@ -526,6 +575,9 @@ export class SonosDiscovery extends EventEmitter {
       
       const property = propertyset['e:property'];
       
+      // Debug log the properties we receive
+      debugManager.debug('upnp', `${deviceName}/${service} properties:`, Object.keys(property));
+      
       // Handle ZoneGroupTopology events
       if (service.includes('ZoneGroupTopology')) {
         // Property might be an array if there are multiple properties
@@ -546,6 +598,7 @@ export class SonosDiscovery extends EventEmitter {
       
       // Handle LastChange events (AVTransport, RenderingControl, etc.)
       if (property.LastChange && device) {
+        debugManager.info('upnp', `${deviceName}: Processing LastChange event for ${service}`);
         // Parse LastChange XML (it's embedded XML within the property)
         const lastChange = this.xmlParser.parse(property.LastChange);
         
@@ -571,29 +624,19 @@ export class SonosDiscovery extends EventEmitter {
           
           if (instance.CurrentTrackURI || instance.CurrentTrackMetaData) {
             // Track metadata changed
-            const previousTrack = device.state.currentTrack;
-            
             // Update full state to get new track info
             await device.updateState();
             
-            // Emit track change event
-            if (device.state.currentTrack !== previousTrack) {
-              this.emit('track-change', {
-                deviceId: device.id,
-                roomName: device.roomName,
-                previousTrack,
-                currentTrack: device.state.currentTrack,
-                timestamp: Date.now()
-              });
-            }
+            // Track change will be handled by EventManager via state-change event
             
             stateChanged = true;
           }
           
           if (stateChanged) {
-            debugManager.info('upnp', `${deviceName}: AVTransport state changed, emitting device-state-change event`);
+            debugManager.info('upnp', `${deviceName}: AVTransport state changed`);
+            logger.trace(`Discovery: Emitting state-change for ${deviceName} (${device.id})`);
+            logger.trace(`Discovery: Device has ${device.listenerCount('state-change')} state-change listeners`);
             device.emit('state-change', device.state, previousState);
-            this.emit('device-state-change', device, device.state, previousState);
           }
         }
         
@@ -639,9 +682,8 @@ export class SonosDiscovery extends EventEmitter {
           }
           
           if (stateChanged) {
-            debugManager.info('upnp', `${deviceName}: RenderingControl state changed, emitting device-state-change event`);
+            debugManager.info('upnp', `${deviceName}: RenderingControl state changed`);
             device.emit('state-change', device.state, previousState);
-            this.emit('device-state-change', device, device.state, previousState);
           }
         }
       }
@@ -680,5 +722,13 @@ export class SonosDiscovery extends EventEmitter {
       throw new Error('UPnP subscriber not initialized');
     }
     await this.subscriber.subscribe(baseUrl, eventUrl, deviceId);
+  }
+  
+  /**
+   * Get the current topology
+   */
+  getTopology(): { zones: ZoneGroup[] } | null {
+    const zones = this.topologyManager.getZones();
+    return zones.length > 0 ? { zones } : null;
   }
 }

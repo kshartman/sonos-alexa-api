@@ -235,9 +235,10 @@ GET /{room}/musicsearch/{service}/{type}/{query}
 
 ### Default room search
 ```
-GET /song/{query}               # Search songs in library
-GET /album/{query}              # Search albums in library
-GET /station/{query}            # Search stations (Apple Music)
+GET /song/{query}               # Search songs (uses default service)
+GET /album/{query}              # Search albums (uses default service)
+GET /artist/{query}             # Search artists (uses default service)
+GET /station/{query}            # Search stations (uses default service)
 ```
 
 Parameters:
@@ -303,6 +304,7 @@ GET /{room}/queue               # Get queue (default 500 items)
 GET /{room}/queue/{limit}       # Get queue with limit
 GET /{room}/queue/{limit}/{offset}  # Get queue with pagination
 GET /{room}/queue/detailed      # Get detailed queue info
+POST /{room}/queue              # Add items to queue
 GET /{room}/clearqueue          # Clear the queue
 ```
 
@@ -311,8 +313,10 @@ GET /{room}/clearqueue          # Clear the queue
 ```
 GET /{room}/say/{text}          # Announce in room
 GET /{room}/say/{text}/{volume} # Announce with specific volume
-GET /{room}/sayall/{text}       # Announce in all rooms
-GET /{room}/sayall/{text}/{volume}  # Announce in all with volume
+GET /{room}/sayall/{text}       # Announce in room's group
+GET /{room}/sayall/{text}/{volume}  # Announce in room's group with volume
+GET /sayall/{text}              # Announce in all rooms
+GET /sayall/{text}/{volume}     # Announce in all rooms with volume
 GET /{room}/saypreset/{preset}/{text}  # Announce to preset rooms
 ```
 
@@ -326,24 +330,46 @@ GET /pauseall                   # Pause all rooms
 GET /resumeall                  # Resume all rooms
 ```
 
-## Default Room
+## Default Settings
 
 ```
-GET /default                    # Get default settings
+GET /default                    # Get current default room and service
 GET /default/room/{room}        # Set default room
+GET /default/service/{service}  # Set default music service
+```
+
+The default room is used for room-less endpoints like `/play`, `/pause`, `/volume/{level}`, etc.
+The default service is used for room-less music search endpoints like `/song/{query}`, `/album/{query}`, etc.
+
+### Room-less Playback Endpoints (use default room)
+```
+GET /play                       # Play in default room
+GET /pause                      # Pause in default room
+GET /volume/{level}             # Set volume in default room
+GET /preset/{preset}            # Play preset in default room
+GET /preset/{preset}/room/{room}  # Play preset in specific room
 ```
 
 ## Debug & Monitoring
 
 ```
 GET /debug                      # Get debug status
-GET /debug/level/{level}        # Set debug level
+GET /debug/level/{level}        # Set debug level (error, warn, info, debug, trace)
 GET /debug/category/{category}/{true|false}  # Toggle category
 GET /debug/enable-all           # Enable all categories
 GET /debug/disable-all          # Disable all categories
 GET /debug/startup              # Get startup info (version, config, presets)
 GET /debug/startup/config       # Get startup configuration with version
 GET /debug/subscriptions        # Get UPnP subscription status
+GET /debug/device-health        # Get device event health monitoring
+GET /loglevel/{level}           # Set log level (error, warn, info, debug, trace)
+```
+
+### Spotify Debug Endpoints
+```
+GET /debug/spotify/parse/{input}    # Parse Spotify URL/URI
+GET /debug/spotify/browse/{room}/{sid}  # Browse Spotify service
+GET /debug/spotify/account/{room}   # Get Spotify account info
 ```
 
 ## Server-Sent Events

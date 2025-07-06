@@ -195,7 +195,7 @@ export class SonosDiscovery extends EventEmitter {
           for (const eventName of eventNames) {
             const listeners = device.listeners(eventName);
             for (const listener of listeners) {
-              updatedDevice.on(eventName as string, listener as any);
+              updatedDevice.on(eventName as string, listener);
             }
           }
           

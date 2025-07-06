@@ -40,9 +40,28 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - **Better Error Handling**: Clear messages when Spotify isn't configured
 
 ### Music Library Enhancements
+- **Fuzzy Search Support**: Intelligent fuzzy matching for more flexible searches
+  - Automatically falls back to fuzzy matching when exact matches aren't found
+  - Multi-field search across artist, album, and title
+  - Smart query handling for better search results
+- **Enhanced Statistics**: New getSummary() and getDetailedData() methods
+  - Track library statistics (top artists, albums, track counts)
+  - Optimized data export for analysis
 - **Random Queue Limit**: Library artist searches now queue random tracks up to configured limit
-- **Default Limit**: Set to 100 tracks, configurable via `LIBRARY_RANDOM_QUEUE_LIMIT`
-- **Consistent Behavior**: Artist search behavior now consistent across all services
+  - Default limit: 100 tracks, configurable via `LIBRARY_RANDOM_QUEUE_LIMIT`
+  - Consistent behavior across all services
+
+### API Health and Monitoring
+- **Device Health Endpoint**: `/debug/device-health` for monitoring system health
+  - Track device event subscription status
+  - Detect stale NOTIFY events (90+ seconds without updates)
+  - Monitor event timing and listener health
+- **Enhanced Diagnostics**: Better visibility into system operation
+
+### New API Endpoints
+- **Artist Search**: `/{room}/musicsearch/{service}/artist/{name}` - Search for artists by name
+- **Default Room Artist**: `/artist/{name}` - Artist search using default room
+- **Queue Management**: `POST /{room}/queue` - Add items to the playback queue
 
 ## Technical Improvements
 
@@ -73,6 +92,22 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - Simplifies configuration and runtime behavior
 - **Environment Variable Consistency**: Process environment updated when log level changes dynamically
 
+### Infrastructure Improvements
+- **EventManager Enhancements**:
+  - Group-aware event handling for stereo pairs and grouped speakers
+  - Device health monitoring with configurable timeouts
+  - Improved memory management and listener cleanup
+  - Fixed max listeners warnings
+- **Discovery Improvements**:
+  - Better handling of stereo pairs and grouped speakers
+  - Dynamic EventManager cache updates on topology changes
+  - New `getGroupMembers()` method for group handling
+- **Test Infrastructure**:
+  - Fixed track-change events for stereo pairs
+  - File-based triggers for TTY-independent interactive mode
+  - Comprehensive test reliability improvements
+  - Support for new test environment variables
+
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration
 - **New PRESETS.md**: Detailed preset configuration documentation
@@ -83,6 +118,10 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed Spotify favorites with old service ID (3079) not playing correctly
 - Resolved issue with token extraction from r:resMD metadata field
 - Fixed mutual exclusivity validation for preset content sources
+- Fixed track-change events not being received for stereo pairs
+- Fixed EventManager max listeners warnings
+- Fixed volume endpoint to use GET instead of POST
+- Enhanced error handling for SOAP operations with proper retry logic
 
 ## Breaking Changes
 - **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies
@@ -117,6 +156,21 @@ This version requires a Sonos S2 system. S1 systems are no longer supported.
 - Support for more Spotify content types (podcasts, audiobooks)
 - Enhanced metadata retrieval for playing content
 - User-specific playlists and recommendations (requires user auth scope)
+
+## Environment Variables
+
+### New Test Configuration Variables
+- `TEST_VOLUME_DEFAULT`: Initial volume level (0-100) for test setup
+- `TEST_ROOM`: Specific room to use for integration tests
+- `TEST_SERVICE`: Default music service for test content
+- `TEST_FAVORITE`: Specific favorite to use in tests
+- `TEST_PLAYLIST`: Specific playlist to use in tests
+- `TEST_PANDORA_STATION`: Pandora station name for tests
+- `TEST_SONG_QUERIES`: JSON array of song queries for test discovery
+- `TEST_ALBUM_QUERIES`: JSON array of album queries for test discovery
+
+### Additional Configuration
+- `LIBRARY_RANDOM_QUEUE_LIMIT`: Maximum tracks to queue for library artist searches (default: 100)
 
 ## Acknowledgments
 Thanks to all contributors and users who provided feedback for this release.

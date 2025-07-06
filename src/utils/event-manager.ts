@@ -74,7 +74,8 @@ export class EventManager extends EventEmitter {
   
   // Group/stereo pair tracking for event handling
   private groupMembersCache: Map<string, string[]> = new Map(); // device ID -> all IDs in group
-  private discovery?: any; // Reference to discovery for topology info
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private discovery?: any; // Reference to discovery for topology info (circular dep prevents proper typing)
   
   private constructor() {
     super();
@@ -134,7 +135,7 @@ export class EventManager extends EventEmitter {
       }
     }
     
-    logger.trace(`EventManager: waitForState - no group members in target state, setting up listener`);
+    logger.trace('EventManager: waitForState - no group members in target state, setting up listener');
     
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
@@ -167,7 +168,7 @@ export class EventManager extends EventEmitter {
         }
       };
       
-      logger.trace(`EventManager: waitForState - registered handler, waiting for state-change events`);
+      logger.trace('EventManager: waitForState - registered handler, waiting for state-change events');
       this.on('state-change', stateHandler);
     });
   }
@@ -365,7 +366,7 @@ export class EventManager extends EventEmitter {
         }
       };
       
-      logger.trace(`EventManager: waitForTrackChange - registered handler, waiting for track-change events`);
+      logger.trace('EventManager: waitForTrackChange - registered handler, waiting for track-change events');
       this.on('track-change', trackHandler);
     });
   }
@@ -440,7 +441,8 @@ export class EventManager extends EventEmitter {
   }
   
   // Register a device with the EventManager
-  registerDevice(device: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  registerDevice(device: any): void { // device type would create circular dependency
     // Track that we want to listen to this device
     this.registeredDevices.add(device.id);
     
@@ -542,7 +544,8 @@ export class EventManager extends EventEmitter {
   }
   
   // Handle device coming back online
-  handleDeviceOnline(device: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleDeviceOnline(device: any): void { // device type would create circular dependency
     logger.debug(`EventManager: Device ${device.roomName} (${device.id}) came online`);
     // If we should be listening to this device, re-register
     if (this.registeredDevices.has(device.id)) {
@@ -643,7 +646,8 @@ export class EventManager extends EventEmitter {
   }
   
   // Set discovery reference for group tracking
-  setDiscovery(discovery: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setDiscovery(discovery: any): void { // discovery type would create circular dependency
     this.discovery = discovery;
     // Update group cache when discovery is set
     this.updateGroupMembersCache();
@@ -661,7 +665,8 @@ export class EventManager extends EventEmitter {
     
     // Build cache from topology
     for (const zone of topology.zones) {
-      const memberIds = zone.members.map((m: any) => m.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const memberIds = zone.members.map((m: any) => m.id); // member type would create circular dependency
       
       // For each member in the zone, store all member IDs
       for (const member of zone.members) {

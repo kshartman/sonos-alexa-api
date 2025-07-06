@@ -118,7 +118,22 @@ discovery.on('topology-change', (_zones) => {
 });
 
 // Forward track change events
-eventManagerInstance.on('track-change', (trackEvent: any) => {
+interface TrackChangeEvent {
+  deviceId: string;
+  currentTrack?: {
+    title?: string;
+    artist?: string;
+    album?: string;
+    uri?: string;
+  };
+  previousTrack?: {
+    title?: string;
+    artist?: string;
+    album?: string;
+    uri?: string;
+  };
+}
+eventManagerInstance.on('track-change', (trackEvent: TrackChangeEvent) => {
   const event = {
     type: 'track-change',
     data: {
@@ -139,7 +154,12 @@ eventManagerInstance.on('track-change', (trackEvent: any) => {
 });
 
 // Forward state change events
-eventManagerInstance.on('state-change', (stateEvent: any) => {
+interface StateChangeEvent {
+  deviceId: string;
+  previousState: string;
+  currentState: string;
+}
+eventManagerInstance.on('state-change', (stateEvent: StateChangeEvent) => {
   const event = {
     type: 'device-state-change',
     data: {

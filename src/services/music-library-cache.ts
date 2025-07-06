@@ -325,7 +325,7 @@ export class MusicLibraryCache {
           haveAlbumMatch = haveExactAlbumMatch;
           haveTitleMatch = haveExactTitleMatch;
         } else {
-          logger.trace(`No exact matches, doing fuzzy matching`);
+          logger.trace('No exact matches, doing fuzzy matching');
           // No exact matches, do fuzzy matching
           for (const item of this.tracks.values()) {
             const match: MatchResult = {

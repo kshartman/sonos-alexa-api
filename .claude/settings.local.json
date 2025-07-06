@@ -7,7 +7,11 @@
       "Bash(npm run lint)",
       "Bash(pkill:*)",
       "Bash(curl:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(for file in test/integration/04-content-*.ts)",
+      "Bash(do echo \"=== $file ===\")",
+      "Bash(done)",
+      "Bash(for file in test/integration/{06,07,08,09}*.ts test/integration/{01,05}*.ts test/integration/adaptive-tests.ts)"
     ],
     "deny": []
   }

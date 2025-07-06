@@ -1622,7 +1622,16 @@ export class ApiRouter {
     const health = eventManager.getDeviceHealth();
     
     // Convert Map to object for JSON serialization
-    const healthData: Record<string, any> = {};
+    interface DeviceHealthStatus {
+      registered: boolean;
+      hasListener: boolean;
+      lastEventMs: number | null;
+      healthy: boolean;
+      staleNotify: boolean;
+      roomName?: string;
+      modelName?: string;
+    }
+    const healthData: Record<string, DeviceHealthStatus> = {};
     for (const [deviceId, status] of health) {
       // DeviceId might have uuid: prefix or not
       const device = this.discovery.getDeviceById(deviceId) || 
@@ -1935,9 +1944,9 @@ export class ApiRouter {
               album: r.album,
               uri: r.uri,
               id: r.id,
-              type: 'track'
+              type: 'track' as const
             }))
-          } as any
+          }
         };
       }
       
@@ -2011,9 +2020,9 @@ export class ApiRouter {
               album: r.album,
               uri: r.uri,
               id: r.id,
-              type: 'track'
+              type: 'track' as const
             }))
-          } as any
+          }
         };
       }
       
@@ -2090,9 +2099,9 @@ export class ApiRouter {
               album: r.album,
               uri: r.uri,
               id: r.id,
-              type: 'track'
+              type: 'track' as const
             }))
-          } as any
+          }
         };
       }
       
@@ -2448,7 +2457,7 @@ export class ApiRouter {
     if (typeof body === 'string') {
       try {
         parsedBody = JSON.parse(body);
-      } catch (e) {
+      } catch (_e) {
         throw { status: 400, message: 'Invalid JSON in request body' };
       }
     } else if (typeof body === 'object') {
@@ -2937,9 +2946,9 @@ export class ApiRouter {
                   album: r.album,
                   uri: r.uri,
                   id: r.id,
-                  type: 'track'
+                  type: 'track' as const
                 }))
-              } as any
+              }
             };
           }
           
@@ -3024,9 +3033,9 @@ export class ApiRouter {
                 album: r.album,
                 uri: r.uri,
                 id: r.id,
-                type: 'track'
+                type: 'track' as const
               }))
-            } as any
+            }
           };
         }
         
@@ -3102,9 +3111,9 @@ export class ApiRouter {
               album: r.album,
               uri: musicService.generateURI(searchType as 'album' | 'song' | 'station', r),
               id: r.id,
-              type: type
+              type: type as 'track'
             }))
-          } as any
+          }
         };
       }
 
@@ -3224,7 +3233,7 @@ export class ApiRouter {
   async debugSubscriptions(): Promise<ApiResponse<any>> { // ANY IS CORRECT: debug endpoint returns various subscription info
     const devices = this.discovery.getAllDevices();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const subscriber = (this.discovery as any).subscriber; // ANY IS CORRECT: subscriber property not in discovery type but exists at runtime
+    const subscriber = (this.discovery as any).subscriber; // subscriber property not in discovery type but exists at runtime
     
     const result = {
       subscriberStatus: subscriber ? 'active' : 'not initialized',

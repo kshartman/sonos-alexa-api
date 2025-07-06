@@ -3,6 +3,12 @@ import { networkInterfaces } from 'os';
 import { debugManager } from '../utils/debug-manager.js';
 import { EventManager } from '../utils/event-manager.js';
 
+interface UPnPError extends Error {
+  code?: string;
+  statusCode?: number;
+  originalError?: Error;
+}
+
 export interface Subscription {
   id: string;
   sid?: string;
@@ -160,21 +166,21 @@ export class UPnPSubscriber {
           resolve();
         } else if (res.statusCode === 412) {
           // 412 Precondition Failed - subscription expired, need to resubscribe
-          const error = new Error(`Subscription expired (412): ${res.statusMessage}`);
-          (error as any).code = 'SUBSCRIPTION_EXPIRED';
-          (error as any).statusCode = 412;
+          const error = new Error(`Subscription expired (412): ${res.statusMessage}`) as UPnPError;
+          error.code = 'SUBSCRIPTION_EXPIRED';
+          error.statusCode = 412;
           reject(error);
         } else {
           reject(new Error(`Subscription failed: ${res.statusCode} ${res.statusMessage}`));
         }
       });
 
-      req.on('error', (err: any) => {
+      req.on('error', (err: NodeJS.ErrnoException) => {
         // ECONNREFUSED means device is offline
         if (err.code === 'ECONNREFUSED') {
-          const error = new Error(`Device offline: ${err.message}`);
-          (error as any).code = 'DEVICE_OFFLINE';
-          (error as any).originalError = err;
+          const error = new Error(`Device offline: ${err.message}`) as UPnPError;
+          error.code = 'DEVICE_OFFLINE';
+          error.originalError = err;
           reject(error);
         } else {
           reject(err);
@@ -182,8 +188,8 @@ export class UPnPSubscriber {
       });
       req.setTimeout(5000, () => {
         req.destroy();
-        const error = new Error('Subscription timeout');
-        (error as any).code = 'TIMEOUT';
+        const error = new Error('Subscription timeout') as UPnPError;
+        error.code = 'TIMEOUT';
         reject(error);
       });
       
@@ -233,11 +239,12 @@ export class UPnPSubscriber {
           const eventManager = EventManager.getInstance();
           eventManager.handleSubscriptionRenewal(subscription.deviceId);
         }
-      } catch (error: any) {
+      } catch (error) {
         debugManager.error('upnp', `Failed to renew subscription to ${subscription.id}:`, error);
         
         // Handle specific error cases
-        if (error.code === 'DEVICE_OFFLINE' || error.code === 'ECONNREFUSED' || error.code === 'TIMEOUT') {
+        const err = error as UPnPError;
+        if (err.code === 'DEVICE_OFFLINE' || err.code === 'ECONNREFUSED' || err.code === 'TIMEOUT') {
           // Device is offline - no point trying to resubscribe
           debugManager.warn('upnp', `Device appears offline for ${subscription.id}`);
           this.subscriptions.delete(subscription.id);
@@ -262,7 +269,7 @@ export class UPnPSubscriber {
             const eventManager = EventManager.getInstance();
             eventManager.handleSubscriptionRenewal(subscription.deviceId);
           }
-        } catch (resubError: any) {
+        } catch (resubError) {
           debugManager.error('upnp', `Failed to resubscribe to ${subscription.id}:`, resubError);
           this.subscriptions.delete(subscription.id);
           

@@ -2252,6 +2252,11 @@ export class ApiRouter {
         throw new Error(`Failed to find complete Pandora station information for '${decodedName}'`);
       }
       
+      // Get session number dynamically
+      const { PandoraSessionHelper } = await import('./services/pandora-session.js');
+      const sessionNumber = await PandoraSessionHelper.getSessionNumber(coordinator);
+      logger.debug(`Using Pandora session number: ${sessionNumber}`);
+      
       // Extract raw station ID from URI if needed
       let rawStationId = stationUri;
       const stationMatch = stationUri.match(/ST%3a([^?]+)/);
@@ -2259,16 +2264,20 @@ export class ApiRouter {
         rawStationId = decodeURIComponent(stationMatch[1]!);
       }
       
-      // Generate metadata with proper service type for Pandora (SID 236)
+      // Update the URI with the correct session number and flags
+      const encodedStationId = encodeURIComponent(rawStationId);
+      const updatedUri = `x-sonosapi-radio:ST%3a${encodedStationId}?sid=236&flags=0&sn=${sessionNumber}`;
+      
+      // Generate metadata to match Sonos app format
       const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
         xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
         xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"
         xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-        <item id="100c206cpndrradio-http://www.pandora.com/xml/images/icon_pandora.jpgST:${rawStationId}" parentID="pndrradio:" restricted="true">
+        <item id="000c0000ST%3a${encodedStationId}" parentID="-1" restricted="true">
           <dc:title>${stationTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
           <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
           <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">
-            SA_RINCON236_
+            SA_RINCON60423_X_#Svc60423-b7ca2819-Token
           </desc>
         </item>
       </DIDL-Lite>`;
@@ -2285,13 +2294,13 @@ export class ApiRouter {
       if (isCurrentlyPlayingPandora || isPlayingAnything) {
         logger.debug('Stopping playback to ensure clean Pandora session');
         await coordinator.stop();
-        // Wait for Pandora to release the session
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait for Pandora to release the session (increased from 500ms to 1s)
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
       // Set the new Pandora station URI with fresh metadata
-      logger.debug(`Setting Pandora URI: ${stationUri}`);
-      await coordinator.setAVTransportURI(stationUri, metadata);
+      logger.debug(`Setting Pandora URI: ${updatedUri}`);
+      await coordinator.setAVTransportURI(updatedUri, metadata);
       
       // Wait for transport to be ready
       await new Promise(resolve => setTimeout(resolve, 500));

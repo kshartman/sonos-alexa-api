@@ -91,45 +91,72 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
   }
 }
 
+// Track stations that have been selected across test runs
+const usedStations = new Set<string>();
+
 /**
  * Get a Pandora station name for testing
  * @param room - The room to use for API calls
- * @param n - Which test station to get (1, 2, or 3). Defaults to 1.
- * @returns A station name from TEST_PANDORA_STATIONS env var or from API
+ * @param n - Which test station to get (1-5). Throws if n > 5.
+ * @returns A unique station name from TEST_PANDORA_STATIONS env var or from API
  */
 export async function getPandoraTestStation(room: string, n: number = 1): Promise<string> {
+  // Validate index
+  if (n < 1 || n > 5) {
+    throw new Error(`Station index ${n} out of bounds. Must be between 1 and 5.`);
+  }
+  
   // Default fallback stations
-  const defaultStations = ['Thumbprint Radio', 'QuickMix', 'The Beatles Radio'];
+  const defaultStations = ['Thumbprint Radio', 'QuickMix', 'The Beatles Radio', 'Today\'s Hits Radio', 'Classic Rock Radio'];
+  
+  // Build a list of available stations, starting with env var stations
+  let availableStations: string[] = [];
   
   // Check if TEST_PANDORA_STATIONS is configured
   if (process.env.TEST_PANDORA_STATIONS) {
     const configuredStations = process.env.TEST_PANDORA_STATIONS.split(';').map(s => s.trim()).filter(s => s);
     
-    // Get the requested station (n-1 for 0-based index)
-    const index = n - 1;
-    if (index >= 0 && index < configuredStations.length) {
-      return configuredStations[index];
-    }
+    // De-duplicate and add to available stations
+    const uniqueConfigured = [...new Set(configuredStations)];
+    availableStations.push(...uniqueConfigured);
     
-    // If n is out of bounds but we have some stations, use modulo to wrap around
-    if (configuredStations.length > 0) {
-      return configuredStations[index % configuredStations.length];
+    // If we have enough unique stations from env var, use them
+    if (availableStations.length >= n) {
+      const station = availableStations[n - 1];
+      usedStations.add(station);
+      testLog.info(`   (from TEST_PANDORA_STATIONS env)`);
+      return station;
     }
   }
   
-  // Try to get stations from the API
+  // If we need more stations, try to get them from the API
   try {
     const stationsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/pandora/stations`);
     if (stationsResponse.ok) {
-      const stations = await stationsResponse.json();
-      if (Array.isArray(stations) && stations.length > 0) {
-        // Get the requested station
-        const index = n - 1;
-        if (index >= 0 && index < stations.length) {
-          return stations[index];
+      const allStations = await stationsResponse.json();
+      if (Array.isArray(allStations) && allStations.length > 0) {
+        // Filter out QuickMix and Thumbprint Radio as they behave differently
+        const userStations = allStations.filter(s => 
+          s !== 'QuickMix' && 
+          s !== 'Thumbprint Radio' &&
+          !s.includes('Thumbprint') &&
+          !s.includes('QuickMix')
+        );
+        
+        // Add API stations that aren't already in our list (avoid duplicates)
+        for (const station of userStations) {
+          if (!availableStations.includes(station)) {
+            availableStations.push(station);
+          }
         }
-        // Wrap around if needed
-        return stations[index % stations.length];
+        
+        // Now we have all unique stations from env + API, pick the nth one
+        if (availableStations.length >= n) {
+          const station = availableStations[n - 1];
+          usedStations.add(station);
+          testLog.info(`   (from ${availableStations.length <= (process.env.TEST_PANDORA_STATIONS?.split(';').length || 0) ? 'TEST_PANDORA_STATIONS env' : 'Pandora API'})`);
+          return station;
+        }
       }
     }
   } catch (error) {
@@ -139,7 +166,11 @@ export async function getPandoraTestStation(room: string, n: number = 1): Promis
   // Fallback to default stations
   const index = n - 1;
   if (index >= 0 && index < defaultStations.length) {
-    return defaultStations[index];
+    const station = defaultStations[index];
+    usedStations.add(station);
+    return station;
   }
-  return defaultStations[0];
+  
+  // Should never reach here due to validation
+  throw new Error(`Could not find station for index ${n}`);
 }

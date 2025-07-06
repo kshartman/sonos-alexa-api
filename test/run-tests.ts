@@ -54,6 +54,13 @@ const apiUrl = process.env.TEST_API_URL || process.env.API_BASE_URL || 'http://l
 const isRemoteApi = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1');
 const shouldAutoStart = !noServer && !isRemoteApi && !mockOnly;
 
+// Generate log filename early so we can show it in configuration
+let logFilename: string | undefined;
+if (enableLogging) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+  logFilename = `test-run-${timestamp}.log`;
+}
+
 console.log(`📋 Configuration:`);
 console.log(`   Mode: ${testMode}`);
 console.log(`   Mock only: ${mockOnly}`);
@@ -68,8 +75,8 @@ console.log(`   Concurrency: Sequential (1 test file at a time)`);
 if (noTimeout) {
   console.log(`   Timeouts: Disabled`);
 }
-if (enableLogging) {
-  console.log(`   Logging: Enabled (logs/test-run.log)`);
+if (enableLogging && logFilename) {
+  console.log(`   Logging: Enabled (logs/${logFilename})`);
 }
 if (enableInteractive) {
   console.log(`   Interactive: Enabled (will pause for user input, timeouts disabled)`);
@@ -153,9 +160,8 @@ async function runTests() {
     };
     
     // Generate log file path if logging is enabled
-    if (enableLogging) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      testEnv.TEST_LOG_PATH = join(__dirname, '..', 'logs', `test-run-${timestamp}.log`);
+    if (enableLogging && logFilename) {
+      testEnv.TEST_LOG_PATH = join(__dirname, '..', 'logs', logFilename);
       console.log(`📝 Test output will be logged to: ${testEnv.TEST_LOG_PATH}\n`);
     }
     

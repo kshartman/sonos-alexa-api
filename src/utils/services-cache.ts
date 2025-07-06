@@ -234,10 +234,16 @@ export class ServicesCache {
     const body = envelope?.['s:Body'] || envelope?.['SOAP-ENV:Body'];
     const response = body?.['u:ListAvailableServicesResponse'];
     const serviceListXml = response?.AvailableServiceDescriptorList;
+    const sessionIdList = response?.AvailableServiceTypeList;
     
     if (!serviceListXml) {
       logger.debug('No AvailableServiceDescriptorList found in SOAP response');
       return {};
+    }
+    
+    // Log session ID list if available (for debugging)
+    if (sessionIdList) {
+      logger.debug('AvailableServiceTypeList:', sessionIdList);
     }
     
     // The service list is HTML-encoded XML, so decode it

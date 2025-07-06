@@ -113,6 +113,10 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       // Wait for track change and stable state
       const waitStartTime = Date.now();
+
+      // Pandora is slow
+      await new Promise(resolve => setTimeout(resolve, 3000));      
+
       const trackChanged = await trackChangePromise;
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForTrackChange took: ${waitTime}ms`);
@@ -173,9 +177,8 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
         testLog.warn(`⚠️  Pandora state: ${state.playbackState} - test may fail`);
       }
       
-      // Always wait for user input in interactive mode to debug issues
-      testLog.info('\n🔍 Check your Sonos app to see the current state');
-      await waitForContinueFlag();
+      // Wait for user input in interactive mode to debug issues
+      await waitForContinue();
       
       // Now do the assertion after user has had a chance to see what's happening
       assert(
@@ -282,8 +285,9 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       }
       
       // Use test stations from env var or API
-      let firstStation = await getPandoraTestStation(testRoom, 1);
-      let secondStation = await getPandoraTestStation(testRoom, 2);
+      // Note: We use index 2 for first station to avoid using the same station that was played in the previous test
+      let firstStation = await getPandoraTestStation(testRoom, 2);
+      let secondStation = await getPandoraTestStation(testRoom, 3);
       
       // If we got the same station twice, try to find different ones from the available list
       if (firstStation === secondStation && availableStations.length >= 2) {
@@ -327,6 +331,10 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       // Wait for it to start playing
       const waitStartTime = Date.now();
+
+      // Pandora is slow
+      await new Promise(resolve => setTimeout(resolve, 3000));      
+
       await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5000);
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForState took: ${waitTime}ms`);

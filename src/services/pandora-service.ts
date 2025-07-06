@@ -43,15 +43,16 @@ export class PandoraService {
   /**
    * Generate Pandora station URI
    */
-  static generateStationURI(stationId: string): string {
+  static generateStationURI(stationId: string, sessionNumber: string = '1'): string {
     const encodedId = encodeURIComponent(stationId);
-    return `x-sonosapi-radio:ST%3a${encodedId}?sid=${this.PANDORA_SID}&flags=8300&sn=1`;
+    // Match Sonos app: use flags=0 instead of flags=8300
+    return `x-sonosapi-radio:ST%3a${encodedId}?sid=${this.PANDORA_SID}&flags=0&sn=${sessionNumber}`;
   }
 
   /**
    * Generate Pandora station metadata
    */
-  static generateStationMetadata(stationId: string, stationName: string): string {
+  static generateStationMetadata(stationId: string, stationName: string, accountToken: string = 'b7ca2819-Token'): string {
     // Do NOT encode the station ID for metadata - use raw ID
     const encodedName = stationName
       .replace(/&/g, '&amp;')
@@ -59,13 +60,16 @@ export class PandoraService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;');
+    
+    // Use encoded station ID in the item id to match Sonos app
+    const encodedId = encodeURIComponent(stationId);
 
     return `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
       xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-      <item id="100c206cST:${stationId}" parentID="0" restricted="true">
+      <item id="000c0000ST%3a${encodedId}" parentID="-1" restricted="true">
         <dc:title>${encodedName}</dc:title>
         <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
-        <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SERVICE_TYPE}_X_#Svc${this.PANDORA_SERVICE_TYPE}-0-Token</desc>
+        <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SERVICE_TYPE}_X_#Svc${this.PANDORA_SERVICE_TYPE}-${accountToken}</desc>
       </item>
     </DIDL-Lite>`;
   }
@@ -171,6 +175,11 @@ export class PandoraService {
       
       logger.info(`Found Pandora station: ${match.item.stationName} (score: ${match.score})`);
       
+      // Get session number dynamically
+      const { PandoraSessionHelper } = await import('./pandora-session.js');
+      const sessionNumber = await PandoraSessionHelper.getSessionNumber(device);
+      logger.debug(`Using Pandora session number: ${sessionNumber}`);
+      
       let uri: string;
       let metadata: string;
       
@@ -178,12 +187,12 @@ export class PandoraService {
       if (match.item.type && match.item.type !== 'genre') {
         logger.debug(`Creating new station from ${match.item.type}: ${match.item.stationName}`);
         const newStation = await api.createStation(match.item.stationId, match.item.type as 'artist' | 'song');
-        uri = this.generateStationURI(newStation.stationId);
+        uri = this.generateStationURI(newStation.stationId, sessionNumber);
         metadata = this.generateStationMetadata(newStation.stationId, newStation.stationName);
       } else {
         // Use existing station
         const stationId = match.item.stationToken || match.item.stationId;
-        uri = this.generateStationURI(stationId);
+        uri = this.generateStationURI(stationId, sessionNumber);
         metadata = this.generateStationMetadata(stationId, match.item.stationName);
       }
       

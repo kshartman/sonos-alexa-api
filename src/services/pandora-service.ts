@@ -52,7 +52,7 @@ export class PandoraService {
    * Generate Pandora station metadata
    */
   static generateStationMetadata(stationId: string, stationName: string): string {
-    const encodedId = encodeURIComponent(stationId);
+    // Do NOT encode the station ID for metadata - use raw ID
     const encodedName = stationName
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -62,9 +62,9 @@ export class PandoraService {
 
     return `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
       xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-      <item id="100c206cST%3a${encodedId}" parentID="0" restricted="true">
+      <item id="100c206cST:${stationId}" parentID="0" restricted="true">
         <dc:title>${encodedName}</dc:title>
-        <upnp:class>object.item.audioItem.audioBroadcast.#station</upnp:class>
+        <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
         <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SERVICE_TYPE}_X_#Svc${this.PANDORA_SERVICE_TYPE}-0-Token</desc>
       </item>
     </DIDL-Lite>`;
@@ -211,14 +211,48 @@ export class PandoraService {
         return { trackToken: null, stationToken: null };
       }
 
-      // URI format: x-sonos-http:VC1%3a%3aST%3a%3aST%3a{stationToken}%3a%3aTR%3a{trackToken}%3a%3a...
-      // Extract track token (after '%3a%3aTR%3a')
-      const trackMatch = trackUri.match(/%3a%3aTR%3a([^%]+)%3a%3a/);
-      const trackToken = trackMatch ? trackMatch[1] || null : null;
+      logger.debug(`Extracting tokens from URI: ${trackUri}`);
 
-      // Extract station token (between '%3a%3aST%3a' and '%3a%3aTR%3a')
-      const stationMatch = trackUri.match(/%3a%3aST%3a([^%]+)%3a%3aTR%3a/);
-      const stationToken = stationMatch ? stationMatch[1] || null : null;
+      // Decode the URI first
+      const decodedUri = decodeURIComponent(trackUri);
+      logger.debug(`Decoded URI: ${decodedUri}`);
+
+      // URI format variations:
+      // 1. x-sonos-http:VC1::ST::ST:{stationToken}::TR:{trackToken}::...
+      // 2. x-sonos-http:TR:{trackToken}?sn=...
+      // 3. x-sonos-http:...TR%3a{trackToken}...
+      
+      let trackToken: string | null = null;
+      let stationToken: string | null = null;
+
+      // Try decoded format first (with ::TR: and ::ST:)
+      let trackMatch = decodedUri.match(/::TR:([^:]+)::/);
+      if (trackMatch) {
+        trackToken = trackMatch[1] || null;
+      } else {
+        // Try encoded format (%3a%3aTR%3a)
+        trackMatch = trackUri.match(/%3a%3aTR%3a([^%]+)%3a%3a/);
+        trackToken = trackMatch ? trackMatch[1] || null : null;
+      }
+
+      // Extract station token - try decoded format first
+      let stationMatch = decodedUri.match(/::ST:([^:]+)::/);
+      if (stationMatch) {
+        stationToken = stationMatch[1] || null;
+      } else {
+        // Try encoded format
+        stationMatch = trackUri.match(/%3a%3aST%3a([^%]+)%3a%3a/);
+        stationToken = stationMatch ? stationMatch[1] || null : null;
+      }
+      
+      // If we didn't find station token with ST::, try looking between TR markers
+      if (!stationToken && trackToken) {
+        // Sometimes station token comes before track token
+        const beforeTrackMatch = decodedUri.match(/::([^:]+)::TR:/);
+        if (beforeTrackMatch) {
+          stationToken = beforeTrackMatch[1] || null;
+        }
+      }
       
       logger.debug(`Extracted tokens - track: ${trackToken}, station: ${stationToken}`);
 

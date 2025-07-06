@@ -2252,16 +2252,23 @@ export class ApiRouter {
         throw new Error(`Failed to find complete Pandora station information for '${decodedName}'`);
       }
       
-      // Generate metadata with proper service type for Pandora (SID 2311)
+      // Extract raw station ID from URI if needed
+      let rawStationId = stationUri;
+      const stationMatch = stationUri.match(/ST%3a([^?]+)/);
+      if (stationMatch) {
+        rawStationId = decodeURIComponent(stationMatch[1]!);
+      }
+      
+      // Generate metadata with proper service type for Pandora (SID 236)
       const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
         xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
         xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"
         xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-        <item id="${stationUri}" parentID="pndrradio:" restricted="true">
+        <item id="100c206cpndrradio-http://www.pandora.com/xml/images/icon_pandora.jpgST:${rawStationId}" parentID="pndrradio:" restricted="true">
           <dc:title>${stationTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
-          <upnp:class>object.container.playlistContainer</upnp:class>
-          <desc id="cd" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">
-            SA_RINCON2311_
+          <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
+          <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">
+            SA_RINCON236_
           </desc>
         </item>
       </DIDL-Lite>`;

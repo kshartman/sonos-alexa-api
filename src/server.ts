@@ -154,11 +154,8 @@ eventManagerInstance.on('track-change', (trackEvent: TrackChangeEvent) => {
 });
 
 // Forward state change events
-interface StateChangeEvent {
-  deviceId: string;
-  previousState: string;
-  currentState: string;
-}
+import type { StateChangeEvent } from './utils/event-manager.js';
+
 eventManagerInstance.on('state-change', (stateEvent: StateChangeEvent) => {
   const event = {
     type: 'device-state-change',

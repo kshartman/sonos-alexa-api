@@ -165,6 +165,23 @@ export interface MusicSearchSuccessResponse {
   message?: string;
 }
 
+export interface LibrarySearchResult {
+  title: string;
+  artist?: string;
+  album?: string;
+  uri: string;
+  id: string;
+  type: 'track' | 'album' | 'station' | 'artist';
+}
+
+export interface LibrarySearchSuccessResponse {
+  status: 'success';
+  service: string;
+  type: 'song' | 'album' | 'station' | 'artist';
+  query: string;
+  results: LibrarySearchResult[];
+}
+
 export interface StateChangeEvent {
   type: 'device-state-change';
   data: {

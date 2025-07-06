@@ -14,7 +14,7 @@ import { spotifyAuthService } from './services/spotify-auth-service.js';
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
-import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, BrowseItem } from './types/sonos.js';
+import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, LibrarySearchSuccessResponse, BrowseItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
 import { EventManager } from './utils/event-manager.js';
@@ -1630,6 +1630,7 @@ export class ApiRouter {
       staleNotify: boolean;
       roomName?: string;
       modelName?: string;
+      ip?: string;
     }
     const healthData: Record<string, DeviceHealthStatus> = {};
     for (const [deviceId, status] of health) {
@@ -1877,7 +1878,7 @@ export class ApiRouter {
   }
   
   // Music library search endpoints
-  private async musicLibrarySearchSong({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchSong({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -1968,7 +1969,7 @@ export class ApiRouter {
     }
   }
   
-  private async musicLibrarySearchArtist({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchArtist({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -2047,7 +2048,7 @@ export class ApiRouter {
     }
   }
   
-  private async musicLibrarySearchAlbum({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async musicLibrarySearchAlbum({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     if (!query) throw { status: 400, message: 'Query parameter is required' };
     
@@ -2869,7 +2870,7 @@ export class ApiRouter {
   /**
    * Perform music search and play results
    */
-  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse>> {
+  private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
     const device = this.getDevice(roomName);
     if (!device) {
       throw { status: 404, message: `Room '${roomName}' not found` };

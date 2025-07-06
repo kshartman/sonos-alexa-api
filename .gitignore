@@ -147,6 +147,7 @@ Temporary Items
 /music-library-cache/
 /pandora-cache/
 /spotify-cache/
+/test/helpers/test-content.cache.json
 
 # Generated documentation
 /apidoc/openapi-bundled.yaml

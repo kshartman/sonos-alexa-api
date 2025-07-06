@@ -5,6 +5,7 @@ import { ApiRouter } from '../../src/api-router.js';
 import type { Config } from '../../src/types/sonos.js';
 import { testEndpoint } from '../helpers/test-helpers.js';
 import { initializeDebugManager } from '../../src/utils/debug-manager.js';
+import { testLog } from '../helpers/test-logger.js';
 
 describe('Group Management Unit Tests', () => {
   let mockDiscovery: MockDiscovery;
@@ -109,7 +110,7 @@ describe('Group Management Unit Tests', () => {
 
     it('should leave group using leave endpoint', async () => {
       // Debug: Check zones before test
-      console.log('Zones before test:', JSON.stringify(mockDiscovery.getZones(), null, 2));
+      testLog.info('Zones before test:', JSON.stringify(mockDiscovery.getZones(), null, 2));
       
       const response = await testEndpoint(router, '/bedroom/leave');
       

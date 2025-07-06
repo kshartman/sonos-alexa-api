@@ -1,28 +1,11 @@
 import { SystemTopology, Zone, defaultConfig } from './test-config.js';
+import { testLog } from './test-logger.js';
 
 /**
  * Discover the Sonos system topology and available features
  */
 export async function discoverSystem(): Promise<SystemTopology> {
   try {
-    // Only enable debug logging if TEST_DEBUG environment variable is set
-    if (process.env.TEST_DEBUG === 'true') {
-      try {
-        // Set log level to debug
-        await fetch(`${defaultConfig.apiUrl}/loglevel/debug`);
-        
-        // Enable specific debug categories
-        const categories = ['topology', 'upnp', 'discovery', 'api', 'soap'];
-        for (const category of categories) {
-          await fetch(`${defaultConfig.apiUrl}/debug/category/${category}/true`);
-        }
-        
-        console.log('📝 Debug logging enabled for tests');
-      } catch (error) {
-        console.log('⚠️  Could not enable debug logging:', error);
-      }
-    }
-    
     // Get zones
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
     if (!zonesResponse.ok) {
@@ -32,7 +15,7 @@ export async function discoverSystem(): Promise<SystemTopology> {
     
     // Give time for UPnP subscriptions to be established
     // This is critical for event-driven tests to work properly
-    console.log('⏳ Waiting for UPnP event subscriptions to establish...');
+    testLog.info('⏳ Waiting for UPnP event subscriptions to establish...');
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Extract unique rooms
@@ -99,7 +82,7 @@ export async function discoverSystem(): Promise<SystemTopology> {
       presetCount
     };
   } catch (error) {
-    console.error('Failed to discover system:', error);
+    testLog.error('Failed to discover system:', error);
     throw error;
   }
 }
@@ -154,10 +137,10 @@ async function makeRoomSafe(room: string): Promise<void> {
         const isJustStereoPair = uniqueRoomNames.size === 1 && roomZone.members.length === 2;
         
         if (!isJustStereoPair) {
-          console.log(`   Ungrouping ${room} from its current group...`);
+          testLog.info(`   Ungrouping ${room} from its current group...`);
           const leaveResponse = await fetch(`${defaultConfig.apiUrl}/${room}/leave`);
           if (leaveResponse.ok) {
-            console.log(`   ✓ ${room} left its group`);
+            testLog.info(`   ✓ ${room} left its group`);
             // Wait for ungrouping to complete
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
@@ -170,17 +153,17 @@ async function makeRoomSafe(room: string): Promise<void> {
     if (stateResponse.ok) {
       const state = await stateResponse.json();
       if (state.playbackState === 'PLAYING') {
-        console.log(`   Stopping playback on ${room}...`);
+        testLog.info(`   Stopping playback on ${room}...`);
         const stopResponse = await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
         if (stopResponse.ok) {
-          console.log(`   ✓ Stopped playback on ${room}`);
+          testLog.info(`   ✓ Stopped playback on ${room}`);
           // Wait for stop to complete
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     }
   } catch (error) {
-    console.log(`   ⚠️  Error making ${room} safe:`, error);
+    testLog.info(`   ⚠️  Error making ${room} safe:`, error);
     // Continue anyway - tests may still work
   }
 }
@@ -231,11 +214,11 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
     
     // Verify the room exists in the topology
     if (topology.rooms.includes(configuredRoom)) {
-      console.log(`✅ Using configured test room: ${configuredRoom} (from TEST_ROOM env)`);
+      testLog.info(`✅ Using configured test room: ${configuredRoom} (from TEST_ROOM env)`);
       await makeRoomSafe(configuredRoom);
       return configuredRoom;
     } else {
-      console.log(`⚠️  Configured TEST_ROOM '${configuredRoom}' not found in topology, falling back to auto-selection`);
+      testLog.info(`⚠️  Configured TEST_ROOM '${configuredRoom}' not found in topology, falling back to auto-selection`);
     }
   }
   
@@ -246,13 +229,13 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
       if (defaultsResponse.ok) {
         const defaults = await defaultsResponse.json();
         if (defaults.room && topology.rooms.includes(defaults.room)) {
-          console.log(`✅ Using default room from API: ${defaults.room}`);
+          testLog.info(`✅ Using default room from API: ${defaults.room}`);
           await makeRoomSafe(defaults.room);
           return defaults.room;
         }
       }
     } catch (error) {
-      console.log('⚠️  Could not fetch default room from API');
+      testLog.info('⚠️  Could not fetch default room from API');
     }
   }
   
@@ -268,13 +251,13 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
       
       // Check if this is the coordinator (for stereo pairs, only coordinator has full services)
       if (!member.isCoordinator) {
-        console.log(`⚠️  Skipping ${room} - not a coordinator (likely stereo pair member)`);
+        testLog.info(`⚠️  Skipping ${room} - not a coordinator (likely stereo pair member)`);
         continue;
       }
       
       // Skip portable devices (Roam, Move) as they lack proper services
       if (room.toLowerCase().includes('roam') || room.toLowerCase().includes('move')) {
-        console.log(`⚠️  Skipping ${room} - portable device (lacks AVTransport/RenderingControl services)`);
+        testLog.info(`⚠️  Skipping ${room} - portable device (lacks AVTransport/RenderingControl services)`);
         continue;
       }
       
@@ -288,11 +271,11 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
         // Check if room has content available
         const hasContent = await checkRoomHasContent(room);
         if (!hasContent) {
-          console.log(`⚠️  Skipping ${room} - no content available (no favorites/playlists or music search)`);
+          testLog.info(`⚠️  Skipping ${room} - no content available (no favorites/playlists or music search)`);
           continue;
         }
         
-        console.log(`✅ Selected test room: ${room} (coordinator, not playing, has content)`);
+        testLog.info(`✅ Selected test room: ${room} (coordinator, not playing, has content)`);
         return room;
       } catch {}
     }
@@ -317,11 +300,11 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
         // Check content availability
         const hasContent = await checkRoomHasContent(coordinator.roomName);
         if (!hasContent) {
-          console.log(`⚠️  Skipping ${coordinator.roomName} - no content available`);
+          testLog.info(`⚠️  Skipping ${coordinator.roomName} - no content available`);
           continue;
         }
         
-        console.log(`✅ Selected test room: ${coordinator.roomName} (coordinator in group, not playing, has content)`);
+        testLog.info(`✅ Selected test room: ${coordinator.roomName} (coordinator in group, not playing, has content)`);
         return coordinator.roomName;
       } catch {}
     }
@@ -333,7 +316,7 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
     if (coordinator) {
       const hasContent = await checkRoomHasContent(coordinator.roomName);
       if (hasContent) {
-        console.log(`⚠️  Using coordinator as test room (may be playing): ${coordinator.roomName}`);
+        testLog.info(`⚠️  Using coordinator as test room (may be playing): ${coordinator.roomName}`);
         return coordinator.roomName;
       }
     }
@@ -343,7 +326,7 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
   for (const room of topology.rooms) {
     const hasContent = await checkRoomHasContent(room);
     if (hasContent) {
-      console.log(`⚠️  WARNING: Using ${room} - may not be optimal for testing!`);
+      testLog.info(`⚠️  WARNING: Using ${room} - may not be optimal for testing!`);
       return room;
     }
   }
@@ -363,7 +346,7 @@ export function isServiceAvailable(topology: SystemTopology, service: string): b
  * Ungroup all speakers to put system in known state
  */
 export async function ungroupAllSpeakers(): Promise<void> {
-  console.log('🔧 Putting system into known state (all speakers standalone)...');
+  testLog.info('🔧 Putting system into known state (all speakers standalone)...');
   
   // Get current zones
   const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -373,11 +356,11 @@ export async function ungroupAllSpeakers(): Promise<void> {
   const groupedZones = zones.filter(zone => zone.members.length > 1);
   
   if (groupedZones.length === 0) {
-    console.log('   ✓ No groups to ungroup');
+    testLog.info('   ✓ No groups to ungroup');
     return;
   }
   
-  console.log(`   Ungrouping ${groupedZones.length} groups...`);
+  testLog.info(`   Ungrouping ${groupedZones.length} groups...`);
   
   // Ungroup each zone by having all non-coordinator members leave
   for (const zone of groupedZones) {
@@ -399,32 +382,32 @@ export async function ungroupAllSpeakers(): Promise<void> {
         const membersWithSameRoom = zone.members.filter(m => m.roomName === member.roomName);
         
         if (membersWithSameRoom.length > 1) {
-          console.log(`   Removing ${member.roomName} (stereo pair) from group`);
+          testLog.info(`   Removing ${member.roomName} (stereo pair) from group`);
           // Mark all instances as processed so we don't try twice
           membersWithSameRoom.forEach(m => processedRooms.add(m.roomName));
         } else {
-          console.log(`   Removing ${member.roomName} from group`);
+          testLog.info(`   Removing ${member.roomName} from group`);
           processedRooms.add(member.roomName);
         }
         
         try {
           const response = await fetch(`${defaultConfig.apiUrl}/${member.roomName}/leave`);
           if (response.ok) {
-            console.log(`   ✓ ${member.roomName} left group`);
+            testLog.info(`   ✓ ${member.roomName} left group`);
           } else {
             const errorText = await response.text();
-            console.log(`   ✗ Failed to remove ${member.roomName}: ${response.status}`);
+            testLog.info(`   ✗ Failed to remove ${member.roomName}: ${response.status}`);
             // Don't log full error text, it's too verbose
           }
         } catch (e) {
-          console.log(`   ✗ Error removing ${member.roomName}:`, e);
+          testLog.info(`   ✗ Error removing ${member.roomName}:`, e);
         }
       }
     }
   }
   
   // Wait for ungrouping to complete
-  console.log('   Waiting for ungrouping to complete...');
+  testLog.info('   Waiting for ungrouping to complete...');
   await new Promise(resolve => setTimeout(resolve, 3000));
   
   // Verify all speakers are standalone (except stereo pairs)
@@ -442,8 +425,8 @@ export async function ungroupAllSpeakers(): Promise<void> {
       const memberNames = zone.members.map(m => m.roomName).join(', ');
       return `[${memberNames}]`;
     }).join(', ');
-    console.log(`   ⚠️  ${stillGrouped.length} non-stereo groups still exist after ungrouping: ${groupDetails}`);
+    testLog.info(`   ⚠️  ${stillGrouped.length} non-stereo groups still exist after ungrouping: ${groupDetails}`);
   } else {
-    console.log('   All speakers are now standalone (stereo pairs preserved)');
+    testLog.info('   All speakers are now standalone (stereo pairs preserved)');
   }
 }

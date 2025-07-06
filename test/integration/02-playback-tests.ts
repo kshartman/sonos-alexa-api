@@ -4,7 +4,8 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -16,7 +17,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
   let deviceId: string;
   
   before(async () => {
-    console.log('🎵 Testing playback controls...');
+    testLog.info('🎵 Testing playback controls...');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events via SSE
@@ -40,15 +41,14 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
     const coordinator = zone.members.find(m => m.isCoordinator);
     deviceId = coordinator.id;
     
-    console.log(`   Test room: ${testRoom}`);
-    console.log(`   Device ID: ${deviceId}`);
+    testLog.info(`   Test room: ${testRoom}`);
+    testLog.info(`   Device ID: ${deviceId}`);
     
     // Load content using favorites API
-    console.log('📻 Loading content for playback testing...');
+    testLog.info('📻 Loading content for playback testing...');
     
-    const contentLoaded = await loadTestContent(testRoom);
-    
-    if (contentLoaded) {
+    try {
+      await loadTestSong(testRoom, true);
       // Stop immediately after loading content so we start from a known state
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
       await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -60,13 +60,13 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await stateResponse.json();
       if (state.currentTrack) {
-        console.log(`✅ Content loaded: ${state.currentTrack.title || 'Stream'}`);
-        console.log(`   Initial state: ${state.playbackState}`);
+        testLog.info(`✅ Content loaded: ${state.currentTrack.title || 'Stream'}`);
+        testLog.info(`   Initial state: ${state.playbackState}`);
       } else {
-        console.log('⚠️  Failed to load content, tests may fail');
+        testLog.info('⚠️  Failed to load content, tests may fail');
       }
-    } else {
-      console.log('⚠️  Failed to load content, playback tests may fail');
+    } catch (error) {
+      testLog.info('⚠️  Failed to load content, playback tests may fail');
     }
   });
   
@@ -76,7 +76,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
   });
   
   after(async () => {
-    console.log('\n🧹 Cleaning up Playback Control tests...\n');
+    testLog.info('\n🧹 Cleaning up Playback Control tests...\n');
     
     // Stop playback
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
@@ -105,15 +105,15 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const state = await stateResponse.json();
       
       if (!state.currentTrack) {
-        console.log('   Loading content first...');
-        await loadTestContent(testRoom);
+        testLog.info('   Loading content first...');
+        await loadTestSong(testRoom, true);
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      console.log(`   Initial state: STOPPED`);
+      testLog.info(`   Initial state: STOPPED`);
       
       // Start playback
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
@@ -123,7 +123,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const stableState = await eventManager.waitForStableState(deviceId, 10000);
       assert(stableState !== null, 'Device should reach stable state');
       assert(stableState !== 'TRANSITIONING', 'Device should not be stuck in TRANSITIONING');
-      console.log(`   Stable state reached: ${stableState}`);
+      testLog.info(`   Stable state reached: ${stableState}`);
     });
     
     it('should track state history', async () => {
@@ -139,14 +139,14 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const state = await stateResponse.json();
       
       if (!state.currentTrack) {
-        await loadTestContent(testRoom);
+        await loadTestSong(testRoom, true);
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      console.log(`   Initial state: STOPPED`);
+      testLog.info(`   Initial state: STOPPED`);
       
       // Clear history to track only our test changes
       eventManager.reset();
@@ -164,7 +164,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       // Check history
       const history = eventManager.getStateHistory(deviceId);
       const newStates = history.slice(initialHistory);
-      console.log(`   State history: ${newStates.map(h => h.currentState).join(' -> ')}`);
+      testLog.info(`   State history: ${newStates.map(h => h.currentState).join(' -> ')}`);
       assert(newStates.length >= 2, `Should have at least 2 new state changes, got ${newStates.length}`);
     });
   });
@@ -186,7 +186,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       
       if (!state.currentTrack) {
         // Load content
-        await loadTestContent(testRoom);
+        await loadTestSong(testRoom, true);
         // Stop it immediately after loading
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -200,7 +200,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       // Check initial state
       const initialResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const initialState = await initialResponse.json();
-      console.log(`   Initial state before play: ${initialState.playbackState}`);
+      testLog.info(`   Initial state before play: ${initialState.playbackState}`);
       
       // Set up event listener BEFORE triggering action
       const stateChangePromise = eventManager.waitForState(deviceId, 'PLAYING', 8000);
@@ -251,7 +251,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const state = await stateResponse.json();
       
       if (!state.currentTrack) {
-        await loadTestContent(testRoom);
+        await loadTestSong(testRoom, true);
         // Content loading might auto-play, so stop again
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -270,7 +270,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       // Check initial state
       const initialResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const initialState = await initialResponse.json();
-      console.log(`   Initial state before pause: ${initialState.playbackState}`);
+      testLog.info(`   Initial state before pause: ${initialState.playbackState}`);
       
       // Set up event listener
       const stateChangePromise = eventManager.waitForState(deviceId, 
@@ -324,7 +324,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const state = await stateResponse.json();
       
       if (!state.currentTrack) {
-        await loadTestContent(testRoom);
+        await loadTestSong(testRoom, true);
         // Content loading might auto-play, so stop again
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -343,7 +343,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       // Check initial state
       const initialResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const initialState = await initialResponse.json();
-      console.log(`   Initial state before stop: ${initialState.playbackState}`);
+      testLog.info(`   Initial state before stop: ${initialState.playbackState}`);
       
       // Set up event listener
       const stateChangePromise = eventManager.waitForState(deviceId, 'STOPPED', 8000);
@@ -377,59 +377,59 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const state = await stateResponse.json();
       
       if (!state.currentTrack) {
-        await loadTestContent(testRoom);
+        await loadTestSong(testRoom, true);
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      console.log(`   Initial state for toggle: STOPPED`);
+      testLog.info(`   Initial state for toggle: STOPPED`);
       
       // First toggle - should play
-      console.log(`   First toggle: calling playpause (expecting PLAYING)`);
+      testLog.info(`   First toggle: calling playpause (expecting PLAYING)`);
       let response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playpause`);
       assert.strictEqual(response.status, 200);
       
       let success = await eventManager.waitForState(deviceId, 'PLAYING', 8000);
       assert(success, 'Should start playing after first toggle');
-      console.log(`   First toggle successful - now PLAYING`);
+      testLog.info(`   First toggle successful - now PLAYING`);
       
       // Wait for stabilization
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Second toggle - should pause
-      console.log(`   Second toggle: calling playpause (expecting PAUSED/STOPPED)`);
+      testLog.info(`   Second toggle: calling playpause (expecting PAUSED/STOPPED)`);
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playpause`);
       assert.strictEqual(response.status, 200);
       
       success = await eventManager.waitForState(deviceId, 
         state => state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 8000);
       assert(success, 'Should pause after second toggle');
-      console.log(`   Second toggle successful - now PAUSED/STOPPED`);
+      testLog.info(`   Second toggle successful - now PAUSED/STOPPED`);
       
       // Check if we still have content after pausing
       const pausedStateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const pausedState = await pausedStateResponse.json();
-      console.log(`   After pause: state=${pausedState.playbackState}, hasTrack=${!!pausedState.currentTrack}`);
+      testLog.info(`   After pause: state=${pausedState.playbackState}, hasTrack=${!!pausedState.currentTrack}`);
       
       // If we lost content, reload it
       if (!pausedState.currentTrack) {
-        console.log(`   Content lost after pause, reloading...`);
-        await loadTestContent(testRoom);
+        testLog.info(`   Content lost after pause, reloading...`);
+        await loadTestSong(testRoom, true);
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`);
         await eventManager.waitForState(deviceId, 
           state => state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 8000);
       }
       
       // Third toggle - should play again
-      console.log(`   Third toggle: calling playpause (expecting PLAYING again)`);
+      testLog.info(`   Third toggle: calling playpause (expecting PLAYING again)`);
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/playpause`);
       assert.strictEqual(response.status, 200);
       
       success = await eventManager.waitForState(deviceId, 'PLAYING', 8000);
       assert(success, 'Should play again after third toggle');
-      console.log(`   Third toggle successful - now PLAYING again`);
+      testLog.info(`   Third toggle successful - now PLAYING again`);
     });
   });
   
@@ -463,14 +463,14 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
   });
   
   after(() => {
-    console.log('   ✓ Playback control tests complete');
+    testLog.info('   ✓ Playback control tests complete');
     
     // Show final state history
     const history = eventManager.getStateHistory(deviceId);
     if (history.length > 0) {
-      console.log(`   Final state history (last 5):`);
+      testLog.info(`   Final state history (last 5):`);
       history.slice(-5).forEach(h => {
-        console.log(`     ${new Date(h.timestamp).toISOString()}: ${h.previousState} -> ${h.currentState}`);
+        testLog.info(`     ${new Date(h.timestamp).toISOString()}: ${h.previousState} -> ${h.currentState}`);
       });
     }
   });

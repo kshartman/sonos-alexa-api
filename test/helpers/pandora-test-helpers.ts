@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { defaultConfig } from './test-config.js';
+import { testLog } from './test-logger.js';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -21,7 +22,7 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
     const settings = await settingsResponse.json();
     
     if (!settings.pandora?.configured) {
-      console.log('⚠️  Pandora credentials not configured in settings.json');
+      testLog.info('⚠️  Pandora credentials not configured in settings.json');
       return false;
     }
     
@@ -50,7 +51,7 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
     // Navigate through the SOAP response
     const services = data['s:Envelope']?.['s:Body']?.['u:ListAvailableServicesResponse']?.AvailableServiceDescriptorList;
     if (!services) {
-      console.log('⚠️  No services found in SOAP response');
+      testLog.info('⚠️  No services found in SOAP response');
       return false;
     }
     
@@ -64,7 +65,7 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
     const servicesData = xmlParser.parse(decodedServices);
     const serviceList = servicesData.Services?.Service;
     if (!serviceList) {
-      console.log('⚠️  No services found in parsed list');
+      testLog.info('⚠️  No services found in parsed list');
       return false;
     }
     
@@ -77,11 +78,11 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
     );
     
     if (!hasPandora) {
-      console.log('⚠️  Pandora service not available on Sonos system');
+      testLog.info('⚠️  Pandora service not available on Sonos system');
       return false;
     }
     
-    console.log('✅ Pandora is available for testing (credentials configured and service available)');
+    testLog.info('✅ Pandora is available for testing (credentials configured and service available)');
     return true;
     
   } catch (error) {
@@ -92,23 +93,53 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
 
 /**
  * Get a Pandora station name for testing
- * First tries to find one in favorites, then falls back to default stations
+ * @param room - The room to use for API calls
+ * @param n - Which test station to get (1, 2, or 3). Defaults to 1.
+ * @returns A station name from TEST_PANDORA_STATIONS env var or from API
  */
-export async function getPandoraTestStation(room: string): Promise<string> {
+export async function getPandoraTestStation(room: string, n: number = 1): Promise<string> {
+  // Default fallback stations
+  const defaultStations = ['Thumbprint Radio', 'QuickMix', 'The Beatles Radio'];
+  
+  // Check if TEST_PANDORA_STATIONS is configured
+  if (process.env.TEST_PANDORA_STATIONS) {
+    const configuredStations = process.env.TEST_PANDORA_STATIONS.split(';').map(s => s.trim()).filter(s => s);
+    
+    // Get the requested station (n-1 for 0-based index)
+    const index = n - 1;
+    if (index >= 0 && index < configuredStations.length) {
+      return configuredStations[index];
+    }
+    
+    // If n is out of bounds but we have some stations, use modulo to wrap around
+    if (configuredStations.length > 0) {
+      return configuredStations[index % configuredStations.length];
+    }
+  }
+  
+  // Try to get stations from the API
   try {
-    // Try to get a station from the API's station list
     const stationsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/pandora/stations`);
     if (stationsResponse.ok) {
       const stations = await stationsResponse.json();
       if (Array.isArray(stations) && stations.length > 0) {
-        // Response is just station names (default behavior)
-        return stations[0];
+        // Get the requested station
+        const index = n - 1;
+        if (index >= 0 && index < stations.length) {
+          return stations[index];
+        }
+        // Wrap around if needed
+        return stations[index % stations.length];
       }
     }
   } catch (error) {
-    console.log('Could not get stations from API:', error);
+    testLog.info('Could not get stations from API:', error);
   }
   
-  // Fallback to default station
-  return 'Thumbprint Radio';
+  // Fallback to default stations
+  const index = n - 1;
+  if (index >= 0 && index < defaultStations.length) {
+    return defaultStations[index];
+  }
+  return defaultStations[0];
 }

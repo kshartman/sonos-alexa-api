@@ -6,7 +6,8 @@ import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { withSavedState } from '../helpers/state-manager.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -20,7 +21,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
   let eventManager: EventManager;
 
   before(async () => {
-    console.log('\n🎵 Starting Volume Control Integration Tests...\n');
+    testLog.info('\n🎵 Starting Volume Control Integration Tests...\n');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events
@@ -39,41 +40,41 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
     // Use the coordinator's ID as primary
     const coordinator = zone.members.find(m => m.isCoordinator);
     deviceId = coordinator.id;
-    console.log(`Test room: ${testRoom}, Device IDs: ${deviceIds.join(', ')}`);
+    testLog.info(`Test room: ${testRoom}, Device IDs: ${deviceIds.join(', ')}`);
     
     // Save original state
     const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
     const state = await stateResponse.json();
     originalVolume = state.volume || 50;
-    console.log(`📊 Original volume: ${originalVolume}`);
+    testLog.info(`📊 Original volume: ${originalVolume}`);
     
     // Load content for volume testing
-    console.log('📻 Loading content for volume testing...');
+    testLog.info('📻 Loading content for volume testing...');
     
-    const contentLoaded = await loadTestContent(testRoom);
-    
-    if (contentLoaded) {
+    try {
+      await loadTestSong(testRoom, true);
+      
       // Wait for playback to start
       const started = await eventManager.waitForState(deviceId, 'PLAYING', 10000);
       if (started) {
-        console.log('✅ Content loaded and playing');
+        testLog.info('✅ Content loaded and playing');
         
         // Verify we have track info
         const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
         const state = await stateResponse.json();
         if (state.currentTrack) {
-          console.log(`   Playing: ${state.currentTrack.title || 'Stream'}`);
+          testLog.info(`   Playing: ${state.currentTrack.title || 'Stream'}`);
         }
       } else {
-        console.log('⚠️  Content loaded but playback not confirmed');
+        testLog.info('⚠️  Content loaded but playback not confirmed');
       }
-    } else {
-      console.log('⚠️  Failed to load content, volume tests may fail');
+    } catch (error) {
+      testLog.info('⚠️  Failed to load content, volume tests may fail');
     }
   });
 
   after(async () => {
-    console.log('\n🧹 Cleaning up Volume Control tests...\n');
+    testLog.info('\n🧹 Cleaning up Volume Control tests...\n');
     
     // Stop playback
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
@@ -81,7 +82,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
     // Restore volume
     if (testRoom && originalVolume > 0) {
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/${originalVolume}`);
-      console.log(`✅ Restored volume to ${originalVolume}`);
+      testLog.info(`✅ Restored volume to ${originalVolume}`);
     }
     
     // Clear any pending event listeners
@@ -100,10 +101,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await response.json();
       if (state.playbackState !== 'PLAYING' || !state.currentTrack) {
-        console.log('🔄 Restarting playback for volume tests...');
+        testLog.info('🔄 Restarting playback for volume tests...');
         // If no content, reload it
         if (!state.currentTrack) {
-          await loadTestContent(testRoom);
+          await loadTestSong(testRoom, true);
         } else {
           await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
         }
@@ -118,7 +119,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       
       assert(typeof state.volume === 'number', 'Volume should be a number');
       assert(state.volume >= 0 && state.volume <= 100, 'Volume should be between 0 and 100');
-      console.log(`✅ Current volume: ${state.volume}`);
+      testLog.info(`✅ Current volume: ${state.volume}`);
     });
 
     it('should set volume', async () => {
@@ -129,7 +130,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       
       // Choose a target that's different from current
       const targetVolume = currentVolume >= 50 ? 25 : 75;
-      console.log(`Current volume: ${currentVolume}, setting to: ${targetVolume}`);
+      testLog.info(`Current volume: ${currentVolume}, setting to: ${targetVolume}`);
       
       // Listen for volume change event from any device in the zone
       const volumePromises = deviceIds.map(id => 
@@ -147,17 +148,17 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check the actual state even if no event
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await stateResponse.json();
-      console.log(`Volume change event received: ${volumeChanged}, actual volume: ${state.volume}`);
+      testLog.info(`Volume change event received: ${volumeChanged}, actual volume: ${state.volume}`);
       
       // If volume was set correctly but no event, that's still a pass for the API
       if (!volumeChanged && state.volume === targetVolume) {
-        console.log('⚠️  Volume set correctly but no event received (stereo pair issue?)');
+        testLog.info('⚠️  Volume set correctly but no event received (stereo pair issue?)');
       } else {
         assert(volumeChanged, 'Should receive volume change event');
       }
       
       assert.equal(state.volume, targetVolume, 'Volume should be set correctly');
-      console.log(`✅ Volume set to ${targetVolume}`);
+      testLog.info(`✅ Volume set to ${targetVolume}`);
     });
 
     it('should handle relative volume changes', async () => {
@@ -173,7 +174,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       let response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       let state = await response.json();
       assert.equal(state.volume, 60, 'Volume should increase by 10');
-      console.log(`✅ Volume increased to ${state.volume}`);
+      testLog.info(`✅ Volume increased to ${state.volume}`);
       
       // Test decrease
       const decreasePromise = eventManager.waitForVolume(deviceId, 40, 5000);
@@ -183,7 +184,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.volume, 40, 'Volume should decrease by 20');
-      console.log(`✅ Volume decreased to ${state.volume}`);
+      testLog.info(`✅ Volume decreased to ${state.volume}`);
     });
 
     it('should handle volume boundaries', async () => {
@@ -192,49 +193,49 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       await eventManager.waitForVolume(deviceId, 50, 3000);
       
       // Test maximum - set to 100 and wait for it
-      console.log('   Testing maximum volume...');
+      testLog.info('   Testing maximum volume...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/100`);
       const reachedMax = await eventManager.waitForVolume(deviceId, 100, 3000);
       
       let response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       let state = await response.json();
       const maxVolume = state.volume;
-      console.log(`   Max volume reached: ${maxVolume}`);
+      testLog.info(`   Max volume reached: ${maxVolume}`);
       
       // Some devices may have volume limits
       assert(maxVolume >= 50, 'Device should support volume of at least 50');
       if (!reachedMax && maxVolume < 100) {
-        console.log(`   Note: Device appears to have max volume limit of ${maxVolume}`);
+        testLog.info(`   Note: Device appears to have max volume limit of ${maxVolume}`);
       }
       
       // Try to exceed maximum
-      console.log('   Testing volume ceiling...');
+      testLog.info('   Testing volume ceiling...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/+10`);
       await new Promise(resolve => setTimeout(resolve, 500)); // Wait for state update
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`   After +10 from ${maxVolume}: actual volume = ${state.volume}`);
+      testLog.info(`   After +10 from ${maxVolume}: actual volume = ${state.volume}`);
       assert.equal(state.volume, maxVolume, 'Should not exceed device maximum');
       
       // Test minimum - with proper wait
-      console.log('   Testing minimum volume...');
+      testLog.info('   Testing minimum volume...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/0`);
       await eventManager.waitForVolume(deviceId, 0, 3000);
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`   After setting to 0: actual volume = ${state.volume}`);
+      testLog.info(`   After setting to 0: actual volume = ${state.volume}`);
       assert.equal(state.volume, 0, 'Should set to minimum volume');
       
       // Try to go below minimum
-      console.log('   Testing volume floor...');
+      testLog.info('   Testing volume floor...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/-10`);
       await new Promise(resolve => setTimeout(resolve, 500)); // Wait for state update
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`   After -10 from 0: actual volume = ${state.volume}`);
+      testLog.info(`   After -10 from 0: actual volume = ${state.volume}`);
       assert.equal(state.volume, 0, 'Should not go below minimum');
       
-      console.log('✅ Volume boundaries handled correctly');
+      testLog.info('✅ Volume boundaries handled correctly');
     });
   });
 
@@ -244,10 +245,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await response.json();
       if (state.playbackState !== 'PLAYING' || !state.currentTrack) {
-        console.log('🔄 Restarting playback for mute tests...');
+        testLog.info('🔄 Restarting playback for mute tests...');
         // If no content, reload it
         if (!state.currentTrack) {
-          await loadTestContent(testRoom);
+          await loadTestSong(testRoom, true);
         } else {
           await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
         }
@@ -260,22 +261,22 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       const state = await response.json();
       
       assert(typeof state.mute === 'boolean', 'Mute state should be boolean');
-      console.log(`✅ Current mute state: ${state.mute}`);
+      testLog.info(`✅ Current mute state: ${state.mute}`);
     });
 
     it('should handle mute, unmute, and togglemute endpoints correctly', async () => {
       // Step 1: Ensure we start unmuted
-      console.log('Step 1: Ensuring device starts unmuted...');
+      testLog.info('Step 1: Ensuring device starts unmuted...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/unmute`);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Give time for state to settle
       
       let response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       let state = await response.json();
       assert.equal(state.mute, false, 'Device should start unmuted');
-      console.log(`✅ Device is unmuted`);
+      testLog.info(`✅ Device is unmuted`);
       
       // Step 2: Test /mute endpoint (should always mute)
-      console.log('\nStep 2: Testing /mute endpoint...');
+      testLog.info('\nStep 2: Testing /mute endpoint...');
       const mutePromise = eventManager.waitForMute(deviceId, true, 5000);
       
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/mute`);
@@ -284,10 +285,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check actual state regardless of event
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`Mute event received: ${muteChanged}, actual mute state: ${state.mute}`);
+      testLog.info(`Mute event received: ${muteChanged}, actual mute state: ${state.mute}`);
       
       if (!muteChanged && state.mute === true) {
-        console.log('⚠️  Mute set correctly but no event received');
+        testLog.info('⚠️  Mute set correctly but no event received');
       } else {
         assert(muteChanged, 'Should receive mute change event');
       }
@@ -295,20 +296,20 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.mute, true, 'Should be muted after calling /mute');
-      console.log(`✅ /mute endpoint works correctly`);
+      testLog.info(`✅ /mute endpoint works correctly`);
       
       // Step 3: Test /mute again when already muted (should stay muted, no event)
-      console.log('\nStep 3: Testing /mute when already muted...');
+      testLog.info('\nStep 3: Testing /mute when already muted...');
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/mute`);
       await new Promise(resolve => setTimeout(resolve, 500));
       
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.mute, true, 'Should remain muted when calling /mute on muted device');
-      console.log(`✅ /mute correctly maintains muted state`);
+      testLog.info(`✅ /mute correctly maintains muted state`);
       
       // Step 4: Test /unmute endpoint
-      console.log('\nStep 4: Testing /unmute endpoint...');
+      testLog.info('\nStep 4: Testing /unmute endpoint...');
       const unmutePromise = eventManager.waitForMute(deviceId, false, 5000);
       
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/unmute`);
@@ -317,10 +318,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check actual state regardless of event
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`Unmute event received: ${unmuteChanged}, actual mute state: ${state.mute}`);
+      testLog.info(`Unmute event received: ${unmuteChanged}, actual mute state: ${state.mute}`);
       
       if (!unmuteChanged && state.mute === false) {
-        console.log('⚠️  Unmute set correctly but no event received');
+        testLog.info('⚠️  Unmute set correctly but no event received');
       } else {
         assert(unmuteChanged, 'Should receive unmute event');
       }
@@ -328,10 +329,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.mute, false, 'Should be unmuted after calling /unmute');
-      console.log(`✅ /unmute endpoint works correctly`);
+      testLog.info(`✅ /unmute endpoint works correctly`);
       
       // Step 5: Test /togglemute endpoint (should mute from unmuted state)
-      console.log('\nStep 5: Testing /togglemute from unmuted state...');
+      testLog.info('\nStep 5: Testing /togglemute from unmuted state...');
       const toggleMutePromise1 = eventManager.waitForMute(deviceId, true, 5000);
       
       const toggleResponse1 = await fetch(`${defaultConfig.apiUrl}/${testRoom}/togglemute`);
@@ -343,10 +344,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check actual state
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`Toggle mute event received: ${toggleChanged1}, actual mute state: ${state.mute}`);
+      testLog.info(`Toggle mute event received: ${toggleChanged1}, actual mute state: ${state.mute}`);
       
       if (!toggleChanged1 && state.mute === true) {
-        console.log('⚠️  Toggle mute set correctly but no event received');
+        testLog.info('⚠️  Toggle mute set correctly but no event received');
       } else {
         assert(toggleChanged1, 'Should receive mute event from togglemute');
       }
@@ -354,10 +355,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.mute, true, 'Should be muted after togglemute from unmuted state');
-      console.log(`✅ /togglemute correctly mutes from unmuted state`);
+      testLog.info(`✅ /togglemute correctly mutes from unmuted state`);
       
       // Step 6: Test /togglemute again (should unmute from muted state)
-      console.log('\nStep 6: Testing /togglemute from muted state...');
+      testLog.info('\nStep 6: Testing /togglemute from muted state...');
       const toggleMutePromise2 = eventManager.waitForMute(deviceId, false, 5000);
       
       const toggleResponse2 = await fetch(`${defaultConfig.apiUrl}/${testRoom}/togglemute`);
@@ -369,10 +370,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check actual state
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
-      console.log(`Toggle unmute event received: ${toggleChanged2}, actual mute state: ${state.mute}`);
+      testLog.info(`Toggle unmute event received: ${toggleChanged2}, actual mute state: ${state.mute}`);
       
       if (!toggleChanged2 && state.mute === false) {
-        console.log('⚠️  Toggle unmute set correctly but no event received');
+        testLog.info('⚠️  Toggle unmute set correctly but no event received');
       } else {
         assert(toggleChanged2, 'Should receive unmute event from togglemute');
       }
@@ -380,7 +381,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.mute, false, 'Should be unmuted after togglemute from muted state');
-      console.log(`✅ /togglemute correctly unmutes from muted state`);
+      testLog.info(`✅ /togglemute correctly unmutes from muted state`);
     });
 
     it('should handle mute independently of volume', async () => {
@@ -426,7 +427,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       assert.equal(state.volume, 30, 'Volume should be same after unmuting');
-      console.log('✅ Mute works independently of volume');
+      testLog.info('✅ Mute works independently of volume');
     });
   });
 
@@ -448,10 +449,10 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
         room2 = existingGroup.members[1].roomName;
         device1Id = existingGroup.id; // Zone ID is the coordinator's ID
         device2Id = existingGroup.members[1].id;
-        console.log(`📊 Using existing group: ${room1} with ${room2}`);
+        testLog.info(`📊 Using existing group: ${room1} with ${room2}`);
       } else {
         // Need to create a group - first ungroup everything to maximize standalone devices
-        console.log('📊 Ungrouping all devices to create test group...');
+        testLog.info('📊 Ungrouping all devices to create test group...');
         
         // Ungroup all grouped zones
         for (const zone of zones) {
@@ -474,7 +475,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
         const standaloneZones = updatedZones.filter((z: any) => z.members.length === 1);
         
         if (standaloneZones.length < 2) {
-          console.log('⚠️  Not enough devices for group volume test - skipping');
+          testLog.info('⚠️  Not enough devices for group volume test - skipping');
           this.skip();
           return;
         }
@@ -485,15 +486,15 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
         device1Id = standaloneZones[0].id;
         device2Id = standaloneZones[1].id;
         
-        console.log(`📊 Creating group for volume test: ${room2} joining ${room1}`);
+        testLog.info(`📊 Creating group for volume test: ${room2} joining ${room1}`);
         await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
         await eventManager.waitForTopologyChange(3000);
       }
       
       // Now test group volume
-      console.log(`📊 Testing group volume control`);
-      console.log(`   Room 1: ${room1} (${device1Id})`);
-      console.log(`   Room 2: ${room2} (${device2Id})`);
+      testLog.info(`📊 Testing group volume control`);
+      testLog.info(`   Room 1: ${room1} (${device1Id})`);
+      testLog.info(`   Room 2: ${room2} (${device2Id})`);
       
       // Note: According to Sonos docs, all devices in a group emit volume events for groupVolume
       // However, devices with fixed line-out might not change volume
@@ -512,25 +513,25 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       // Check actual state even if no events
       const stateResponse1 = await fetch(`${defaultConfig.apiUrl}/${room1}/state`);
       const state1 = await stateResponse1.json();
-      console.log(`Room 1 volume after groupVolume: ${state1.volume}`);
+      testLog.info(`Room 1 volume after groupVolume: ${state1.volume}`);
       
       let state2: any = null;
       if (room1 !== room2) {
         const stateResponse2 = await fetch(`${defaultConfig.apiUrl}/${room2}/state`);
         state2 = await stateResponse2.json();
-        console.log(`Room 2 volume after groupVolume: ${state2.volume}`);
+        testLog.info(`Room 2 volume after groupVolume: ${state2.volume}`);
       }
       
       if (!volumeChanged) {
-        console.log('⚠️  No volume events received - checking if volume was set correctly');
+        testLog.info('⚠️  No volume events received - checking if volume was set correctly');
         // If volume was set correctly on at least one device, that's still a pass
         if (state1.volume === 35 || (state2 && state2.volume === 35)) {
-          console.log('✅ Group volume set correctly despite no events');
+          testLog.info('✅ Group volume set correctly despite no events');
         } else {
           assert.fail('Group volume was not set correctly and no events received');
         }
       } else {
-        console.log('✅ Group volume control tested with events');
+        testLog.info('✅ Group volume control tested with events');
       }
       
       // Clean up - only ungroup if we created the group
@@ -553,7 +554,7 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: 6
       const response2 = await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/invalid`);
       assert(response2.status === 400 || response2.status === 404, 'Should reject invalid volume');
       
-      console.log('✅ Invalid volume values handled gracefully');
+      testLog.info('✅ Invalid volume values handled gracefully');
     });
   });
 });

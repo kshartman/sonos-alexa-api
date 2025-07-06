@@ -4,6 +4,8 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { loadTestAlbum, loadTestPlaylist } from '../helpers/content-loader.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -14,7 +16,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
   let deviceId: string;
   
   before(async () => {
-    console.log('🎛️  Testing playback modes...');
+    testLog.info('🎛️  Testing playback modes...');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events via SSE
@@ -28,7 +30,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       throw new Error('No suitable test room found');
     }
     
-    console.log(`   Test room: ${room}`);
+    testLog.info(`   Test room: ${room}`);
     
     // Get device ID for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -42,61 +44,40 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
     // Use coordinator device ID (important for stereo pairs)
     const coordinatorMember = zone.members.find(m => m.isCoordinator);
     deviceId = coordinatorMember.id;
-    console.log(`   Device ID: ${deviceId}`);
+    testLog.info(`   Device ID: ${deviceId}`);
     
     // Load content to enable playback mode changes
-    console.log('   Loading content for playback mode tests...');
+    testLog.info('   Loading content for playback mode tests...');
     
-    // Try to load content using favorites first (more reliable)
-    const favResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites`);
-    if (favResponse.ok) {
-      const favorites = await favResponse.json();
-      const radioStation = favorites.find(f => f.type === 'radio' || f.uri?.includes('radio'));
-      
-      if (radioStation) {
-        console.log(`   Loading favorite: ${radioStation.title}`);
-        const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorite/${encodeURIComponent(radioStation.title)}`);
-        if (playResponse.ok) {
-          // Wait for playback to start
-          await eventManager.waitForState(deviceId, 'PLAYING', 10000);
-          console.log('   ✅ Test content loaded and playing');
-          return;
-        }
-      }
-    }
-    
-    // Fallback to music search if favorites don't work
+    // Need multiple tracks for shuffle/repeat testing
     try {
-      const songQuery = 'track:Yesterday artist:The Beatles';
-      const searchResponse = await fetch(`${defaultConfig.apiUrl}/${room}/musicsearch/apple/song/${encodeURIComponent(songQuery)}`);
-      
-      if (searchResponse.ok) {
-        const result = await searchResponse.json();
-        if (result.status === 'success') {
-          // Wait for playback to start
-          await eventManager.waitForState(deviceId, 'PLAYING', 10000);
-          console.log('   ✅ Test content loaded and playing via music search');
-          return;
-        }
-      }
+      // Try to load an album first (guaranteed multiple tracks)
+      await loadTestAlbum(room);
+      testLog.info('   ✅ Loaded test album with multiple tracks');
     } catch (error) {
-      console.log('   ⚠️  Music search failed, trying another method...');
+      testLog.info('   ⚠️  Failed to load album, trying playlist...');
+      try {
+        // Fallback to playlist
+        await loadTestPlaylist(room);
+        testLog.info('   ✅ Loaded test playlist with multiple tracks');
+      } catch (playlistError) {
+        testLog.info('   ⚠️  Failed to load multi-track content:', playlistError.message);
+        throw new Error('Cannot test playback modes without multi-track content');
+      }
     }
     
-    // Last resort: Just try to play if there's already something in the queue
+    // Start playback
     const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/play`);
-    if (playResponse.ok) {
-      try {
-        await eventManager.waitForState(deviceId, 'PLAYING', 5000);
-        console.log('   ✅ Playing existing queue content');
-      } catch {
-        console.log('   ⚠️  Warning: Could not load test content, tests may fail');
-      }
+    if (!playResponse.ok) {
+      throw new Error('Failed to start playback');
     }
+    
+    await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+    testLog.info('   ✅ Playback started successfully');
   });
   
   after(async () => {
-    console.log('\n🧹 Cleaning up Playback Modes tests...\n');
+    testLog.info('\n🧹 Cleaning up Playback Modes tests...\n');
     
     // Stop playback
     if (room) {
@@ -112,7 +93,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
     // Give a moment for cleanup to complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    console.log('✓ Playback modes tests complete');
+    testLog.info('✓ Playback modes tests complete');
   });
   
   describe('Repeat Modes', () => {
@@ -249,7 +230,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       };
       
       // Enable all modes sequentially with proper delays and debug each step
-      console.log('   Setting repeat mode...');
+      testLog.info('   Setting repeat mode...');
       const repeatResponse = await fetch(`${defaultConfig.apiUrl}/${room}/repeat/on`);
       assert.strictEqual(repeatResponse.status, 200);
       
@@ -257,9 +238,9 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       let checkResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       let checkState = await checkResponse.json();
-      console.log(`   After repeat: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
+      testLog.info(`   After repeat: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
       
-      console.log('   Setting shuffle mode...');
+      testLog.info('   Setting shuffle mode...');
       const shuffleResponse = await fetch(`${defaultConfig.apiUrl}/${room}/shuffle/on`);
       assert.strictEqual(shuffleResponse.status, 200);
       
@@ -267,9 +248,9 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       checkResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       checkState = await checkResponse.json();
-      console.log(`   After shuffle: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
+      testLog.info(`   After shuffle: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
       
-      console.log('   Setting crossfade mode...');
+      testLog.info('   Setting crossfade mode...');
       const crossfadeResponse = await fetch(`${defaultConfig.apiUrl}/${room}/crossfade/on`);
       assert.strictEqual(crossfadeResponse.status, 200);
       
@@ -277,12 +258,12 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       checkResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       checkState = await checkResponse.json();
-      console.log(`   After crossfade: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
+      testLog.info(`   After crossfade: repeat=${checkState.playMode.repeat}, shuffle=${checkState.playMode.shuffle}, crossfade=${checkState.playMode.crossfade}`);
       
       // Final verification that all modes are set
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       const state = await stateResponse.json();
-      console.log(`   Final state: repeat=${state.playMode.repeat}, shuffle=${state.playMode.shuffle}, crossfade=${state.playMode.crossfade}`);
+      testLog.info(`   Final state: repeat=${state.playMode.repeat}, shuffle=${state.playMode.shuffle}, crossfade=${state.playMode.crossfade}`);
       
       assert.strictEqual(state.playMode.repeat, 'all');
       assert.strictEqual(state.playMode.shuffle, true);
@@ -335,7 +316,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       assert.strictEqual(queueResponse.status, 200);
       
       const queue = await queueResponse.json();
-      console.log(`   After clear - queue length: ${queue.length}`);
+      testLog.info(`   After clear - queue length: ${queue.length}`);
       
       assert.strictEqual(queue.length, 0, 'Queue should be empty after clearing');
     });

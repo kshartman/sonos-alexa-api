@@ -9,7 +9,8 @@ import { TTSService } from './services/tts-service.js';
 import { applicationVersion } from './version.js';
 import { loadConfiguration } from './utils/config-loader.js';
 import { PresetGenerator } from './utils/preset-generator.js';
-import type { Config, StateChangeEvent } from './types/sonos.js';
+import { EventManager } from './utils/event-manager.js';
+import type { Config } from './types/sonos.js';
 
 // Load configuration from multiple sources (this will show the startup banner)
 const config: Config = loadConfiguration();
@@ -66,68 +67,9 @@ const server = http.createServer((req, res) => {
 // Webhook support
 let webhookClients: ServerResponse[] = [];
 
-discovery.on('device-state-change', (device, state, previousState) => {
-  debugManager.info('sse', `Forwarding device-state-change event for ${device.roomName}`);
-  
-  // Create a serializable state without circular references
-  const serializableState = {
-    playbackState: state.playbackState,
-    volume: state.volume,
-    mute: state.mute,
-    currentTrack: state.currentTrack
-    // Exclude coordinator to avoid circular reference
-  };
-  
-  const event: StateChangeEvent = {
-    type: 'device-state-change',
-    data: {
-      room: device.roomName,
-      deviceId: device.id,
-      state: serializableState,
-      ...(previousState ? { previousState } : {})
-    }
-  };
+// Get EventManager instance  
+const eventManagerInstance = EventManager.getInstance();
 
-  // Send to webhooks
-  config.webhooks.forEach(webhook => {
-    // Skip invalid URLs
-    try {
-      new URL(webhook.url);
-    } catch (_err) {
-      return;
-    }
-    
-    fetch(webhook.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...webhook.headers
-      },
-      body: JSON.stringify(event)
-    }).catch(err => {
-      let errorMsg = 'Unknown error';
-      if (err instanceof Error) {
-        // Check for Node.js system errors with cause
-        const cause = (err as Error & { cause?: { code?: string } }).cause;
-        errorMsg = cause?.code || err.message;
-      }
-      logger.error(`Webhook error for ${webhook.url}:`, errorMsg);
-    });
-  });
-
-  // Send to SSE clients
-  const sseData = `data: ${JSON.stringify(event)}\n\n`;
-  debugManager.debug('sse', `Sending to ${webhookClients.length} SSE clients`);
-  webhookClients = webhookClients.filter(client => {
-    try {
-      client.write(sseData);
-      return true;
-    } catch (err) {
-      debugManager.error('sse', 'Error writing to client:', err);
-      return false;
-    }
-  });
-});
 
 // Forward content update events
 discovery.on('content-update', (deviceId, containerUpdateIDs) => {
@@ -176,11 +118,42 @@ discovery.on('topology-change', (_zones) => {
 });
 
 // Forward track change events
-discovery.on('track-change', (trackEvent) => {
+eventManagerInstance.on('track-change', (trackEvent: any) => {
   const event = {
     type: 'track-change',
     data: {
       ...trackEvent,
+      timestamp: new Date().toISOString()
+    }
+  };
+  
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  webhookClients = webhookClients.filter(client => {
+    try {
+      client.write(sseData);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  });
+});
+
+// Forward state change events
+eventManagerInstance.on('state-change', (stateEvent: any) => {
+  const event = {
+    type: 'device-state-change',
+    data: {
+      room: stateEvent.roomName,
+      deviceId: stateEvent.deviceId,
+      state: {
+        playbackState: stateEvent.currentState,
+        // Include volume and mute if available
+        volume: undefined,
+        mute: undefined
+      },
+      previousState: {
+        playbackState: stateEvent.previousState
+      },
       timestamp: new Date().toISOString()
     }
   };

@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import logger from './logger.js';
 import type { SonosDevice } from '../sonos-device.js';
 import type { ZoneGroup } from '../topology-manager.js';
-import type { SonosTrack } from '../types/sonos.js';
+import type { SonosTrack, SonosState } from '../types/sonos.js';
 
 // Helper function to compare device IDs, handling uuid: prefix
 function compareDeviceIds(id1: string, id2: string): boolean {
@@ -62,10 +62,26 @@ export class EventManager extends EventEmitter {
   private static instance: EventManager;
   private stateHistory: Map<string, StateChangeEvent[]> = new Map();
   private muteHistory: Map<string, MuteChangeEvent[]> = new Map();
+  private deviceListeners: Map<string, (state: SonosState, previousState?: Partial<SonosState>) => void> = new Map();
+  
+  // Device lifecycle tracking
+  private registeredDevices: Set<string> = new Set(); // Devices that should have listeners
+  private lastEventTime: Map<string, number> = new Map(); // Track last event per device
+  private deviceHealthTimeout = 3600000; // 1 hour - if no events, consider unhealthy
+  private staleNotifyTimeout = 90000; // 90 seconds - if no NOTIFY events, subscription may be stale
+  private healthCheckInterval?: NodeJS.Timeout;
+  private healthCheckIntervalMs = 60000; // Check every minute
+  
+  // Group/stereo pair tracking for event handling
+  private groupMembersCache: Map<string, string[]> = new Map(); // device ID -> all IDs in group
+  private discovery?: any; // Reference to discovery for topology info
   
   private constructor() {
     super();
     this.setMaxListeners(100); // Support many concurrent tests
+    
+    // Start periodic health checks
+    this.startHealthCheck();
     
     // Track mute change events for history
     this.on('mute-change', (event: MuteChangeEvent) => {
@@ -96,43 +112,80 @@ export class EventManager extends EventEmitter {
     targetState: string | ((state: string) => boolean),
     timeout = 5000
   ): Promise<boolean> {
-    // First check if we're already in the target state
-    const currentState = this.getCurrentState(deviceId);
-    if (currentState) {
-      const matches = typeof targetState === 'function' 
-        ? targetState(currentState)
-        : currentState === targetState;
-      if (matches) {
-        return true; // Already in target state
+    logger.trace(`EventManager: waitForState called for device ${deviceId}, target: ${typeof targetState === 'function' ? 'function' : targetState}, timeout: ${timeout}ms`);
+    
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    logger.trace(`EventManager: waitForState - group members: ${groupMembers.join(', ')}`);
+    
+    // First check if we're already in the target state (check all group members)
+    for (const memberId of groupMembers) {
+      const currentState = this.getCurrentState(memberId);
+      logger.trace(`EventManager: waitForState - checking member ${memberId}, current state: ${currentState}`);
+      
+      if (currentState) {
+        const matches = typeof targetState === 'function' 
+          ? targetState(currentState)
+          : currentState === targetState;
+        if (matches) {
+          logger.trace(`EventManager: waitForState - device ${memberId} (group member of ${deviceId}) already in target state: ${currentState}`);
+          return true; // Already in target state
+        }
       }
     }
     
+    logger.trace(`EventManager: waitForState - no group members in target state, setting up listener`);
+    
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
+        logger.trace(`EventManager: waitForState - timeout reached for ${deviceId}`);
         this.off('state-change', stateHandler);
         resolve(false);
       }, timeout);
       
       const stateHandler = (event: StateChangeEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId)) {
+        logger.trace(`EventManager: waitForState - state-change event received from ${event.deviceId}: ${event.previousState} -> ${event.currentState}`);
+        
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember) {
           const matches = typeof targetState === 'function' 
             ? targetState(event.currentState)
             : event.currentState === targetState;
             
+          logger.trace(`EventManager: waitForState - group member ${event.deviceId}, matches target: ${matches}`);
+            
           if (matches) {
+            logger.trace(`EventManager: waitForState - received state change from ${event.deviceId} (group member of ${deviceId})`);
             clearTimeout(timeoutId);
             this.off('state-change', stateHandler);
             resolve(true);
           }
+        } else {
+          logger.trace(`EventManager: waitForState - ignoring state change from ${event.deviceId} (not in group)`);
         }
       };
       
+      logger.trace(`EventManager: waitForState - registered handler, waiting for state-change events`);
       this.on('state-change', stateHandler);
     });
   }
   
   // Wait for device to exit TRANSITIONING state
   async waitForStableState(deviceId: string, timeout = 10000): Promise<string | null> {
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    
+    // First check if we're already in a stable state (check all group members)
+    for (const memberId of groupMembers) {
+      const currentState = this.getCurrentState(memberId);
+      if (currentState && currentState !== 'TRANSITIONING') {
+        logger.trace(`EventManager: waitForStableState - device ${memberId} (group member of ${deviceId}) already in stable state: ${currentState}`);
+        return currentState; // Already in stable state
+      }
+    }
+    
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('state-change', stateHandler);
@@ -140,7 +193,11 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const stateHandler = (event: StateChangeEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId) && event.currentState !== 'TRANSITIONING') {
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember && event.currentState !== 'TRANSITIONING') {
+          logger.trace(`EventManager: waitForStableState - received stable state from ${event.deviceId} (group member of ${deviceId})`);
           clearTimeout(timeoutId);
           this.off('state-change', stateHandler);
           resolve(event.currentState);
@@ -153,6 +210,9 @@ export class EventManager extends EventEmitter {
   
   // Wait for volume to reach target
   async waitForVolume(deviceId: string, targetVolume: number, timeout = 5000): Promise<boolean> {
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('volume-change', volumeHandler);
@@ -160,7 +220,11 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const volumeHandler = (event: VolumeChangeEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId) && event.currentVolume === targetVolume) {
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember && event.currentVolume === targetVolume) {
+          logger.trace(`EventManager: waitForVolume - received volume change from ${event.deviceId} (group member of ${deviceId})`);
           clearTimeout(timeoutId);
           this.off('volume-change', volumeHandler);
           resolve(true);
@@ -191,10 +255,16 @@ export class EventManager extends EventEmitter {
   
   // Wait for mute change
   async waitForMute(deviceId: string, targetMute: boolean, timeout = 5000): Promise<boolean> {
-    // First check if we're already in the target mute state
-    const currentMute = this.getCurrentMute(deviceId);
-    if (currentMute !== null && currentMute === targetMute) {
-      return true; // Already in target mute state
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    
+    // First check if we're already in the target mute state (check all group members)
+    for (const memberId of groupMembers) {
+      const currentMute = this.getCurrentMute(memberId);
+      if (currentMute !== null && currentMute === targetMute) {
+        logger.trace(`EventManager: waitForMute - device ${memberId} (group member of ${deviceId}) already in target mute state: ${currentMute}`);
+        return true; // Already in target mute state
+      }
     }
     
     return new Promise((resolve) => {
@@ -204,7 +274,11 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const muteHandler = (event: MuteChangeEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId) && event.currentMute === targetMute) {
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember && event.currentMute === targetMute) {
+          logger.trace(`EventManager: waitForMute - received mute change from ${event.deviceId} (group member of ${deviceId})`);
           clearTimeout(timeoutId);
           this.off('mute-change', muteHandler);
           resolve(true);
@@ -217,6 +291,9 @@ export class EventManager extends EventEmitter {
   
   // Wait for content update
   async waitForContentUpdate(deviceId: string, timeout = 5000): Promise<string | null> {
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('content-update', contentHandler);
@@ -224,7 +301,11 @@ export class EventManager extends EventEmitter {
       }, timeout);
       
       const contentHandler = (event: ContentUpdateEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId)) {
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember) {
+          logger.trace(`EventManager: waitForContentUpdate - received content update from ${event.deviceId} (group member of ${deviceId})`);
           clearTimeout(timeoutId);
           this.off('content-update', contentHandler);
           resolve(event.containerUpdateIDs);
@@ -255,26 +336,44 @@ export class EventManager extends EventEmitter {
   
   // Wait for track change
   async waitForTrackChange(deviceId: string, timeout = 5000): Promise<boolean> {
+    logger.trace(`EventManager: waitForTrackChange called for device ${deviceId} with timeout ${timeout}ms`);
+    
+    // Get all group members for this device
+    const groupMembers = this.getGroupMembers(deviceId);
+    logger.trace(`EventManager: waitForTrackChange - group members: ${groupMembers.join(', ')}`);
+    
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
+        logger.trace(`EventManager: waitForTrackChange - timeout reached for ${deviceId}`);
         this.off('track-change', trackHandler);
         resolve(false);
       }, timeout);
       
       const trackHandler = (event: TrackChangeEvent) => {
-        if (compareDeviceIds(event.deviceId, deviceId)) {
+        logger.trace(`EventManager: waitForTrackChange - track-change event received from ${event.deviceId}`);
+        
+        // Check if the event is from any device in the group
+        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        
+        if (isGroupMember) {
+          logger.trace(`EventManager: waitForTrackChange - received track change from ${event.deviceId} (group member of ${deviceId})`);
           clearTimeout(timeoutId);
           this.off('track-change', trackHandler);
           resolve(true);
+        } else {
+          logger.trace(`EventManager: waitForTrackChange - ignoring track change from ${event.deviceId} (not in group)`);
         }
       };
       
+      logger.trace(`EventManager: waitForTrackChange - registered handler, waiting for track-change events`);
       this.on('track-change', trackHandler);
     });
   }
   
   // Emit state change and track history
   emitStateChange(device: SonosDevice, previousState: string, currentState: string) {
+    logger.trace(`EventManager: emitStateChange called for ${device.roomName} (${device.id}): ${previousState} -> ${currentState}`);
+    
     const event: StateChangeEvent = {
       deviceId: device.id,
       roomName: device.roomName,
@@ -327,5 +426,264 @@ export class EventManager extends EventEmitter {
     this.removeAllListeners();
     this.stateHistory.clear();
     this.muteHistory.clear();
+    // Remove all device listeners
+    for (const [deviceId, listener] of this.deviceListeners) {
+      const device = global.discovery?.getDeviceById(deviceId);
+      if (device) {
+        device.off('state-change', listener);
+      }
+    }
+    this.deviceListeners.clear();
+    this.registeredDevices.clear();
+    this.lastEventTime.clear();
+    this.stopHealthCheck();
+  }
+  
+  // Register a device with the EventManager
+  registerDevice(device: any): void {
+    // Track that we want to listen to this device
+    this.registeredDevices.add(device.id);
+    
+    // Check if already has an active listener
+    if (this.deviceListeners.has(device.id)) {
+      logger.debug(`EventManager: Device ${device.roomName} (${device.id}) already has active listener`);
+      return;
+    }
+    
+    // Create a new listener for this device
+    const listener = (state: SonosState, previousState?: Partial<SonosState>) => {
+      logger.trace(`EventManager: Received state change for ${device.roomName} (${device.id}) - playback: ${previousState?.playbackState} -> ${state.playbackState}`);
+      
+      // Update last event time for health tracking
+      this.lastEventTime.set(device.id, Date.now());
+      // Emit state change event
+      if (state.playbackState !== previousState?.playbackState) {
+        this.emitStateChange(device, previousState?.playbackState || 'UNKNOWN', state.playbackState);
+      }
+      
+      // Emit volume change event  
+      if (state.volume !== previousState?.volume && previousState?.volume !== undefined) {
+        const volumeEvent: VolumeChangeEvent = {
+          deviceId: device.id,
+          roomName: device.roomName,
+          previousVolume: previousState.volume,
+          currentVolume: state.volume,
+          timestamp: Date.now()
+        };
+        this.emit('volume-change', volumeEvent);
+      }
+      
+      // Emit mute change event
+      if (state.mute !== previousState?.mute && previousState?.mute !== undefined) {
+        const muteEvent: MuteChangeEvent = {
+          deviceId: device.id,
+          roomName: device.roomName,
+          previousMute: previousState.mute,
+          currentMute: state.mute,
+          timestamp: Date.now()
+        };
+        this.emit('mute-change', muteEvent);
+      }
+      
+      // Emit track change event
+      if (state.currentTrack !== previousState?.currentTrack) {
+        logger.trace(`EventManager: Track change detected for ${device.roomName} (${device.id})`);
+        logger.trace(`  Previous track: ${JSON.stringify(previousState?.currentTrack)}`);
+        logger.trace(`  Current track: ${JSON.stringify(state.currentTrack)}`);
+        
+        const trackEvent: TrackChangeEvent = {
+          deviceId: device.id,
+          roomName: device.roomName,
+          previousTrack: previousState?.currentTrack || null,
+          currentTrack: state.currentTrack,
+          timestamp: Date.now()
+        };
+        
+        logger.trace(`EventManager: Emitting track-change event for ${device.roomName}`);
+        this.emit('track-change', trackEvent);
+      } else {
+        logger.trace(`EventManager: No track change for ${device.roomName} - tracks are the same`);
+      }
+    };
+    
+    // Store the listener reference so we can remove it later
+    this.deviceListeners.set(device.id, listener);
+    
+    // Add the listener to the device
+    device.on('state-change', listener);
+    
+    logger.debug(`EventManager: Registered device ${device.roomName} (${device.id})`);
+  }
+  
+  // Unregister a device from the EventManager  
+  unregisterDevice(deviceId: string, permanent: boolean = true): void {
+    // Remove from registered devices if permanent
+    if (permanent) {
+      this.registeredDevices.delete(deviceId);
+      this.lastEventTime.delete(deviceId);
+    }
+    
+    const listener = this.deviceListeners.get(deviceId);
+    if (listener) {
+      const device = global.discovery?.getDeviceById(deviceId);
+      if (device) {
+        device.off('state-change', listener);
+        logger.debug(`EventManager: Unregistered device ${device.roomName} (${deviceId})`);
+      }
+      this.deviceListeners.delete(deviceId);
+    }
+  }
+  
+  // Handle device going offline
+  handleDeviceOffline(deviceId: string): void {
+    logger.debug(`EventManager: Device ${deviceId} went offline`);
+    // Remove active listener but keep registration
+    this.unregisterDevice(deviceId, false);
+  }
+  
+  // Handle device coming back online
+  handleDeviceOnline(device: any): void {
+    logger.debug(`EventManager: Device ${device.roomName} (${device.id}) came online`);
+    // If we should be listening to this device, re-register
+    if (this.registeredDevices.has(device.id)) {
+      logger.debug(`EventManager: Re-registering listener for ${device.roomName}`);
+      this.registerDevice(device);
+    }
+  }
+  
+  // Check if a device is healthy based on last event time
+  isDeviceHealthy(deviceId: string): boolean {
+    const lastEvent = this.lastEventTime.get(deviceId);
+    if (!lastEvent) return false;
+    return (Date.now() - lastEvent) < this.deviceHealthTimeout;
+  }
+  
+  // Get devices that haven't sent events recently
+  getUnhealthyDevices(): string[] {
+    const unhealthy: string[] = [];
+    for (const [deviceId, lastEvent] of this.lastEventTime) {
+      if ((Date.now() - lastEvent) >= this.deviceHealthTimeout) {
+        unhealthy.push(deviceId);
+      }
+    }
+    return unhealthy;
+  }
+  
+  // Get device health status
+  getDeviceHealth(): Map<string, {registered: boolean, hasListener: boolean, lastEventMs: number | null, healthy: boolean, staleNotify: boolean}> {
+    const health = new Map();
+    
+    // Check all registered devices
+    for (const deviceId of this.registeredDevices) {
+      const lastEvent = this.lastEventTime.get(deviceId);
+      const hasListener = this.deviceListeners.has(deviceId);
+      const lastEventMs = lastEvent ? Date.now() - lastEvent : null;
+      health.set(deviceId, {
+        registered: true,
+        hasListener,
+        lastEventMs,
+        healthy: lastEvent ? (Date.now() - lastEvent) < this.deviceHealthTimeout : false,
+        staleNotify: lastEvent ? (Date.now() - lastEvent) > this.staleNotifyTimeout : true
+      });
+    }
+    
+    return health;
+  }
+  
+  // Check if device has stale NOTIFY (no events for 90+ seconds)
+  hasStaleNotify(deviceId: string): boolean {
+    const lastEvent = this.lastEventTime.get(deviceId);
+    if (!lastEvent) return true; // No events ever = stale
+    return (Date.now() - lastEvent) > this.staleNotifyTimeout;
+  }
+  
+  // Get all devices with stale NOTIFY subscriptions
+  getStaleNotifyDevices(): string[] {
+    const stale: string[] = [];
+    for (const deviceId of this.registeredDevices) {
+      if (this.hasStaleNotify(deviceId)) {
+        stale.push(deviceId);
+      }
+    }
+    return stale;
+  }
+  
+  // Handle subscription renewal failure - device is likely offline
+  handleSubscriptionFailure(deviceId: string): void {
+    logger.warn(`EventManager: Device ${deviceId} subscription failed - marking as offline`);
+    this.handleDeviceOffline(deviceId);
+    this.emit('device-offline', { deviceId, timestamp: Date.now() });
+  }
+  
+  // Handle successful subscription renewal
+  handleSubscriptionRenewal(deviceId: string): void {
+    // Update last event time to prevent false positives
+    this.lastEventTime.set(deviceId, Date.now());
+    logger.debug(`EventManager: Device ${deviceId} subscription renewed`);
+  }
+  
+  // Start periodic health checks
+  private startHealthCheck(): void {
+    this.healthCheckInterval = setInterval(() => {
+      const staleDevices = this.getStaleNotifyDevices();
+      if (staleDevices.length > 0) {
+        logger.debug(`EventManager: Found ${staleDevices.length} devices with stale NOTIFY subscriptions`);
+        // Emit event so discovery can attempt to resubscribe
+        this.emit('devices-need-resubscribe', staleDevices);
+      }
+    }, this.healthCheckIntervalMs);
+  }
+  
+  // Stop health checks (for cleanup)
+  stopHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
+    }
+  }
+  
+  // Set discovery reference for group tracking
+  setDiscovery(discovery: any): void {
+    this.discovery = discovery;
+    // Update group cache when discovery is set
+    this.updateGroupMembersCache();
+  }
+  
+  // Update group members cache from current topology
+  updateGroupMembersCache(): void {
+    if (!this.discovery) return;
+    
+    const topology = this.discovery.getTopology();
+    if (!topology?.zones) return;
+    
+    // Clear existing cache
+    this.groupMembersCache.clear();
+    
+    // Build cache from topology
+    for (const zone of topology.zones) {
+      const memberIds = zone.members.map((m: any) => m.id);
+      
+      // For each member in the zone, store all member IDs
+      for (const member of zone.members) {
+        this.groupMembersCache.set(member.id, memberIds);
+      }
+    }
+    
+    logger.debug(`EventManager: Updated group members cache with ${this.groupMembersCache.size} entries`);
+  }
+  
+  // Get all device IDs in the same group as the given device
+  getGroupMembers(deviceId: string): string[] {
+    // Strip uuid: prefix for consistency
+    const cleanId = deviceId.startsWith('uuid:') ? deviceId : `uuid:${deviceId}`;
+    const members = this.groupMembersCache.get(cleanId);
+    
+    if (members) {
+      logger.trace(`EventManager: Device ${deviceId} is in group with ${members.length} members`);
+      return members;
+    }
+    
+    // If not in cache, return just the device itself
+    return [cleanId];
   }
 }

@@ -4,7 +4,8 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -16,7 +17,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
   let originalVolume: number;
   
   before(async () => {
-    console.log('🗣️  Testing text-to-speech...');
+    testLog.info('🗣️  Testing text-to-speech...');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events via SSE
@@ -30,7 +31,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       throw new Error('No suitable test room found');
     }
     
-    console.log(`   Test room: ${room}`);
+    testLog.info(`   Test room: ${room}`);
     
     // Get device ID for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -44,7 +45,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
     // Use coordinator device ID (important for stereo pairs)
     const coordinatorMember = zone.members.find(m => m.isCoordinator);
     deviceId = coordinatorMember.id;
-    console.log(`   Device ID: ${deviceId}`);
+    testLog.info(`   Device ID: ${deviceId}`);
     
     // Get initial volume
     const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
@@ -53,7 +54,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
   });
   
   after(async () => {
-    console.log('\n🧹 Cleaning up TTS tests...\n');
+    testLog.info('\n🧹 Cleaning up TTS tests...\n');
     
     // Stop playback
     if (room) {
@@ -63,7 +64,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
     // Restore original volume
     if (room && originalVolume > 0) {
       await fetch(`${defaultConfig.apiUrl}/${room}/volume/${originalVolume}`);
-      console.log(`✅ Restored volume to ${originalVolume}`);
+      testLog.info(`✅ Restored volume to ${originalVolume}`);
     }
     
     // Clear any pending event listeners
@@ -75,15 +76,15 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
     // Give a moment for cleanup to complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    console.log('✓ TTS tests complete');
+    testLog.info('✓ TTS tests complete');
   });
   
   describe('Core TTS Functionality', () => {
     it('Test 1: Say to playing room with different volume, verify playback and volume restore', { timeout: 60000 }, async () => {
-      console.log('   Test 1: Setting up - playing song at low volume');
+      testLog.info('   Test 1: Setting up - playing song at low volume');
       
       // Load content and start playing
-      await loadTestContent(room);
+      await loadTestSong(room, true);
       await eventManager.waitForState(deviceId, 'PLAYING', 10000);
       
       // Set low volume (20)
@@ -93,10 +94,10 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       // Get current track info
       const beforeState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       const stateBefore = await beforeState.json();
-      console.log(`   Playing: ${stateBefore.currentTrack?.title || 'Stream'} at volume 20`);
+      testLog.info(`   Playing: ${stateBefore.currentTrack?.title || 'Stream'} at volume 20`);
       
       // Make announcement at volume 50
-      console.log('   Making announcement at volume 50');
+      testLog.info('   Making announcement at volume 50');
       const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/Test%20case%201:%20Volume%20and%20playback%20restore/50`);
       assert.strictEqual(response.status, 200);
       
@@ -109,13 +110,13 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       // Get current state for debugging
       const afterState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
       const stateAfter = await afterState.json();
-      console.log(`   Current state after TTS: volume=${stateAfter.volume}, playback=${stateAfter.playbackState}`);
+      testLog.info(`   Current state after TTS: volume=${stateAfter.volume}, playback=${stateAfter.playbackState}`);
       
       // For now, let's be more lenient - check if volume is close to 20 (within 5)
       const volumeIsClose = Math.abs(stateAfter.volume - 20) <= 5;
       
       if (!volumeRestored && !volumeIsClose) {
-        console.log(`   WARNING: Volume not restored exactly. Expected: 20, Got: ${stateAfter.volume}`);
+        testLog.info(`   WARNING: Volume not restored exactly. Expected: 20, Got: ${stateAfter.volume}`);
       }
       
       // Check playback restored
@@ -125,16 +126,16 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       // Verify final state
       assert(volumeIsClose || stateAfter.volume === 20, `Volume should be close to 20, got ${stateAfter.volume}`);
       assert.strictEqual(stateAfter.playbackState, 'PLAYING', 'Should be playing');
-      console.log(`   ✓ Playback restored, volume is ${stateAfter.volume} (expected ~20)`);
+      testLog.info(`   ✓ Playback restored, volume is ${stateAfter.volume} (expected ~20)`);
     });
     
     it('Test 2: TTS using default room', async () => {
-      console.log('   Test 2: Testing TTS via default room');
+      testLog.info('   Test 2: Testing TTS via default room');
       
       // Make sure we have a default room set
       const setDefaultResponse = await fetch(`${defaultConfig.apiUrl}/default/room/${room}`);
       assert.strictEqual(setDefaultResponse.status, 200);
-      console.log(`   Set default room to: ${room}`);
+      testLog.info(`   Set default room to: ${room}`);
       
       // Since there's no roomless TTS endpoint, we'll test that default room was set correctly
       const defaultsResponse = await fetch(`${defaultConfig.apiUrl}/default`);
@@ -148,11 +149,11 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       
       // Wait for announcement
       await new Promise(resolve => setTimeout(resolve, 4000));
-      console.log('   ✓ TTS with default room completed');
+      testLog.info('   ✓ TTS with default room completed');
     });
     
     it('Test 3: Say to paused room, verify stays paused', async () => {
-      console.log('   Test 3: Testing TTS on paused room');
+      testLog.info('   Test 3: Testing TTS on paused room');
       
       // Make sure we're playing first
       const currentState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
@@ -164,7 +165,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       }
       
       // Now pause
-      console.log('   Pausing playback');
+      testLog.info('   Pausing playback');
       await fetch(`${defaultConfig.apiUrl}/${room}/pause`);
       await eventManager.waitForState(deviceId, state => 
         state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 5000);
@@ -181,11 +182,11 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       const stateFinal = await finalState.json();
       assert(['PAUSED_PLAYBACK', 'STOPPED'].includes(stateFinal.playbackState), 
         `Should be paused/stopped, got ${stateFinal.playbackState}`);
-      console.log('   ✓ Room stayed paused after TTS');
+      testLog.info('   ✓ Room stayed paused after TTS');
     });
     
     it('Test 4: Sayall with no room specified', async () => {
-      console.log('   Test 4: Testing sayall without room');
+      testLog.info('   Test 4: Testing sayall without room');
       
       const response = await fetch(`${defaultConfig.apiUrl}/sayall/Test%20case%204:%20Say%20all%20no%20room`);
       assert.strictEqual(response.status, 200);
@@ -195,11 +196,11 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       
       // Just wait for announcement to play
       await new Promise(resolve => setTimeout(resolve, 4000));
-      console.log('   ✓ Sayall completed');
+      testLog.info('   ✓ Sayall completed');
     });
     
     it('Test 5: Sayall from specific room', async () => {
-      console.log('   Test 5: Testing sayall from specific room');
+      testLog.info('   Test 5: Testing sayall from specific room');
       
       const response = await fetch(`${defaultConfig.apiUrl}/${room}/sayall/Test%20case%205:%20Say%20all%20from%20room`);
       assert.strictEqual(response.status, 200);
@@ -209,7 +210,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration }, () => {
       
       // Just wait for announcement to play
       await new Promise(resolve => setTimeout(resolve, 4000));
-      console.log('   ✓ Room sayall completed');
+      testLog.info('   ✓ Room sayall completed');
     });
   });
   

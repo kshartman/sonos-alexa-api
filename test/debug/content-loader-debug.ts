@@ -1,6 +1,6 @@
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
 
 // Debug content loading issues
 async function debugContentLoading() {
@@ -77,16 +77,15 @@ async function debugContentLoading() {
     }
     
     // Test 3: Try loading content
-    console.log('\n--- Test 3: Testing loadTestContent ---');
-    console.log('Calling loadTestContent...');
+    console.log('\n--- Test 3: Testing loadTestSong ---');
+    console.log('Calling loadTestSong...');
     const startTime = Date.now();
-    const result = await loadTestContent(testRoom);
-    const elapsed = Date.now() - startTime;
-    
-    console.log(`Result: ${result}`);
-    console.log(`Time taken: ${elapsed}ms`);
-    
-    if (result) {
+    try {
+      await loadTestSong(testRoom, true);
+      const elapsed = Date.now() - startTime;
+      
+      console.log(`Success!`);
+      console.log(`Time taken: ${elapsed}ms`);
       // Check state
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await stateResponse.json();
@@ -94,6 +93,8 @@ async function debugContentLoading() {
       console.log(`  Playback state: ${state.playbackState}`);
       console.log(`  Track: ${state.currentTrack?.title || 'None'}`);
       console.log(`  Artist: ${state.currentTrack?.artist || 'None'}`);
+    } catch (error) {
+      console.log(`Failed to load content: ${error}`);
     }
     
     // Test 4: Try direct music search

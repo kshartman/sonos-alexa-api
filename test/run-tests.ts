@@ -3,7 +3,6 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { startServer, stopServer, isServerRunning, waitForServer } from './helpers/server-manager.js';
-import { DebugSettingsManager } from './helpers/debug-settings-manager.js';
 import { defaultConfig } from './helpers/test-config.js';
 import * as dotenv from 'dotenv';
 
@@ -19,7 +18,9 @@ console.log('🧪 Sonos API Test Suite\n');
 const args = process.argv.slice(2);
 const mockOnly = args.includes('--mock-only');
 const noServer = args.includes('--no-server') || process.env.NO_SERVER === 'true';
-const enableDebug = args.includes('--debug');
+const enableInteractive = args.includes('--interactive');
+const noTimeout = args.includes('--no-timeout') || enableInteractive; // Interactive mode implies no timeout
+const enableLogging = args.includes('--log');
 
 // Extract grep pattern if provided
 let grepPattern: string | undefined;
@@ -42,11 +43,10 @@ const testMode = mockOnly ? 'mock-only' : 'integration';
 // Set environment variables
 process.env.TEST_MODE = testMode;
 process.env.MOCK_ONLY = mockOnly ? 'true' : 'false';
-process.env.TEST_DEBUG = enableDebug ? 'true' : 'false';
 
 // Set log level for test process (affects EventBridge and other helpers that use the logger)
-if (!enableDebug && !process.env.LOG_LEVEL) {
-  process.env.LOG_LEVEL = 'error';  // Only show errors during tests unless debug is enabled
+if (!process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL = 'error';  // Only show errors during tests unless explicitly set
 }
 
 // Get the actual API URL that will be used
@@ -60,21 +60,50 @@ console.log(`   Mock only: ${mockOnly}`);
 console.log(`   API URL: ${apiUrl}`);
 console.log(`   Remote API: ${isRemoteApi}`);
 console.log(`   Auto-start server: ${shouldAutoStart}`);
-console.log(`   Debug mode: ${enableDebug ? 'enabled' : 'disabled'}`);
 console.log(`   Pattern: ${pattern}`);
 if (grepPattern) {
   console.log(`   Grep: ${grepPattern}`);
 }
-console.log(`   Concurrency: Sequential (1 test file at a time)\n`);
+console.log(`   Concurrency: Sequential (1 test file at a time)`);
+if (noTimeout) {
+  console.log(`   Timeouts: Disabled`);
+}
+if (enableLogging) {
+  console.log(`   Logging: Enabled (logs/test-run.log)`);
+}
+if (enableInteractive) {
+  console.log(`   Interactive: Enabled (will pause for user input, timeouts disabled)`);
+}
+console.log();
 
 if (!mockOnly) {
   console.log('⚠️  Integration tests will run against your Sonos system.');
   console.log('   Use --mock-only to run only unit tests.\n');
 }
 
+async function handleTestExit(code: number, shouldStopServer: boolean, enableLogging: boolean, logPath?: string) {
+  // Clean up server if we started it
+  if (shouldStopServer) {
+    console.log('\n🛑 Stopping test server...');
+    await stopServer();
+  }
+
+  if (code === 0) {
+    console.log('\n✅ All tests passed!');
+    if (enableLogging && logPath) {
+      console.log(`📝 Test log saved to: ${logPath}`);
+    }
+  } else {
+    console.log(`\n❌ Tests failed with code ${code}`);
+    if (enableLogging && logPath) {
+      console.log(`📝 Test log saved to: ${logPath}`);
+    }
+  }
+  process.exit(code);
+}
+
 async function runTests() {
   let shouldStopServer = false;
-  const debugManager = new DebugSettingsManager();
 
   try {
     // Check if we need to start the server
@@ -92,13 +121,6 @@ async function runTests() {
       console.log(`🌐 Using remote API at ${apiUrl}\n`);
     }
       
-    // Only enable debug mode if --debug flag is passed
-    if (enableDebug && !mockOnly && !noServer) {
-      console.log('🔧 Enabling debug mode for tests...');
-      await debugManager.save();
-      await debugManager.enableDebugMode();
-      console.log('');
-    }
 
     // Run tests using tsx to handle TypeScript files
     // IMPORTANT: Using --test-concurrency=1 to run tests sequentially
@@ -109,6 +131,12 @@ async function runTests() {
       '--test-reporter=spec'
     ];
     
+    // Disable test timeout if requested
+    if (noTimeout) {
+      testArgs.push('--test-timeout=0');
+      console.log('⏱️  Test timeouts disabled\n');
+    }
+    
     // Add grep pattern if provided
     if (grepPattern) {
       testArgs.push(`--test-name-pattern=${grepPattern}`);
@@ -117,41 +145,50 @@ async function runTests() {
     // Don't prepend test/ if pattern already includes it
     testArgs.push(pattern.startsWith('test/') ? pattern : `test/${pattern}`);
     
+    // Set environment variables for test process
+    const testEnv = { 
+      ...process.env,
+      TEST_LOGGING: enableLogging ? 'true' : 'false',
+      TEST_INTERACTIVE: enableInteractive ? 'true' : 'false'
+    };
+    
+    // Generate log file path if logging is enabled
+    if (enableLogging) {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      testEnv.TEST_LOG_PATH = join(__dirname, '..', 'logs', `test-run-${timestamp}.log`);
+      console.log(`📝 Test output will be logged to: ${testEnv.TEST_LOG_PATH}\n`);
+    }
+    
+    // Run tests with proper stdio configuration
     const testProcess = spawn('npx', testArgs, {
-      stdio: 'inherit',
+      stdio: enableInteractive ? ['inherit', 'pipe', 'inherit'] : 'inherit',
       cwd: join(__dirname, '..'),
-      env: { ...process.env }
+      env: testEnv
     });
-
+    
+    // Monitor stdout for interactive wait markers if in interactive mode
+    if (enableInteractive && testProcess.stdout) {
+      testProcess.stdout.on('data', (data) => {
+        const output = data.toString();
+        process.stdout.write(output);
+        
+        // Check for wait marker
+        if (output.includes('[WAITING_FOR_EXTERNAL_TRIGGER]')) {
+          const triggerFile = join(__dirname, '..', 'tmp', 'test-continue.flag');
+          console.log('\n🔔 Test is waiting for user action!');
+          console.log(`📝 To continue: touch ${triggerFile}`);
+          console.log(`   Or run: ${join(__dirname, 'continue.sh')}\n`);
+        }
+      });
+    }
+    
     testProcess.on('close', async (code) => {
-      // Restore debug settings if we enabled them
-      if (enableDebug && !mockOnly && !noServer) {
-        console.log('\n🔧 Restoring debug settings...');
-        await debugManager.restore();
-      }
-      
-      // Clean up server if we started it
-      if (shouldStopServer) {
-        console.log('\n🛑 Stopping test server...');
-        await stopServer();
-      }
-
-      if (code === 0) {
-        console.log('\n✅ All tests passed!');
-      } else {
-        console.log(`\n❌ Tests failed with code ${code}`);
-      }
-      process.exit(code || 0);
+      await handleTestExit(code || 0, shouldStopServer, enableLogging, testEnv.TEST_LOG_PATH);
     });
 
   } catch (error) {
     console.error('❌ Failed to start tests:', error);
     
-    // Restore debug settings on error
-    if (!mockOnly && !noServer) {
-      console.log('\n🔧 Restoring debug settings...');
-      await debugManager.restore();
-    }
     
     if (shouldStopServer) {
       await stopServer();
@@ -168,6 +205,9 @@ Usage: npm test [options] [pattern]
 Options:
   --mock-only     Run only unit tests (no Sonos required)
   --no-server     Don't auto-start server (assume it's running)
+  --no-timeout    Disable test timeouts (for interactive debugging)
+  --log           Log test output to file
+  --interactive   Enable interactive mode (pause for user input, implies --no-timeout)
   --grep PATTERN  Filter tests by name pattern
   --help          Show this help
 
@@ -177,6 +217,8 @@ Examples:
   npm test unit/*.ts                  # Run only unit tests by pattern
   npm test -- --grep "Pandora"        # Run only tests matching "Pandora"
   npm test -- "--grep=Pandora Service" # Alternative grep syntax
+  npm test -- --interactive test/integration/04-content-pandora-tests.ts # Interactive test (timeouts auto-disabled)
+  npm test -- --log --interactive test/integration/04-content-pandora-tests.ts # Interactive test with logging
   `);
   process.exit(0);
 }

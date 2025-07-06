@@ -4,6 +4,7 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -14,7 +15,7 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
   let deviceId: string;
   
   before(async () => {
-    console.log('🚀 Testing advanced features...');
+    testLog.info('🚀 Testing advanced features...');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events via SSE
@@ -28,7 +29,7 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
       throw new Error('No suitable test room found');
     }
     
-    console.log(`   Test room: ${room}`);
+    testLog.info(`   Test room: ${room}`);
     
     // Get device ID for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -42,11 +43,11 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
     // Use coordinator device ID (important for stereo pairs)
     const coordinatorMember = zone.members.find(m => m.isCoordinator);
     deviceId = coordinatorMember.id;
-    console.log(`   Device ID: ${deviceId}`);
+    testLog.info(`   Device ID: ${deviceId}`);
   });
   
   after(async () => {
-    console.log('\n🧹 Cleaning up Advanced Features tests...\n');
+    testLog.info('\n🧹 Cleaning up Advanced Features tests...\n');
     
     // Stop playback
     if (room) {
@@ -62,7 +63,7 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
     // Give a moment for cleanup to complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    console.log('✓ Advanced features tests complete');
+    testLog.info('✓ Advanced features tests complete');
   });
   
   describe('Sleep Timer', () => {
@@ -221,14 +222,14 @@ describe('Advanced Features Tests', { skip: skipIntegration }, () => {
     });
     
     it('should add track to queue', async () => {
-      // Load a Beatles song
-      const { loadBeatlesSong } = await import('../helpers/content-loader.js');
-      await loadBeatlesSong(room);
+      // Load a test song
+      const { loadTestSong } = await import('../helpers/content-loader.js');
+      await loadTestSong(room);
       
       // Verify it was added to queue
       const queueResponse = await fetch(`${defaultConfig.apiUrl}/${room}/queue`);
       const queue = await queueResponse.json();
-      assert(queue.length > 0, 'Queue should have items after loading Beatles song');
+      assert(queue.length > 0, 'Queue should have items after loading test song');
     });
     
     it('should get current queue', async () => {

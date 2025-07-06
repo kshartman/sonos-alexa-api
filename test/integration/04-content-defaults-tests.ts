@@ -1,46 +1,41 @@
-import { after, before, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
-import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
-import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
+import { getSearchTerm, getSafeSearchQuery } from '../helpers/test-search-terms.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Default Service Content Integration Tests', { skip: skipIntegration, timeout: 60000 }, () => {
-  let topology: SystemTopology;
+describe('Default Service Content Integration Tests', { skip: skipIntegration, timeout: 210000 }, () => {
+  let testContext: TestContext;
   let testRoom: string;
   let deviceId: string;
-  let eventManager: EventManager;
   let originalDefaults: any;
   let libraryAvailable: boolean = false;
 
   before(async () => {
-    console.log('\n🎵 Starting Default Service Content Integration Tests...\n');
-    eventManager = EventManager.getInstance();
+    testContext = await globalTestSetup('Default Service Content Integration Tests');
     
-    // Start event bridge to receive UPnP events
-    await startEventBridge();
+    // Get test room from env or use first available room
+    if (process.env.TEST_ROOM) {
+      testRoom = process.env.TEST_ROOM;
+      testLog.info(`✅ Using configured test room: ${testRoom} (from TEST_ROOM env)`);
+    } else {
+      testRoom = testContext.topology.rooms[0];
+      testLog.info(`📊 Using first available room: ${testRoom}`);
+    }
     
-    topology = await discoverSystem();
-    testRoom = await getSafeTestRoom(topology);
-    
-    // Get device ID for event tracking - use coordinator ID for groups/stereo pairs
-    const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
-    const zones = await zonesResponse.json();
-    const zone = zones.find(z => z.members.some(m => m.roomName === testRoom));
-    // Use the coordinator's ID for event tracking
-    const coordinatorMember = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinatorMember.id;
-    
-    console.log(`📊 Test room: ${testRoom}`);
-    console.log(`📊 Device ID: ${deviceId}`);
+    // Get device ID from mapping
+    deviceId = testContext.deviceIdMapping.get(testRoom) || '';
+    testLog.info(`📊 Test room: ${testRoom}`);
+    testLog.info(`📊 Device ID: ${deviceId}`);
     
     // Store original defaults to restore later
     const defaultsResponse = await fetch(`${defaultConfig.apiUrl}/default`);
     originalDefaults = await defaultsResponse.json();
-    console.log(`📊 Original defaults: room=${originalDefaults.room}, service=${originalDefaults.musicService}`);
+    testLog.info(`📊 Original defaults: room=${originalDefaults.room}, service=${originalDefaults.musicService}`);
     
     // Set test room as default
     await fetch(`${defaultConfig.apiUrl}/default/room/${testRoom}`);
@@ -50,19 +45,19 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
     if (libraryStatusResponse.ok) {
       const status = await libraryStatusResponse.json();
       if (status.status === 'not initialized') {
-        console.log('📚 Music library not initialized, triggering refresh...');
+        testLog.info('📚 Music library not initialized, triggering refresh...');
         const refreshResponse = await fetch(`${defaultConfig.apiUrl}/library/refresh`);
         if (refreshResponse.ok) {
           // Wait for indexing to complete (up to 20 seconds)
           let indexed = false;
           for (let i = 0; i < 20; i++) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 500));
             const checkResponse = await fetch(`${defaultConfig.apiUrl}/library/index`);
             if (checkResponse.ok) {
               const checkStatus = await checkResponse.json();
               if (!checkStatus.isIndexing && checkStatus.metadata) {
                 indexed = true;
-                console.log(`✅ Music library indexed: ${checkStatus.metadata.totalTracks} tracks`);
+                testLog.info(`✅ Music library indexed: ${checkStatus.metadata.totalTracks} tracks`);
                 break;
               }
             }
@@ -71,34 +66,37 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
         }
       } else if (status.metadata) {
         libraryAvailable = true;
-        console.log(`✅ Music library already indexed: ${status.metadata.totalTracks} tracks`);
+        testLog.info(`✅ Music library already indexed: ${status.metadata.totalTracks} tracks`);
       }
     }
   });
 
   after(async () => {
-    console.log('\n🧹 Cleaning up Default Service tests...\n');
+    testLog.info('\n🧹 Cleaning up Default Service tests...\n');
     
     // Restore original defaults
-    if (originalDefaults.room) {
+    if (originalDefaults?.room) {
       await fetch(`${defaultConfig.apiUrl}/default/room/${originalDefaults.room}`);
     }
-    if (originalDefaults.musicService) {
+    if (originalDefaults?.musicService) {
       await fetch(`${defaultConfig.apiUrl}/default/service/${originalDefaults.musicService}`);
     }
     
-    // Stop playback and wait for confirmation
-    await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-    await eventManager.waitForState(deviceId, 'STOPPED', 5000);
-    
-    // Clear any pending event listeners
-    eventManager.reset();
-    
-    // Stop event bridge
-    stopEventBridge();
-    
-    // Give a moment for cleanup to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Use global teardown
+    await globalTestTeardown('Default Service Content', testContext);
+  });
+  
+  afterEach(async () => {
+    // Stop any playback after each test to prevent music from continuing
+    // Only do this if we have a valid test room
+    if (testRoom) {
+      try {
+        const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`);
+        // Don't wait for response processing
+      } catch (error) {
+        // Ignore errors if already stopped
+      }
+    }
   });
 
   describe('Default Settings Management', () => {
@@ -111,7 +109,7 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       assert(defaults.musicService, 'Should have default music service');
       assert(defaults.lastUpdated, 'Should have last updated timestamp');
       
-      console.log(`✅ Current defaults: room=${defaults.room}, service=${defaults.musicService}`);
+      testLog.info(`✅ Current defaults: room=${defaults.room}, service=${defaults.musicService}`);
     });
 
     it('should set default music service to library', async () => {
@@ -127,7 +125,7 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       const defaults = await checkResponse.json();
       assert.strictEqual(defaults.musicService, 'library');
       
-      console.log('✅ Default service set to library');
+      testLog.info('✅ Default service set to library');
     });
 
     it('should set default music service to apple', async () => {
@@ -143,25 +141,25 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       const defaults = await checkResponse.json();
       assert.strictEqual(defaults.musicService, 'apple');
       
-      console.log('✅ Default service set to apple');
+      testLog.info('✅ Default service set to apple');
     });
 
     it('should handle invalid service names', async () => {
       const response = await fetch(`${defaultConfig.apiUrl}/default/service/invalidservice`);
-      assert.strictEqual(response.status, 200); // API accepts any service name
+      // API now validates service names and returns 400 for invalid ones
+      assert.strictEqual(response.status, 400);
       
-      // But when we try to use it, it should fail gracefully
-      const searchResponse = await fetch(`${defaultConfig.apiUrl}/song/test`);
-      assert(searchResponse.status === 501 || searchResponse.status === 400);
+      const error = await response.json();
+      assert(error.error, 'Should have error message');
       
-      console.log('✅ Invalid service handled correctly');
+      testLog.info('✅ Invalid service handled correctly');
     });
   });
 
   describe('Default Song Search', () => {
     it('should search songs using library service', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
@@ -169,7 +167,9 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       // Set default to library
       await fetch(`${defaultConfig.apiUrl}/default/service/library`);
       
-      const response = await fetch(`${defaultConfig.apiUrl}/song/love`);
+      // Get a safe search term for library
+      const searchTerm = await getSafeSearchQuery('song', 'library');
+      const response = await fetch(`${defaultConfig.apiUrl}/song/${encodeURIComponent(searchTerm)}`);
       assert.strictEqual(response.status, 200);
       
       const result = await response.json();
@@ -178,12 +178,12 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       assert(result.title, 'Should have song title');
       assert(result.artist, 'Should have artist');
       
-      console.log(`✅ Found library song: "${result.title}" by ${result.artist}`);
+      testLog.info(`✅ Found library song: "${result.title}" by ${result.artist}`);
       
       // Wait for track change
-      const trackChanged = await eventManager.waitForTrackChange(deviceId, 10000);
+      const trackChanged = await testContext.eventManager.waitForTrackChange(deviceId, 10000);
       if (trackChanged) {
-        console.log('✅ Default song search triggered playback');
+        testLog.info('✅ Default song search triggered playback');
       }
     });
 
@@ -191,23 +191,25 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       // Set default to apple
       await fetch(`${defaultConfig.apiUrl}/default/service/apple`);
       
-      const response = await fetch(`${defaultConfig.apiUrl}/song/hello%20adele`);
+      // Get a safe search term for apple
+      const searchTerm = await getSafeSearchQuery('song', 'apple');
+      const response = await fetch(`${defaultConfig.apiUrl}/song/${encodeURIComponent(searchTerm)}`);
       
       if (response.status === 200) {
         const result = await response.json();
         assert.strictEqual(result.status, 'success');
         assert.strictEqual(result.service, 'apple');
         assert(result.title, 'Should have song title');
-        console.log(`✅ Found Apple Music song: "${result.title}"`);
+        testLog.info(`✅ Found Apple Music song: "${result.title}"`);
       } else {
         // Apple Music search might fail due to account issues
-        console.log('⚠️  Apple Music search failed (likely account configuration)');
+        testLog.info('⚠️  Apple Music search failed (likely account configuration)');
       }
     });
 
     it('should handle no results gracefully', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
@@ -222,14 +224,14 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       assert(error.error, 'Should have error message');
       assert(error.error.includes('No songs found'), 'Should indicate no results found');
       
-      console.log('✅ No results handled correctly');
+      testLog.info('✅ No results handled correctly');
     });
   });
 
   describe('Default Album Search', () => {
     it('should search albums using library service', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
@@ -237,16 +239,18 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       // Set default to library
       await fetch(`${defaultConfig.apiUrl}/default/service/library`);
       
-      const response = await fetch(`${defaultConfig.apiUrl}/album/greatest`);
+      // Get a safe search term for library albums
+      const searchTerm = await getSafeSearchQuery('album', 'library');
+      const response = await fetch(`${defaultConfig.apiUrl}/album/${encodeURIComponent(searchTerm)}`);
       
       if (response.status === 200) {
         const result = await response.json();
         assert.strictEqual(result.status, 'success');
         assert.strictEqual(result.service, 'library');
         assert(result.album, 'Should have album name');
-        console.log(`✅ Found library album: "${result.album}"`);
+        testLog.info(`✅ Found library album: "${result.album}"`);
       } else if (response.status === 404) {
-        console.log('⚠️  No albums found with "greatest" in library (this is normal)');
+        testLog.info('⚠️  No albums found with "greatest" in library (this is normal)');
       }
     });
 
@@ -254,16 +258,18 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       // Set default to apple
       await fetch(`${defaultConfig.apiUrl}/default/service/apple`);
       
-      const response = await fetch(`${defaultConfig.apiUrl}/album/abbey%20road`);
+      // Get a safe search term for apple albums
+      const searchTerm = await getSafeSearchQuery('album', 'apple');
+      const response = await fetch(`${defaultConfig.apiUrl}/album/${encodeURIComponent(searchTerm)}`);
       
       if (response.status === 200) {
         const result = await response.json();
         assert.strictEqual(result.status, 'success');
         assert.strictEqual(result.service, 'apple');
         assert(result.album, 'Should have album name');
-        console.log(`✅ Found Apple Music album: "${result.album}"`);
+        testLog.info(`✅ Found Apple Music album: "${result.album}"`);
       } else {
-        console.log('⚠️  Apple Music album search failed (likely account configuration)');
+        testLog.info('⚠️  Apple Music album search failed (likely account configuration)');
       }
     });
   });
@@ -280,25 +286,27 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       assert(error.error, 'Should have error message');
       assert(error.error.includes('Library does not support station search'), 'Should indicate library limitation');
       
-      console.log('✅ Library station search limitation handled correctly');
+      testLog.info('✅ Library station search limitation handled correctly');
     });
 
-    it('should handle station search with pandora service', async () => {
+    it('should handle station search with pandora service', { timeout: 40000 }, async () => {
       // Set default to pandora
       await fetch(`${defaultConfig.apiUrl}/default/service/pandora`);
       
-      const response = await fetch(`${defaultConfig.apiUrl}/station/quickmix`);
+      // Use TEST_PANDORA_STATION if set, otherwise default to quickmix
+      const stationName = process.env.TEST_PANDORA_STATION || 'quickmix';
+      const response = await fetch(`${defaultConfig.apiUrl}/station/${encodeURIComponent(stationName)}`);
       
       // Pandora might not be configured, so we expect either success or 503/404
       if (response.status === 200) {
         const result = await response.json();
         assert.strictEqual(result.status, 'success');
         assert.strictEqual(result.service, 'pandora');
-        console.log('✅ Pandora station search succeeded');
+        testLog.info(`✅ Pandora station search succeeded: "${stationName}"`);
       } else if (response.status === 404 || response.status === 503) {
-        console.log('⚠️  Pandora not configured or station not found (expected)');
+        testLog.info(`⚠️  Pandora not configured or station "${stationName}" not found (expected)`);
       } else {
-        console.log(`⚠️  Unexpected response: ${response.status}`);
+        testLog.info(`⚠️  Unexpected response for station "${stationName}": ${response.status}`);
       }
     });
   });
@@ -306,34 +314,36 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
   describe('Service Switching', () => {
     it('should switch between library and apple services', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
       
       // Test library first
       await fetch(`${defaultConfig.apiUrl}/default/service/library`);
-      let response = await fetch(`${defaultConfig.apiUrl}/song/music`);
+      const librarySongTerm = await getSearchTerm('song', 'library');
+      let response = await fetch(`${defaultConfig.apiUrl}/song/${encodeURIComponent(librarySongTerm)}`);
       
       if (response.status === 200) {
         let result = await response.json();
         assert.strictEqual(result.service, 'library');
-        console.log(`✅ Library search: "${result.title}"`);
+        testLog.info(`✅ Library search: "${result.title}"`);
       }
       
       // Switch to Apple Music
       await fetch(`${defaultConfig.apiUrl}/default/service/apple`);
-      response = await fetch(`${defaultConfig.apiUrl}/album/greatest%20hits`);
+      const appleAlbumTerm = await getSearchTerm('album', 'apple');
+      response = await fetch(`${defaultConfig.apiUrl}/album/${encodeURIComponent(appleAlbumTerm)}`);
       
       if (response.status === 200) {
         let result = await response.json();
         assert.strictEqual(result.service, 'apple');
-        console.log(`✅ Apple Music search: "${result.album || result.title}"`);
+        testLog.info(`✅ Apple Music search: "${result.album || result.title}"`);
       } else {
-        console.log('⚠️  Apple Music search failed (account configuration)');
+        testLog.info('⚠️  Apple Music search failed (account configuration)');
       }
       
-      console.log('✅ Service switching test completed');
+      testLog.info('✅ Service switching test completed');
     });
 
     it('should persist service changes across requests', async () => {
@@ -353,14 +363,14 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       defaults = await checkResponse.json();
       assert.strictEqual(defaults.musicService, 'apple');
       
-      console.log('✅ Service changes persist correctly');
+      testLog.info('✅ Service changes persist correctly');
     });
   });
 
   describe('Error Handling', () => {
     it('should handle unsupported service gracefully', async () => {
-      // Set to unsupported service
-      await fetch(`${defaultConfig.apiUrl}/default/service/spotify`);
+      // Use a truly unsupported service (SiriusXM is not implemented)
+      await fetch(`${defaultConfig.apiUrl}/default/service/siriusxm`);
       
       const response = await fetch(`${defaultConfig.apiUrl}/song/test`);
       assert.strictEqual(response.status, 501);
@@ -369,7 +379,7 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       assert(error.error, 'Should have error message');
       assert(error.error.includes('not yet implemented'), 'Should indicate service not supported');
       
-      console.log('✅ Unsupported service handled correctly');
+      testLog.info('✅ Unsupported service handled correctly');
     });
 
     it('should handle library not indexed', async () => {
@@ -383,11 +393,11 @@ describe('Default Service Content Integration Tests', { skip: skipIntegration, t
       if (response.status === 503) {
         const error = await response.json();
         assert(error.error.includes('not yet indexed'), 'Should indicate indexing needed');
-        console.log('✅ Library not indexed error handled correctly');
+        testLog.info('✅ Library not indexed error handled correctly');
       } else if (response.status === 404) {
-        console.log('✅ Library indexed but no results found (normal)');
+        testLog.info('✅ Library indexed but no results found (normal)');
       } else if (response.status === 200) {
-        console.log('✅ Library search succeeded');
+        testLog.info('✅ Library search succeeded');
       }
     });
   });

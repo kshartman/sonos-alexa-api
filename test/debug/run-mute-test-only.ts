@@ -4,7 +4,7 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
 
 // Run just the mute test to see detailed output
 describe('Mute Test Only', async () => {
@@ -23,7 +23,7 @@ describe('Mute Test Only', async () => {
     const device = zones.flatMap(z => z.members).find(m => m.roomName === testRoom);
     deviceId = device.id;
     
-    await loadTestContent(testRoom);
+    await loadTestSong(testRoom, true);
   });
 
   after(async () => {

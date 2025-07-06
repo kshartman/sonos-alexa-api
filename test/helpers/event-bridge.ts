@@ -1,6 +1,6 @@
 import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from './test-config.js';
-import logger from '../../src/utils/logger.js';
+import { testLog } from './test-logger.js';
 import http from 'http';
 
 /**
@@ -20,10 +20,11 @@ export class EventBridge {
    * Connect to the server's SSE endpoint to receive UPnP events
    */
   async connect(): Promise<void> {
-    logger.info('EventBridge: Connecting to server SSE endpoint');
+    testLog.info('EventBridge: Connecting to server SSE endpoint');
     
-    // First, get device ID mapping
+    // First, get device ID mapping and group members
     await this.updateDeviceIdMap();
+    await this.updateGroupMembersCache();
     
     // Connect to SSE endpoint
     const url = new URL(`${defaultConfig.apiUrl}/events`);
@@ -38,12 +39,14 @@ export class EventBridge {
         }
       }, (res) => {
         if (res.statusCode !== 200) {
-          reject(new Error(`SSE connection failed: ${res.statusCode}`));
+          const error = new Error(`SSE connection failed: ${res.statusCode}`);
+          testLog.error('EventBridge:', error);
+          reject(error);
           return;
         }
         
         this.sseConnection = res;
-        logger.info('EventBridge: Connected to SSE endpoint');
+        testLog.info('EventBridge: Connected to SSE endpoint');
         resolve();
         
         // Handle SSE data
@@ -59,37 +62,33 @@ export class EventBridge {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.substring(6));
-                logger.debug(`EventBridge: Received SSE data: ${line.substring(6)}`);
                 this.processEvent(data);
               } catch (error) {
-                logger.error('EventBridge: Error parsing SSE data:', error);
+                testLog.error('EventBridge: Error parsing SSE data:', error);
               }
             }
           }
         });
         
         res.on('error', (error) => {
-          logger.error('EventBridge: SSE connection error:', error);
+          testLog.error('EventBridge: SSE connection error:', error);
         });
         
         res.on('end', () => {
-          logger.info('EventBridge: SSE connection closed');
+          testLog.info('EventBridge: SSE connection closed');
           this.sseConnection = undefined;
         });
       });
       
       req.on('error', (error) => {
-        logger.error('EventBridge: Failed to connect to SSE:', error);
+        testLog.error('EventBridge: Failed to connect to SSE:', error);
         reject(error);
       });
     });
   }
   
   private processEvent(data: any): void {
-    logger.debug(`EventBridge: Processing SSE event - type: ${data.type}`);
-    
     if (data.type === 'device-state-change') {
-      logger.debug(`EventBridge: State change for ${data.data.room} - volume: ${data.data.state?.volume}, mute: ${data.data.state?.mute}`);
       const roomName = data.data.room;
       const eventDeviceId = data.data.deviceId;
       const mappedDeviceId = this.deviceIdMap.get(roomName);
@@ -175,6 +174,7 @@ export class EventBridge {
       });
     } else if (data.type === 'track-change') {
       // Forward track change events
+      testLog.info(`EventBridge: Received track-change event for ${data.data.roomName} (${data.data.deviceId})`);
       this.eventManager.emit('track-change', {
         deviceId: data.data.deviceId,
         roomName: data.data.roomName,
@@ -204,10 +204,41 @@ export class EventBridge {
           }
         }
         
-        logger.debug(`EventBridge: Updated device ID map with ${this.deviceIdMap.size} devices`);
       }
     } catch (error) {
-      logger.error('EventBridge: Failed to update device ID map:', error);
+      testLog.error('EventBridge: Failed to update device ID map:', error);
+    }
+  }
+
+  /**
+   * Update the group members cache in EventManager
+   */
+  private async updateGroupMembersCache(): Promise<void> {
+    try {
+      const response = await fetch(`${defaultConfig.apiUrl}/zones`);
+      if (response.ok) {
+        const zones = await response.json();
+        
+        // Get the groupMembersCache from EventManager (using any to access private member)
+        const groupMembersCache = (this.eventManager as any).groupMembersCache as Map<string, string[]>;
+        
+        // Clear existing cache
+        groupMembersCache.clear();
+        
+        // Build cache from topology
+        for (const zone of zones) {
+          const memberIds = zone.members.map((m: any) => m.id);
+          
+          // For each member in the zone, store all member IDs
+          for (const member of zone.members) {
+            groupMembersCache.set(member.id, memberIds);
+          }
+        }
+        
+        testLog.info(`EventBridge: Updated group members cache with ${groupMembersCache.size} entries`);
+      }
+    } catch (error) {
+      testLog.error('EventBridge: Failed to update group members cache:', error);
     }
   }
 
@@ -219,7 +250,7 @@ export class EventBridge {
       this.sseConnection.destroy();
       this.sseConnection = undefined;
     }
-    logger.info('EventBridge: Disconnected from SSE endpoint');
+    testLog.info('EventBridge: Disconnected from SSE endpoint');
   }
 }
 
@@ -233,7 +264,7 @@ export async function startEventBridge(): Promise<void> {
   await bridgeInstance.connect();
   
   // Wait for the event bridge to be fully ready and for any initial events to settle
-  console.log('⏳ Waiting for event bridge to establish...');
+  testLog.info('⏳ Waiting for event bridge to establish...');
   await new Promise(resolve => setTimeout(resolve, 2000));
 }
 

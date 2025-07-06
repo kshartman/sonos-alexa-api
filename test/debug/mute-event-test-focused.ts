@@ -2,7 +2,7 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadTestContent } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
 import assert from 'node:assert/strict';
 
 // Focused test that mimics the actual test more closely
@@ -30,13 +30,11 @@ async function testMuteEvent() {
     console.log(`Test room: ${testRoom}`);
     console.log(`Device ID: ${deviceId}`);
     
-    // Load content (like the real test does)
+    // Load content and start playing (like the real test does)
     console.log('Loading test content...');
-    const contentLoaded = await loadTestContent(testRoom);
-    if (contentLoaded) {
-      await eventManager.waitForState(deviceId, 'PLAYING', 10000);
-      console.log('Content loaded and playing');
-    }
+    await loadTestSong(testRoom, true);
+    await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+    console.log('Content loaded and playing');
     
     // Test 1: Basic mute toggle (exactly like the real test)
     console.log('\n--- Test 1: Basic Mute Toggle ---');

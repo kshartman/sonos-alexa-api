@@ -4,6 +4,7 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -17,7 +18,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
   let eventManager: EventManager;
 
   before(async () => {
-    console.log('\n👥 Running quick group management tests...\n');
+    testLog.info('\n👥 Running quick group management tests...\n');
     eventManager = EventManager.getInstance();
     
     // Start event bridge
@@ -27,7 +28,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     
     // Need at least 2 rooms for group tests
     if (topology.rooms.length < 2) {
-      console.log('⚠️  Skipping group tests - requires at least 2 Sonos devices');
+      testLog.info('⚠️  Skipping group tests - requires at least 2 Sonos devices');
       return;
     }
     
@@ -42,7 +43,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
       room2 = topology.rooms[1];
     }
     
-    console.log(`   Test rooms: ${room1} and ${room2}`);
+    testLog.info(`   Test rooms: ${room1} and ${room2}`);
     
     // Get device IDs for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -52,11 +53,11 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     device1Id = device1.id;
     device2Id = device2.id;
     
-    console.log(`   Device IDs: ${device1Id}, ${device2Id}`);
+    testLog.info(`   Device IDs: ${device1Id}, ${device2Id}`);
   });
 
   after(async () => {
-    console.log('\n🧹 Cleaning up quick group tests...\n');
+    testLog.info('\n🧹 Cleaning up quick group tests...\n');
     
     // Try to ungroup test rooms
     try {
@@ -69,26 +70,26 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
   });
 
   it('should join and leave a group', async () => {
-    console.log('   Testing join...');
+    testLog.info('   Testing join...');
     
     // Reset event manager for clean test
     eventManager.reset();
     
     // Debug: listen for any events  
     eventManager.on('topology-change', (event) => {
-      console.log('   📡 Received topology-change event with', event.zones?.length, 'zones');
+      testLog.info('   📡 Received topology-change event with', event.zones?.length, 'zones');
     });
     
     // Set up topology change listener BEFORE action
     const topologyPromise = eventManager.waitForTopologyChange(10000);
     
     // Join room2 to room1
-    console.log(`   Joining ${room2} to ${room1}: ${defaultConfig.apiUrl}/${room2}/join/${room1}`);
+    testLog.info(`   Joining ${room2} to ${room1}: ${defaultConfig.apiUrl}/${room2}/join/${room1}`);
     const joinResponse = await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
-    console.log(`   Join response status: ${joinResponse.status}`);
+    testLog.info(`   Join response status: ${joinResponse.status}`);
     if (joinResponse.status !== 200) {
       const error = await joinResponse.text();
-      console.log(`   Join error: ${error}`);
+      testLog.info(`   Join error: ${error}`);
     }
     assert.strictEqual(joinResponse.status, 200);
     
@@ -106,10 +107,10 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     );
     
     assert(groupZone, 'Rooms should be in the same group');
-    console.log('   ✅ Group formed successfully');
+    testLog.info('   ✅ Group formed successfully');
     
     // Now test leave
-    console.log('   Testing leave...');
+    testLog.info('   Testing leave...');
     
     // Set up topology change listener for leave
     const leaveTopologyPromise = eventManager.waitForTopologyChange(5000);
@@ -131,7 +132,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     );
     
     assert(!stillGrouped, 'Rooms should no longer be grouped');
-    console.log('   ✅ Leave group successful');
+    testLog.info('   ✅ Leave group successful');
   });
 
   it('should control group playback', async () => {
@@ -143,7 +144,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
     await joinTopologyPromise;
     
-    console.log('   Testing group playback control...');
+    testLog.info('   Testing group playback control...');
     
     // Load some content first (using TTS for simplicity)
     await fetch(`${defaultConfig.apiUrl}/${room1}/say/Testing group playback`);
@@ -156,7 +157,7 @@ describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000
     const pauseResponse = await fetch(`${defaultConfig.apiUrl}/${room1}/pause`);
     assert.strictEqual(pauseResponse.status, 200);
     
-    console.log('   ✅ Group playback control working');
+    testLog.info('   ✅ Group playback control working');
     
     // Clean up
     const leaveTopologyPromise = eventManager.waitForTopologyChange(5000);

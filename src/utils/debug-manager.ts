@@ -114,6 +114,10 @@ class DebugManager {
   getLogLevel(): LogLevel {
     return logger.level as LogLevel;
   }
+  
+  isLevelEnabled(level: LogLevel): boolean {
+    return this.shouldLog(level);
+  }
 
   getCategories(): DebugCategories {
     return { ...this.categories };

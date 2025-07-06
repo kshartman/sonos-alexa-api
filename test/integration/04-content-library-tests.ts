@@ -1,47 +1,41 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
-import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
-import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Music Library Content Integration Tests', { skip: skipIntegration, timeout: 60000 }, () => {
-  let topology: SystemTopology;
+describe('Music Library Content Integration Tests', { skip: skipIntegration, timeout: 100000 }, () => {
+  let testContext: TestContext;
   let testRoom: string;
   let deviceId: string;
-  let eventManager: EventManager;
   let libraryAvailable: boolean = false;
 
   before(async () => {
-    console.log('\n🎵 Starting Music Library Content Integration Tests...\n');
-    eventManager = EventManager.getInstance();
+    testContext = await globalTestSetup('Music Library Content Integration Tests');
     
-    // Start event bridge to receive UPnP events
-    await startEventBridge();
+    // Get test room from env or use first available room
+    if (process.env.TEST_ROOM) {
+      testRoom = process.env.TEST_ROOM;
+      testLog.info(`✅ Using configured test room: ${testRoom} (from TEST_ROOM env)`);
+    } else {
+      testRoom = testContext.topology.rooms[0];
+      testLog.info(`📊 Using first available room: ${testRoom}`);
+    }
     
-    topology = await discoverSystem();
-    testRoom = await getSafeTestRoom(topology);
-    
-    // Get device ID for event tracking - use coordinator ID for groups/stereo pairs
-    const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
-    const zones = await zonesResponse.json();
-    const zone = zones.find(z => z.members.some(m => m.roomName === testRoom));
-    // Use the coordinator's ID for event tracking
-    const coordinatorMember = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinatorMember.id;
-    
-    console.log(`📊 Test room: ${testRoom}`);
-    console.log(`📊 Device ID: ${deviceId}`);
+    // Get device ID from mapping
+    deviceId = testContext.deviceIdMapping.get(testRoom) || '';
+    testLog.info(`📊 Test room: ${testRoom}`);
+    testLog.info(`📊 Device ID: ${deviceId}`);
     
     // Check if music library is available and indexed
     const libraryStatusResponse = await fetch(`${defaultConfig.apiUrl}/library/index`);
     if (libraryStatusResponse.ok) {
       const status = await libraryStatusResponse.json();
       if (status.status === 'not initialized') {
-        console.log('📚 Music library not initialized, triggering refresh...');
+        testLog.info('📚 Music library not initialized, triggering refresh...');
         const refreshResponse = await fetch(`${defaultConfig.apiUrl}/library/refresh`);
         if (refreshResponse.ok) {
           // Wait for indexing to complete (up to 30 seconds)
@@ -53,7 +47,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
               const checkStatus = await checkResponse.json();
               if (!checkStatus.isIndexing && checkStatus.metadata) {
                 indexed = true;
-                console.log(`✅ Music library indexed: ${checkStatus.metadata.totalTracks} tracks`);
+                testLog.info(`✅ Music library indexed: ${checkStatus.metadata.totalTracks} tracks`);
                 break;
               }
             }
@@ -62,30 +56,17 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
         }
       } else if (status.metadata) {
         libraryAvailable = true;
-        console.log(`✅ Music library already indexed: ${status.metadata.totalTracks} tracks`);
+        testLog.info(`✅ Music library already indexed: ${status.metadata.totalTracks} tracks`);
       }
     }
     
     if (!libraryAvailable) {
-      console.log('⚠️  Music library not available for testing');
+      testLog.info('⚠️  Music library not available for testing');
     }
   });
 
   after(async () => {
-    console.log('\n🧹 Cleaning up Music Library tests...\n');
-    
-    // Stop playback and wait for confirmation
-    await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-    await eventManager.waitForState(deviceId, 'STOPPED', 5000);
-    
-    // Clear any pending event listeners
-    eventManager.reset();
-    
-    // Stop event bridge
-    stopEventBridge();
-    
-    // Give a moment for cleanup to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await globalTestTeardown('Music Library tests', testContext);
   });
 
   describe('Library Status', () => {
@@ -96,7 +77,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       const status = await response.json();
       
       if (status.status === 'not initialized') {
-        console.log('⚠️  Music library not initialized');
+        testLog.info('⚠️  Music library not initialized');
         this.skip();
         return;
       }
@@ -108,7 +89,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
         assert(typeof status.metadata.totalTracks === 'number', 'Should have track count');
         assert(typeof status.metadata.totalAlbums === 'number', 'Should have album count');
         assert(typeof status.metadata.totalArtists === 'number', 'Should have artist count');
-        console.log(`✅ Library status: ${status.metadata.totalTracks} tracks, ${status.metadata.totalAlbums} albums, ${status.metadata.totalArtists} artists`);
+        testLog.info(`✅ Library status: ${status.metadata.totalTracks} tracks, ${status.metadata.totalAlbums} albums, ${status.metadata.totalArtists} artists`);
       }
     });
   });
@@ -116,12 +97,14 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
   describe('Music Library Search', () => {
     it('should search library by song title', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
 
-      const songQuery = 'love'; // Common word likely to have results
+      const songQuery = testContext.musicsearchSongTerm;
+      testLog.info(`   🔍 Searching for song: "${songQuery}"`);
+      
       
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/library/song/${encodeURIComponent(songQuery)}`);
       assert.strictEqual(response.status, 200);
@@ -132,34 +115,37 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       assert(result.title, 'Should have a title');
       assert(result.artist, 'Should have an artist');
       
-      console.log(`✅ Found song: "${result.title}" by ${result.artist}`);
+      testLog.info(`✅ Found song: "${result.title}" by ${result.artist}`);
       
       // Test playing the found track
-      const trackChangePromise = eventManager.waitForTrackChange(deviceId, 20000);
+      const trackChangePromise = testContext.eventManager.waitForTrackChange(deviceId, 5000);
       
       // The search result should have triggered playback
       const trackChanged = await trackChangePromise;
       if (trackChanged) {
-        const finalState = await eventManager.waitForStableState(deviceId, 20000);
+        const finalState = await testContext.eventManager.waitForStableState(deviceId, 5000);
         assert(finalState === 'PLAYING', `Expected PLAYING state, got ${finalState}`);
         
         const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
         const state = await stateResponse.json();
         assert(state.currentTrack, 'Should have current track info');
-        console.log(`✅ Playing library track: ${state.currentTrack.title}`);
+        testLog.info(`✅ Playing library track: ${state.currentTrack.title}`);
+        
+        // Pause to hear the track
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     });
 
     it('should search library by artist', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
 
       // Stop current playback
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-      await eventManager.waitForState(deviceId, 'STOPPED', 5000);
+      await testContext.eventManager.waitForState(deviceId, 'STOPPED', 2000);
 
       const artistQuery = 'the'; // Common word in many artist names
       
@@ -171,17 +157,19 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       assert(result.service === 'library', 'Service should be library');
       assert(result.artist, 'Should have an artist');
       
-      console.log(`✅ Found track by artist: "${result.title}" by ${result.artist}`);
+      testLog.info(`✅ Found track by artist: "${result.title}" by ${result.artist}`);
     });
 
     it('should search library by album', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
 
-      const albumQuery = 'greatest'; // Common word in compilation albums
+      const albumQuery = testContext.musicsearchAlbumTerm;
+      testLog.info(`   🔍 Searching for album: "${albumQuery}"`);
+      
       
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/library/album/${encodeURIComponent(albumQuery)}`);
       assert.strictEqual(response.status, 200);
@@ -189,13 +177,13 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       const result = await response.json();
       
       if (result.status === 'error' && result.error === 'No albums found matching "greatest"') {
-        console.log('⚠️  No albums found with "greatest" in the title');
+        testLog.info('⚠️  No albums found with "greatest" in the title');
         // Try another common album word
         const altResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/library/album/best`);
         if (altResponse.ok) {
           const altResult = await altResponse.json();
           if (altResult.status === 'success') {
-            console.log(`✅ Found track from album: "${altResult.title}" from ${altResult.album}`);
+            testLog.info(`✅ Found track from album: "${altResult.title}" from ${altResult.album}`);
             return;
           }
         }
@@ -207,12 +195,12 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       assert(result.service === 'library', 'Service should be library');
       assert(result.album, 'Should have an album');
       
-      console.log(`✅ Found track from album: "${result.title}" from ${result.album}`);
+      testLog.info(`✅ Found track from album: "${result.title}" from ${result.album}`);
     });
 
     it('should handle library search with no results', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
@@ -223,11 +211,11 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       if (response.status === 404) {
         const error = await response.json();
         assert(error.error, 'Should have error message');
-        console.log('✅ Library search returned 404 for non-existent song');
+        testLog.info('✅ Library search returned 404 for non-existent song');
       } else if (response.status === 200) {
         const result = await response.json();
         assert(result.status === 'error', 'Should have error status');
-        console.log('✅ Library search returned error for non-existent song');
+        testLog.info('✅ Library search returned error for non-existent song');
       } else {
         assert.fail(`Unexpected status code: ${response.status}`);
       }
@@ -235,7 +223,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
 
     it('should handle library search when cache is stale', async function() {
       if (!libraryAvailable) {
-        console.log('⚠️  Test skipped - music library not available');
+        testLog.info('⚠️  Test skipped - music library not available');
         this.skip();
         return;
       }
@@ -249,7 +237,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
         const age = Date.now() - lastUpdated.getTime();
         const ageHours = age / (1000 * 60 * 60);
         
-        console.log(`📚 Library cache age: ${ageHours.toFixed(1)} hours`);
+        testLog.info(`📚 Library cache age: ${ageHours.toFixed(1)} hours`);
         
         // Search should still work even with stale cache
         const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/library/song/music`);
@@ -257,7 +245,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
         
         const result = await response.json();
         assert(result.status === 'success', 'Should still search with stale cache');
-        console.log('✅ Library search works with potentially stale cache');
+        testLog.info('✅ Library search works with potentially stale cache');
       }
     });
   });
@@ -271,16 +259,16 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
       assert(result.status === 'success', 'Refresh request should succeed');
       
       // Check if indexing started
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       const statusResponse = await fetch(`${defaultConfig.apiUrl}/library/index`);
       const status = await statusResponse.json();
       
       // It might already be complete if the library is small or was recently indexed
       if (status.isIndexing) {
-        console.log(`✅ Library refresh started, progress: ${status.progress}%`);
+        testLog.info(`✅ Library refresh started, progress: ${status.progress}%`);
       } else if (status.metadata) {
-        console.log('✅ Library refresh completed (or was already fresh)');
+        testLog.info('✅ Library refresh completed (or was already fresh)');
       }
     });
   });

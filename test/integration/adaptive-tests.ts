@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { withSavedState } from '../helpers/state-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -12,20 +13,20 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
   let testRoom: string;
   
   before(async () => {
-    console.log('🔍 Discovering Sonos system...');
+    testLog.info('🔍 Discovering Sonos system...');
     topology = await discoverSystem();
     testRoom = await getSafeTestRoom(topology);
     
-    console.log(`📊 System discovered:`);
-    console.log(`   - Rooms: ${topology.rooms.join(', ')}`);
-    console.log(`   - Groups: ${topology.hasGroups ? 'Yes' : 'No'}`);
-    console.log(`   - Stereo pairs: ${topology.hasStereoPairs ? `Yes (${topology.stereoPairs?.join(', ')})` : 'No'}`);
-    console.log(`   - Services: ${topology.availableServices.join(', ')}`);
-    console.log(`   - Default room: ${topology.defaultRoom || 'Not set'}`);
-    console.log(`   - Default service: ${topology.defaultService || 'Not set'}`);
-    console.log(`   - Presets: ${topology.presetCount || 0}`);
-    console.log(`   - Test room: ${testRoom}`);
-    console.log(`   - Test mode: ${defaultConfig.testMode}`);
+    testLog.info(`📊 System discovered:`);
+    testLog.info(`   - Rooms: ${topology.rooms.join(', ')}`);
+    testLog.info(`   - Groups: ${topology.hasGroups ? 'Yes' : 'No'}`);
+    testLog.info(`   - Stereo pairs: ${topology.hasStereoPairs ? `Yes (${topology.stereoPairs?.join(', ')})` : 'No'}`);
+    testLog.info(`   - Services: ${topology.availableServices.join(', ')}`);
+    testLog.info(`   - Default room: ${topology.defaultRoom || 'Not set'}`);
+    testLog.info(`   - Default service: ${topology.defaultService || 'Not set'}`);
+    testLog.info(`   - Presets: ${topology.presetCount || 0}`);
+    testLog.info(`   - Test room: ${testRoom}`);
+    testLog.info(`   - Test mode: ${defaultConfig.testMode}`);
   });
 
   describe('System Discovery', () => {
@@ -70,7 +71,7 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
           if (state.playbackState === lastState) {
             stableCount++;
             if (stableCount >= 3) { // State unchanged for 3 checks
-              console.log(`   Room ${roomName} stable at: ${state.playbackState}`);
+              testLog.info(`   Room ${roomName} stable at: ${state.playbackState}`);
               return state;
             }
           } else {
@@ -84,17 +85,17 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      console.log(`   Warning: Room ${roomName} did not stabilize after ${maxWaitMs}ms`);
+      testLog.info(`   Warning: Room ${roomName} did not stabilize after ${maxWaitMs}ms`);
       return null;
     }
     
     it('should say text in a room', async () => {
-      console.log(`   Starting TTS test in ${testRoom}...`);
+      testLog.info(`   Starting TTS test in ${testRoom}...`);
       
       // Get initial state
       const initialResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const initialState = await initialResponse.json();
-      console.log(`   Initial state: ${initialState.playbackState}`);
+      testLog.info(`   Initial state: ${initialState.playbackState}`);
       
       await withSavedState(testRoom, async () => {
         const response = await fetch(
@@ -114,11 +115,11 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
       
       // Verify the room has returned to initial state or stopped
       const finalState = await waitForStableState(testRoom);
-      console.log(`   TTS test complete. Final state: ${finalState?.playbackState || 'unknown'}`);
+      testLog.info(`   TTS test complete. Final state: ${finalState?.playbackState || 'unknown'}`);
     });
 
     it('should announce to all rooms', async function() {
-      console.log(`   Starting global announcement test...`);
+      testLog.info(`   Starting global announcement test...`);
       
       const testMessage = 'Global announcement test';
       const response = await fetch(
@@ -132,7 +133,7 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
       
       // Wait for all rooms to stabilize
       const testRooms = topology.rooms.slice(0, Math.min(3, topology.rooms.length));
-      console.log(`   Waiting for ${testRooms.length} rooms to stabilize...`);
+      testLog.info(`   Waiting for ${testRooms.length} rooms to stabilize...`);
       
       const stabilizationPromises = testRooms.map(room => waitForStableState(room, 15000));
       await Promise.all(stabilizationPromises);
@@ -145,12 +146,12 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
         fetch(`${defaultConfig.apiUrl}/${room}/state`).then(r => r.json())
       );
       const states = await Promise.all(stateChecks);
-      console.log(`   Say all test complete. Room states: ${states.map(s => s.playbackState).join(', ')}`);
+      testLog.info(`   Say all test complete. Room states: ${states.map(s => s.playbackState).join(', ')}`);
     });
 
     it('should announce to grouped rooms only', async function() {
       if (topology.zones.length === 0 || !topology.hasGroups) {
-        console.log('   No groups available - skipping grouped announcement test');
+        testLog.info('   No groups available - skipping grouped announcement test');
         this.skip();
         return;
       }
@@ -158,18 +159,18 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
       // Find a grouped zone
       const groupedZone = topology.zones.find(z => z.members.length > 1);
       if (!groupedZone) {
-        console.log('   No grouped zones found - skipping test');
+        testLog.info('   No grouped zones found - skipping test');
         this.skip();
         return;
       }
 
-      console.log(`   Starting group announcement test...`);
+      testLog.info(`   Starting group announcement test...`);
       const coordinator = groupedZone.coordinator;
       const testMessage = 'Group announcement test';
       
       // Get all room names in the group
       const groupRooms = groupedZone.members.map(m => m.roomName);
-      console.log(`   Testing announcement to group: ${groupRooms.join(', ')}`);
+      testLog.info(`   Testing announcement to group: ${groupRooms.join(', ')}`);
       
       await withSavedState(coordinator, async () => {
         const response = await fetch(
@@ -189,12 +190,12 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
       // Additional wait to ensure complete restoration
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      console.log(`   Group announcement test complete`);
+      testLog.info(`   Group announcement test complete`);
     });
     
     // Final stabilization check after all TTS tests
     after(async () => {
-      console.log('\n   Ensuring all rooms are stable after TTS tests...');
+      testLog.info('\n   Ensuring all rooms are stable after TTS tests...');
       
       // Check up to 5 rooms to ensure they're all stable
       const roomsToCheck = topology.rooms.slice(0, Math.min(5, topology.rooms.length));
@@ -203,22 +204,22 @@ describe('Sonos API Integration Tests', { skip: skipIntegration }, () => {
       
       const allStable = results.every(r => r !== null);
       if (!allStable) {
-        console.log('   WARNING: Some rooms did not stabilize after TTS tests');
+        testLog.info('   WARNING: Some rooms did not stabilize after TTS tests');
       } else {
-        console.log('   ✓ All checked rooms are stable');
+        testLog.info('   ✓ All checked rooms are stable');
       }
       
       // Final wait to be absolutely sure
       await new Promise(resolve => setTimeout(resolve, 3000));
-      console.log('   TTS tests cleanup complete, proceeding with other tests...\n');
+      testLog.info('   TTS tests cleanup complete, proceeding with other tests...\n');
     });
   });
 
   // Generate test coverage report at the end
   after(() => {
-    console.log('\n📈 Test Coverage Summary:');
-    console.log(`   - System discovery: ✓`);
-    console.log(`   - TTS functionality: ✓`);
-    console.log(`   - Tested ${topology?.rooms?.length || 0} rooms`);
+    testLog.info('\n📈 Test Coverage Summary:');
+    testLog.info(`   - System discovery: ✓`);
+    testLog.info(`   - TTS functionality: ✓`);
+    testLog.info(`   - Tested ${topology?.rooms?.length || 0} rooms`);
   });
 });

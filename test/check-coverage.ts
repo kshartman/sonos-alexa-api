@@ -189,6 +189,9 @@ const coveredEndpoints = [
   '/resumeAll',
   
   // Integration tests cover these
+  '/devices',
+  '/devices/id/{deviceId}',
+  '/devices/room/{roomName}',
   '/{room}/state',
   '/{room}/say/{text}',
   '/{room}/say/{text}/{volume}',
@@ -206,6 +209,7 @@ const coveredEndpoints = [
   '/library/index',
   '/library/refresh',
   '/{room}/applemusic/{action}/{id}',
+  '/{room}/spotify/play/{id}',
   '/{room}/pandora/play/{name}',
   '/{room}/pandora/stations',
   '/{room}/pandora/thumbsup',
@@ -335,9 +339,10 @@ if (showDetailed) {
       'integration/03-volume-tests.ts',
       'integration/04-content-apple.ts',
       'integration/04-content-defaults.ts',
-      'integration/04-content-generic.ts',
-      'integration/04-content-library.ts',
-      'integration/04-content-pandora.ts',
+      'integration/04-content-generic-tests.ts',
+      'integration/04-content-generic-tts-tests.ts',
+      'integration/04-content-library-tests.ts',
+      'integration/04-content-pandora-tests.ts',
       'integration/04-content-spotify-tests.ts',
       'integration/05-group-tests-quick.ts',
       'integration/06-playback-modes-tests.ts',
@@ -382,9 +387,10 @@ if (showDetailed) {
   console.log('   - 03-volume-tests.ts: Volume, mute, group volume');
   console.log('   - 04-content-apple.ts: Apple Music search');
   console.log('   - 04-content-defaults.ts: Default room/service music search');
-  console.log('   - 04-content-generic.ts: Generic music search');
-  console.log('   - 04-content-library.ts: Music library search and indexing');
-  console.log('   - 04-content-pandora.ts: Pandora playback and feedback');
+  console.log('   - 04-content-generic-tests.ts: Generic music search');
+  console.log('   - 04-content-generic-tts-tests.ts: Additional TTS tests');
+  console.log('   - 04-content-library-tests.ts: Music library search and indexing');
+  console.log('   - 04-content-pandora-tests.ts: Pandora playback and feedback');
   console.log('   - 04-content-spotify-tests.ts: Spotify direct playback');
   console.log('   - 05-group-tests-quick.ts: Basic group management');
   console.log('   - 06-playback-modes-tests.ts: Repeat, shuffle, crossfade, sleep');

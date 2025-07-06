@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { defaultConfig } from './test-config.js';
+import { testLog } from './test-logger.js';
 
 let serverProcess: ChildProcess | null = null;
 
@@ -10,16 +11,16 @@ export async function startServer(): Promise<void> {
   // Check if using external server
   const externalHost = process.env.TEST_API_URL && !process.env.TEST_API_URL.includes('localhost');
   if (externalHost) {
-    console.log(`🌐 Using external server: ${process.env.TEST_API_URL}`);
+    testLog.info(`🌐 Using external server: ${process.env.TEST_API_URL}`);
     return;
   }
 
   if (serverProcess) {
-    console.log('Server already running');
+    testLog.info('Server already running');
     return;
   }
 
-  console.log('🚀 Starting API server...');
+  testLog.info('🚀 Starting API server...');
   
   return new Promise((resolve, reject) => {
     // Start the server
@@ -49,14 +50,14 @@ export async function startServer(): Promise<void> {
           output.includes('Server running on port')) {
         cleanup();
         if (!isResolved) {
-          console.log('✅ Server started successfully');
+          testLog.info('✅ Server started successfully');
           resolve();
         }
       }
     });
 
     serverProcess.stderr?.on('data', (data) => {
-      console.error('Server error:', data.toString());
+      testLog.error('Server error:', data.toString());
     });
 
     serverProcess.on('error', (error) => {
@@ -96,7 +97,7 @@ export async function stopServer(): Promise<void> {
     return;
   }
 
-  console.log('🛑 Stopping API server...');
+  testLog.info('🛑 Stopping API server...');
   
   return new Promise((resolve) => {
     const cleanup = () => {

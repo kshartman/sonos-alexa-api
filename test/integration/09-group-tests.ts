@@ -4,7 +4,8 @@ import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom, SystemTopology, ungroupAllSpeakers } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
-import { loadBeatlesSong } from '../helpers/content-loader.js';
+import { loadTestSong } from '../helpers/content-loader.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -35,7 +36,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
   let device2Id: string;
   
   before(async () => {
-    console.log('👥 Testing group management...');
+    testLog.info('👥 Testing group management...');
     eventManager = EventManager.getInstance();
     
     // Start event bridge to receive UPnP events via SSE
@@ -43,12 +44,12 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     
     // Discover system and get test rooms
     topology = await discoverSystem();
-    console.log(`   Initial topology: ${topology.zones.length} zone(s), ${topology.rooms.length} room(s)`);
+    testLog.info(`   Initial topology: ${topology.zones.length} zone(s), ${topology.rooms.length} room(s)`);
     
     // We need at least 2 rooms for group tests
     if (topology.rooms.length < 2) {
-      console.log('⚠️  Skipping group tests - requires at least 2 Sonos devices');
-      console.log(`   Found ${topology.rooms.length} room(s): ${topology.rooms.join(', ')}`);
+      testLog.info('⚠️  Skipping group tests - requires at least 2 Sonos devices');
+      testLog.info(`   Found ${topology.rooms.length} room(s): ${topology.rooms.join(', ')}`);
       return; // Skip all tests
     }
     
@@ -73,7 +74,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     room1 = standaloneRooms[0];
     room2 = standaloneRooms[1];
     
-    console.log(`   Test rooms: ${room1} and ${room2}`);
+    testLog.info(`   Test rooms: ${room1} and ${room2}`);
     
     // Get device IDs for event tracking
     const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
@@ -89,7 +90,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     device1Id = zone1.id;
     device2Id = zone2.id;
     
-    console.log(`   Device IDs: ${device1Id}, ${device2Id}`);
+    testLog.info(`   Device IDs: ${device1Id}, ${device2Id}`);
   });
   
   afterEach(() => {
@@ -98,7 +99,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
   });
   
   after(async () => {
-    console.log('\n🧹 Cleaning up Group Management tests...\n');
+    testLog.info('\n🧹 Cleaning up Group Management tests...\n');
     
     // Ungroup all speakers to clean up
     await ungroupAllSpeakers();
@@ -112,7 +113,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     // Give a moment for cleanup to complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    console.log('✓ Group management tests complete');
+    testLog.info('✓ Group management tests complete');
   });
   
   describe('Group Formation', () => {
@@ -123,7 +124,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     });
     
     it('should join two rooms into a group', async () => {
-      console.log(`   Joining ${room2} to ${room1}`);
+      testLog.info(`   Joining ${room2} to ${room1}`);
       
       // Set up topology change listener BEFORE action
       const topologyPromise = eventManager.waitForTopologyChange(5000);
@@ -156,7 +157,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     
     it('should leave a group', async () => {
       // First create a group
-      console.log(`   Creating group: ${room2} joining ${room1}`);
+      testLog.info(`   Creating group: ${room2} joining ${room1}`);
       await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
       await eventManager.waitForTopologyChange(3000);
       
@@ -164,7 +165,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const topologyPromise = eventManager.waitForTopologyChange(5000);
       
       // Leave the group
-      console.log(`   ${room2} leaving group`);
+      testLog.info(`   ${room2} leaving group`);
       const response = await fetch(`${defaultConfig.apiUrl}/${room2}/leave`);
       assert.strictEqual(response.status, 200);
       
@@ -195,15 +196,15 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       
       // Need at least 3 standalone rooms for this test
       if (standaloneRooms.length < 3) {
-        console.log('   Skipping test - requires 3+ standalone Sonos devices');
+        testLog.info('   Skipping test - requires 3+ standalone Sonos devices');
         return;
       }
       
       const room3 = standaloneRooms.find(r => r !== room1 && r !== room2);
-      console.log(`   Adding third room: ${room3} to group [${room1}, ${room2}]`);
+      testLog.info(`   Adding third room: ${room3} to group [${room1}, ${room2}]`);
       
       // Create initial group
-      console.log(`   Step 1: Creating initial group - ${room2} joining ${room1}`);
+      testLog.info(`   Step 1: Creating initial group - ${room2} joining ${room1}`);
       await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
       await eventManager.waitForTopologyChange(3000);
       
@@ -211,7 +212,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const topologyPromise = eventManager.waitForTopologyChange(5000);
       
       // Add third room
-      console.log(`   Step 2: Adding ${room3} to the group`);
+      testLog.info(`   Step 2: Adding ${room3} to the group`);
       const response = await fetch(`${defaultConfig.apiUrl}/${room3}/join/${room1}`);
       assert.strictEqual(response.status, 200);
       
@@ -229,8 +230,8 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const groupZone = zones.find(zone => zone.members.some(m => m.roomName === room1));
       assert(groupZone, 'Should find group zone');
       
-      console.log(`   Final group members: ${groupZone.members.map(m => m.roomName).join(', ')}`);
-      console.log(`   Expected: 3 members, Got: ${groupZone.members.length} members`);
+      testLog.info(`   Final group members: ${groupZone.members.map(m => m.roomName).join(', ')}`);
+      testLog.info(`   Expected: 3 members, Got: ${groupZone.members.length} members`);
       
       assert.strictEqual(groupZone.members.length, 3, 'Group should have 3 members');
     });
@@ -245,8 +246,8 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       await eventManager.waitForTopologyChange(3000);
       
       // Load content to enable playback commands
-      console.log('   Loading content for group playback...');
-      await loadBeatlesSong(room1);
+      testLog.info('   Loading content for group playback...');
+      await loadTestSong(room1);
       
       // Wait for content to fully load
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -315,7 +316,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const initialVolume1 = initialState1.volume;
       const initialVolume2 = initialState2.volume;
       
-      console.log(`   Initial volumes: room1=${initialVolume1}, room2=${initialVolume2}`);
+      testLog.info(`   Initial volumes: room1=${initialVolume1}, room2=${initialVolume2}`);
       
       // Set initial volumes to different levels to test proportional scaling
       await fetch(`${defaultConfig.apiUrl}/${room1}/volume/20`);
@@ -327,7 +328,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const room2InitState = await fetch(`${defaultConfig.apiUrl}/${room2}/state`);
       const initState1 = await room1InitState.json();
       const initState2 = await room2InitState.json();
-      console.log(`   Set volumes: room1=${initState1.volume}, room2=${initState2.volume}`);
+      testLog.info(`   Set volumes: room1=${initState1.volume}, room2=${initState2.volume}`);
       
       // Set group volume
       const response = await fetch(`${defaultConfig.apiUrl}/${room1}/groupVolume/${targetVolume}`);
@@ -342,7 +343,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const state1 = await room1State.json();
       const state2 = await room2State.json();
       
-      console.log(`   After groupVolume(${targetVolume}): room1=${state1.volume}, room2=${state2.volume}`);
+      testLog.info(`   After groupVolume(${targetVolume}): room1=${state1.volume}, room2=${state2.volume}`);
       
       // The new volumes should be different from the initial ones
       assert(state1.volume !== initState1.volume || state2.volume !== initState2.volume,
@@ -356,7 +357,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       
       // The louder room should generally stay louder (but with some tolerance for edge cases)
       // This might not always be true due to Sonos's volume scaling algorithm
-      console.log(`   Volume difference maintained: ${state2.volume > state1.volume ? 'Yes' : 'No'}`);
+      testLog.info(`   Volume difference maintained: ${state2.volume > state1.volume ? 'Yes' : 'No'}`);
     });
     
     it('should maintain individual volume control', async () => {
@@ -371,7 +372,7 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const beforeState2 = await room2BeforeState.json();
       const beforeVolume1 = beforeState1.volume;
       
-      console.log(`   After groupVolume(30): room1=${beforeVolume1}, room2=${beforeState2.volume}`);
+      testLog.info(`   After groupVolume(30): room1=${beforeVolume1}, room2=${beforeState2.volume}`);
       
       // Set individual volume for room2
       const individualVolume = 40;
@@ -412,12 +413,12 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
     
     it('should handle group volume on non-coordinator', async () => {
       // Create group with room1 as coordinator
-      console.log(`   Creating group: ${room2} joining ${room1} (coordinator)`);
+      testLog.info(`   Creating group: ${room2} joining ${room1} (coordinator)`);
       await fetch(`${defaultConfig.apiUrl}/${room2}/join/${room1}`);
       await eventManager.waitForTopologyChange(3000);
       
       // Try to set group volume from non-coordinator
-      console.log(`   Setting group volume to 50 from non-coordinator (${room2})`);
+      testLog.info(`   Setting group volume to 50 from non-coordinator (${room2})`);
       const response = await fetch(`${defaultConfig.apiUrl}/${room2}/groupVolume/50`);
       // This should work - API should route to coordinator
       assert.strictEqual(response.status, 200);
@@ -431,10 +432,10 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
       const state1 = await room1State.json();
       const state2 = await room2State.json();
       
-      console.log(`   After groupVolume(50): ${room1}=${state1.volume}, ${room2}=${state2.volume}`);
+      testLog.info(`   After groupVolume(50): ${room1}=${state1.volume}, ${room2}=${state2.volume}`);
       
       const averageVolume = Math.round((state1.volume + state2.volume) / 2);
-      console.log(`   Average volume: ${averageVolume}, Target: 50, Difference: ${Math.abs(averageVolume - 50)}`);
+      testLog.info(`   Average volume: ${averageVolume}, Target: 50, Difference: ${Math.abs(averageVolume - 50)}`);
       
       // Sonos group volume algorithm may not result in exact average
       // Allow more tolerance as the algorithm is proprietary
@@ -444,6 +445,6 @@ describe('Group Management Tests', { skip: skipIntegration }, () => {
   });
   
   after(() => {
-    console.log('   ✓ Group management tests complete');
+    testLog.info('   ✓ Group management tests complete');
   });
 });

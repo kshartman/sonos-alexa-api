@@ -1,210 +1,21 @@
 import { defaultConfig } from './test-config.js';
 import { getSafeTestRoom, discoverSystem } from './discovery.js';
+import { getBestTestFavorite, Favorite } from './favorite-selector.js';
+import { getTestContentUris } from './test-content-cache.js';
+import { testLog } from './test-logger.js';
+
 
 /**
- * Helper to load content for testing playback commands
- * Uses multiple fallback methods to ensure content is loaded
- */
-export async function loadTestContent(room: string): Promise<boolean> {
-  console.log('📻 Loading content for testing...');
-  
-  // Try multiple methods in order of preference
-  // Songs and playlists load faster than radio stations, so try favorites last
-  const methods = [
-    () => loadFromMusicSearch(room),
-    () => loadFromPlaylists(room),
-    () => loadFromFavorites(room),
-  ];
-  
-  for (const method of methods) {
-    try {
-      const success = await method();
-      if (success) return true;
-    } catch (error) {
-      console.log(`   Method failed: ${error}`);
-    }
-  }
-  
-  console.log('⚠️  All content loading methods failed');
-  return false;
-}
-
-/**
- * Try to load content from favorites
- */
-async function loadFromFavorites(room: string): Promise<boolean> {
-  console.log('   Trying favorites...');
-  
-  const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites/detailed`);
-  if (!favoritesResponse.ok) {
-    console.log('   Failed to get favorites list');
-    return false;
-  }
-  
-  const favorites = await favoritesResponse.json();
-  console.log(`   Found ${favorites.length} favorites`);
-  
-  if (favorites.length === 0) {
-    return false;
-  }
-  
-  // Check if we got the detailed response or just titles
-  if (Array.isArray(favorites) && favorites.length > 0) {
-    const firstFav = favorites[0];
-    
-    // If we have objects with uri/title, look for radio stations
-    if (typeof firstFav === 'object' && firstFav.uri) {
-      console.log('   Got detailed favorites');
-      
-      // Look for a radio station (most reliable for continuous playback)
-      const radioFavorite = favorites.find((fav: any) => 
-        fav.uri && (
-          fav.uri.includes('radio') || 
-          fav.uri.includes('x-sonosapi-stream') ||
-          fav.uri.includes('x-sonosapi-radio') ||
-          fav.uri.includes('x-rincon-mp3radio')
-        )
-      );
-      
-      const targetFavorite = radioFavorite || favorites[0];
-      console.log(`   Loading favorite: ${targetFavorite.title}`);
-      const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorite/${encodeURIComponent(targetFavorite.title)}`);
-      
-      if (playResponse.ok) {
-        console.log('✅ Loaded favorite successfully');
-        return true;
-      } else {
-        const error = await playResponse.text();
-        console.log(`   Failed to play favorite: ${error}`);
-        return false;
-      }
-    } 
-    // If we just got strings (titles), pick one
-    else if (typeof firstFav === 'string') {
-      console.log('   Got favorite titles only');
-      
-      // Look for one that might be a radio station
-      const radioTitle = favorites.find((title: string) => 
-        title.toLowerCase().includes('radio') ||
-        title.toLowerCase().includes('fm') ||
-        title.toLowerCase().includes('am') ||
-        title.toLowerCase().includes('classic') ||
-        title.toLowerCase().includes('jazz')
-      );
-      
-      const targetTitle = radioTitle || favorites[0];
-      console.log(`   Loading favorite: ${targetTitle}`);
-      const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorite/${encodeURIComponent(targetTitle)}`);
-      
-      if (playResponse.ok) {
-        console.log('✅ Loaded favorite successfully');
-        return true;
-      } else {
-        const error = await playResponse.text();
-        console.log(`   Failed to play favorite: ${error}`);
-        return false;
-      }
-    }
-  }
-  
-  console.log('   No valid favorites found');
-  return false;
-}
-
-/**
- * Try to load content via music search
- */
-async function loadFromMusicSearch(room: string): Promise<boolean> {
-  console.log('   Trying music search...');
-  
-  // Try to search for classic, non-disruptive songs using structured format
-  const queries = [
-    'track:Yesterday artist:The Beatles',
-    'track:Imagine artist:John Lennon', 
-    'track:Let It Be artist:The Beatles'
-  ];
-  
-  for (const query of queries) {
-    try {
-      const searchResponse = await fetch(`${defaultConfig.apiUrl}/${room}/musicsearch/apple/song/${encodeURIComponent(query)}`);
-      if (searchResponse.ok) {
-        console.log(`✅ Loaded content via music search: ${query}`);
-        return true;
-      }
-    } catch (error) {
-      console.log(`   Search failed for "${query}"`);
-    }
-  }
-  
-  return false;
-}
-
-/**
- * Try to load content from playlists
- */
-async function loadFromPlaylists(room: string): Promise<boolean> {
-  console.log('   Trying playlists...');
-  
-  const playlistsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/playlists/detailed`);
-  if (!playlistsResponse.ok) {
-    console.log('   Failed to get playlists');
-    return false;
-  }
-  
-  const playlists = await playlistsResponse.json();
-  console.log(`   Found ${playlists.length} playlists`);
-  
-  if (playlists.length === 0) {
-    return false;
-  }
-  
-  // Try the first playlist
-  const playlist = playlists[0];
-  if (!playlist || !playlist.title) {
-    console.log('   No valid playlist found');
-    return false;
-  }
-  
-  console.log(`   Loading playlist: ${playlist.title}`);
-  const playResponse = await fetch(`${defaultConfig.apiUrl}/${room}/playlist/${encodeURIComponent(playlist.title)}`);
-  
-  if (playResponse.ok) {
-    console.log('✅ Loaded playlist successfully');
-    return true;
-  } else {
-    const error = await playResponse.text();
-    console.log(`   Failed to play playlist: ${error}`);
-    return false;
-  }
-}
-
-/**
- * Alternative: Use a specific favorite by name if you know it exists
- */
-export async function loadSpecificFavorite(room: string, favoriteName: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${defaultConfig.apiUrl}/${room}/favorite/${encodeURIComponent(favoriteName)}`);
-    if (response.ok) {
-      console.log(`✅ Loaded favorite: ${favoriteName}`);
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.log('⚠️  Error loading favorite:', error);
-    return false;
-  }
-}
-
-/**
- * Load a Beatles song into the queue for testing playback commands.
- * This ensures we get appropriate content (not explicit/offensive).
- * Verifies that the loaded track is actually by The Beatles.
+ * Load a single known test song into the queue.
+ * Uses cached URIs for consistent, reliable test content.
+ * If the song can be queued successfully, it's considered valid.
  * 
  * @param room - The room name to load content for (defaults to safe test room)
- * @returns Promise that resolves when Beatles content is loaded
- * @throws Error if unable to load Beatles content
+ * @param play - Whether to start playing after loading (default: false)
+ * @returns Promise that resolves when test song is queued (and optionally playing)
+ * @throws Error if unable to queue test content
  */
-export async function loadBeatlesSong(room?: string): Promise<void> {
+export async function loadTestSong(room?: string, play: boolean = false): Promise<void> {
   // Use provided room or get the default test room
   let targetRoom = room;
   if (!targetRoom) {
@@ -212,90 +23,477 @@ export async function loadBeatlesSong(room?: string): Promise<void> {
     targetRoom = await getSafeTestRoom(topology);
   }
   
-  // Try multiple Beatles songs in case one fails
-  const beatlesSongs = [
-    'track:Yesterday artist:The Beatles',
-    'track:Hey Jude artist:The Beatles',
-    'track:Let It Be artist:The Beatles',
-    'track:Come Together artist:The Beatles',
-    'track:Here Comes the Sun artist:The Beatles',
-    'track:All You Need Is Love artist:The Beatles',
-    'track:Help! artist:The Beatles',
-    'track:Eleanor Rigby artist:The Beatles'
-  ];
+  testLog.info('🎵 Loading test song...');
+  
+  // Check for environment variable override
+  const envSongUri = process.env.TEST_SONG_URI;
+  if (envSongUri) {
+    testLog.info('   Using TEST_SONG_URI from environment');
+    const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri: envSongUri })
+    });
+    
+    if (response.ok) {
+      testLog.info('   ✅ Loaded song from environment variable');
+      return;
+    }
+  }
+  
+  // Get cached content URIs (will discover if needed)
+  const cache = await getTestContentUris(targetRoom);
+  
+  if (!cache.songUri) {
+    throw new Error('Failed to find suitable test song');
+  }
+  
+  // Clear queue first
+  await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+  
+  // Add the cached song URI
+  testLog.info(`   Loading: "${cache.songTitle}" by ${cache.songArtist}`);
+  const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uri: cache.songUri })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to add test song to queue: ${response.status}`);
+  }
+  
+  testLog.info(`   ✅ Song queued successfully`);
+  
+  // Start playing if requested
+  if (play) {
+    const playResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/play`);
+    if (!playResponse.ok) {
+      throw new Error(`Failed to start playback: ${playResponse.status}`);
+    }
+    testLog.info(`   ▶️  Playback started`);
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
 
-  let loaded = false;
-  let lastError: any;
-
-  for (const searchQuery of beatlesSongs) {
-    try {
-      console.log(`   Trying: ${searchQuery}`);
-      const query = encodeURIComponent(searchQuery);
-      const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/musicsearch/apple/song/${query}`);
+/**
+ * Load a test favorite into the queue.
+ * Selects from available favorites using priority order:
+ * 1. x-file-cifs (network playlists)
+ * 2. x-rincon-playlist (local playlists) 
+ * 3. x-sonos-spotify (spotify tracks)
+ * 4. x-sonosapi-stream (streams)
+ * 
+ * @param room - The room name to load content for (defaults to safe test room)
+ * @param play - Whether to start playing after loading (default: false)
+ * @returns Promise that resolves when test favorite is queued (and optionally playing)
+ * @throws Error if unable to queue test content
+ */
+export async function loadTestFavorite(room?: string, play: boolean = false): Promise<void> {
+  // Use provided room or get the default test room
+  let targetRoom = room;
+  if (!targetRoom) {
+    const topology = await discoverSystem();
+    targetRoom = await getSafeTestRoom(topology);
+  }
+  
+  testLog.info('⭐ Loading test favorite...');
+  
+  // Check for TEST_FAVORITE environment variable
+  const testFavorite = process.env.TEST_FAVORITE;
+  if (testFavorite) {
+    testLog.info(`   Using TEST_FAVORITE: "${testFavorite}"`);
+    
+    // Get all favorites and look for the specified one
+    const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/favorites/detailed`);
+    if (favoritesResponse.ok) {
+      const favorites = await favoritesResponse.json();
+      const found = favorites.find((f: any) => f.title === testFavorite);
       
-      if (response.status !== 200) {
-        lastError = `Search returned status ${response.status}`;
-        continue;
-      }
-
-      // Wait for content to load
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Verify the content loaded correctly by checking the state
-      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/state`);
-      const state = await stateResponse.json();
-
-      // Check if we have a current track and it's by The Beatles
-      if (state.currentTrack?.artist) {
-        const artist = state.currentTrack.artist.toLowerCase();
-        if (artist.includes('beatles') || artist === 'the beatles') {
-          console.log(`   ✅ Loaded Beatles song: "${state.currentTrack.title}" by ${state.currentTrack.artist}`);
-          loaded = true;
-          break;
-        } else {
-          console.log(`   ⚠️  Unexpected artist: ${state.currentTrack.artist} (expected The Beatles)`);
-          lastError = `Got artist: ${state.currentTrack.artist}`;
+      if (found) {
+        // Check if it's a queueable URI type
+        const queueableTypes = ['x-file-cifs:', 'x-rincon-playlist:', 'x-sonos-spotify:', 'x-sonosapi-stream:'];
+        const isQueueable = found.uri && queueableTypes.some(type => found.uri.startsWith(type));
+        
+        if (isQueueable) {
+          testLog.info(`   Found queueable favorite: "${found.title}" (${found.uri.split(':')[0]}:)`);
           
-          // Stop playback if we got the wrong content
-          try {
-            await fetch(`${defaultConfig.apiUrl}/${targetRoom}/pause`);
-          } catch (e) {
-            // Ignore pause errors
+          // Clear queue and add it
+          await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+          
+          const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              uri: found.uri,
+              metadata: found.metadata || ''
+            })
+          });
+          
+          if (response.ok) {
+            testLog.info(`   ✅ Favorite queued successfully`);
+            
+            // Start playing if requested
+            if (play) {
+              const playResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/play`);
+              if (!playResponse.ok) {
+                throw new Error(`Failed to start playback: ${playResponse.status}`);
+              }
+              testLog.info(`   ▶️  Playback started`);
+          // Pause for 1 second so you can hear the music
+          await new Promise(resolve => setTimeout(resolve, 1000));
+            // Pause for 1 second so you can hear the music
+            await new Promise(resolve => setTimeout(resolve, 1000));
+              // Pause for 1 second so you can hear the music
+              await new Promise(resolve => setTimeout(resolve, 1000));
+      // Pause for 1 second so you can hear the music
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            return;
+          } else {
+            const error = await response.text();
+            testLog.info(`   ❌ Failed to queue favorite: ${error}`);
           }
+        } else {
+          const uriType = found.uri?.split(':').slice(0, 2).join(':') || 'no uri';
+          testLog.info(`   ⚠️  TEST_FAVORITE "${testFavorite}" found but not queueable`);
+          testLog.info(`      URI type: ${uriType}`);
+          testLog.info(`      Queueable types: x-file-cifs, x-rincon-playlist, x-sonos-spotify, x-sonosapi-stream`);
+          testLog.info(`   Falling back to auto-selection...`);
         }
       } else {
-        lastError = 'No current track after loading';
+        testLog.info(`   ⚠️  TEST_FAVORITE "${testFavorite}" not found`);
       }
-    } catch (error) {
-      lastError = error;
-      console.log(`   ⚠️  Failed to load ${searchQuery}:`, error.message || error);
     }
   }
+  
+  // Get all favorites
+  const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/favorites/detailed`);
+  if (!favoritesResponse.ok) {
+    throw new Error('Failed to fetch favorites');
+  }
+  
+  const favorites = await favoritesResponse.json();
+  if (!Array.isArray(favorites) || favorites.length === 0) {
+    throw new Error('No favorites available');
+  }
+  
+  // Priority order for URI types
+  const uriPriority = [
+    'x-file-cifs:',
+    'x-rincon-playlist:',
+    'x-sonos-spotify:',
+    'x-sonosapi-stream:'
+  ];
+  
+  // Find best favorite by URI type priority
+  let selectedFavorite = null;
+  for (const uriPrefix of uriPriority) {
+    const found = favorites.find(fav => fav.uri && fav.uri.startsWith(uriPrefix));
+    if (found) {
+      selectedFavorite = found;
+      break;
+    }
+  }
+  
+  if (!selectedFavorite) {
+    throw new Error('No queueable favorites found (need x-file-cifs, x-rincon-playlist, x-sonos-spotify, or x-sonosapi-stream)');
+  }
+  
+  testLog.info(`   Selected: "${selectedFavorite.title}" (${selectedFavorite.uri.split(':')[0]}:)`);
+  
+  // Clear queue first
+  await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+  
+  // Queue the favorite
+  const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      uri: selectedFavorite.uri,
+      metadata: selectedFavorite.metadata || ''
+    })
+  });
+  
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to queue favorite: ${error}`);
+  }
+  
+  testLog.info(`   ✅ Favorite queued successfully`);
+  
+  // Start playing if requested
+  if (play) {
+    const playResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/play`);
+    if (!playResponse.ok) {
+      throw new Error(`Failed to start playback: ${playResponse.status}`);
+    }
+    testLog.info(`   ▶️  Playback started`);
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+}
 
-  if (!loaded) {
-    // Try a more general Beatles search as fallback
-    try {
-      console.log('   Trying general Beatles search...');
-      const query = encodeURIComponent('The Beatles');
-      const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/musicsearch/apple/song/${query}`);
+/**
+ * Load a test playlist into the queue.
+ * Looks for network playlists (x-file-cifs) or local playlists (x-rincon-playlist).
+ * 
+ * @param room - The room name to load content for (defaults to safe test room)
+ * @param play - Whether to start playing after loading (default: false)
+ * @returns Promise that resolves when test playlist is queued (and optionally playing)
+ * @throws Error if unable to queue test content
+ */
+export async function loadTestPlaylist(room?: string, play: boolean = false): Promise<void> {
+  // Use provided room or get the default test room
+  let targetRoom = room;
+  if (!targetRoom) {
+    const topology = await discoverSystem();
+    targetRoom = await getSafeTestRoom(topology);
+  }
+  
+  testLog.info('📋 Loading test playlist...');
+  
+  // Check for TEST_PLAYLIST environment variable
+  const testPlaylist = process.env.TEST_PLAYLIST;
+  if (testPlaylist) {
+    testLog.info(`   Using TEST_PLAYLIST: "${testPlaylist}"`);
+    
+    // First check if it exists in playlists
+    const playlistsResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/playlists/detailed`);
+    if (playlistsResponse.ok) {
+      const playlists = await playlistsResponse.json();
+      const found = playlists.find((p: any) => p.title === testPlaylist);
       
-      if (response.status === 200) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        const stateResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/state`);
-        const state = await stateResponse.json();
-        
-        if (state.currentTrack?.artist?.toLowerCase().includes('beatles')) {
-          console.log(`   ✅ Loaded Beatles song: "${state.currentTrack.title}" by ${state.currentTrack.artist}`);
-          loaded = true;
+      if (found) {
+        testLog.info(`   Found playlist: "${found.title}"`);
+        const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/playlist/${encodeURIComponent(found.title)}`);
+        if (response.ok) {
+          testLog.info(`   ✅ Playlist loaded successfully`);
+          return;
         }
       }
-    } catch (error) {
-      console.log('   General Beatles search also failed:', error.message || error);
+    }
+    
+    // Also check favorites for playlist-like entries
+    const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/favorites/detailed`);
+    if (favoritesResponse.ok) {
+      const favorites = await favoritesResponse.json();
+      const found = favorites.find((f: any) => 
+        f.title === testPlaylist && 
+        f.uri && (
+          (f.uri.startsWith('x-file-cifs:') && f.uri.includes('.m3u')) ||
+          f.uri.startsWith('x-rincon-playlist:')
+        )
+      );
+      
+      if (found) {
+        testLog.info(`   Found playlist in favorites: "${found.title}"`);
+        
+        // Clear queue and add it
+        await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+        
+        const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            uri: found.uri,
+            metadata: found.metadata || ''
+          })
+        });
+        
+        if (response.ok) {
+          testLog.info(`   ✅ Playlist queued successfully`);
+          
+          // Start playing if requested
+          if (play) {
+            const playResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/play`);
+            if (!playResponse.ok) {
+              throw new Error(`Failed to start playback: ${playResponse.status}`);
+            }
+            testLog.info(`   ▶️  Playback started`);
+          // Pause for 1 second so you can hear the music
+          await new Promise(resolve => setTimeout(resolve, 1000));
+            // Pause for 1 second so you can hear the music
+            await new Promise(resolve => setTimeout(resolve, 1000));
+      // Pause for 1 second so you can hear the music
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          return;
+        }
+      }
+    }
+    
+    testLog.info(`   ⚠️  TEST_PLAYLIST "${testPlaylist}" not found, falling back to auto-selection`);
+  }
+  
+  // First try to find a playlist in favorites (many playlists show up there)
+  const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/favorites/detailed`);
+  if (favoritesResponse.ok) {
+    const favorites = await favoritesResponse.json();
+    
+    // Look for playlist-like favorites
+    const playlistFavorite = favorites.find(fav => 
+      fav.uri && (
+        (fav.uri.startsWith('x-file-cifs:') && fav.uri.includes('.m3u')) ||
+        fav.uri.startsWith('x-rincon-playlist:')
+      )
+    );
+    
+    if (playlistFavorite) {
+      testLog.info(`   Found playlist in favorites: "${playlistFavorite.title}"`);
+      
+      // Clear queue and add it
+      await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+      
+      const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          uri: playlistFavorite.uri,
+          metadata: playlistFavorite.metadata || ''
+        })
+      });
+      
+      if (response.ok) {
+        testLog.info(`   ✅ Playlist queued successfully`);
+        
+        // Start playing if requested
+        if (play) {
+          const playResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/play`);
+          if (!playResponse.ok) {
+            throw new Error(`Failed to start playback: ${playResponse.status}`);
+          }
+          testLog.info(`   ▶️  Playback started`);
+          // Pause for 1 second so you can hear the music
+          await new Promise(resolve => setTimeout(resolve, 1000));
+      // Pause for 1 second so you can hear the music
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        return;
+      }
     }
   }
-
-  if (!loaded) {
-    throw new Error(`Failed to load Beatles content. Last error: ${lastError}`);
+  
+  // If no playlist found in favorites, try the playlists endpoint
+  const playlistsResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/playlists/detailed`);
+  if (!playlistsResponse.ok) {
+    throw new Error('Failed to fetch playlists');
   }
+  
+  const playlists = await playlistsResponse.json();
+  if (!Array.isArray(playlists) || playlists.length === 0) {
+    throw new Error('No playlists available');
+  }
+  
+  // Playlists from this endpoint typically have x-rincon-playlist URIs
+  const selectedPlaylist = playlists[0];
+  testLog.info(`   Selected playlist: "${selectedPlaylist.title}"`);
+  
+  // For playlists from /playlists endpoint, we need to use the play endpoint
+  // as they might need special handling
+  const response = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/playlist/${encodeURIComponent(selectedPlaylist.title)}`);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to load playlist: ${response.status}`);
+  }
+  
+  testLog.info(`   ✅ Playlist loaded successfully`);
+}
+
+/**
+ * Load a test album into the queue.
+ * Uses cached URIs for consistent, reliable test content.
+ * 
+ * @param room - The room name to load content for (defaults to safe test room)
+ * @param play - Whether to start playing after loading (default: false)
+ * @returns Promise that resolves when test album is queued (and optionally playing)
+ * @throws Error if unable to load test content
+ */
+export async function loadTestAlbum(room?: string, play: boolean = false): Promise<void> {
+  // Use provided room or get the default test room
+  let targetRoom = room;
+  if (!targetRoom) {
+    const topology = await discoverSystem();
+    targetRoom = await getSafeTestRoom(topology);
+  }
+  
+  testLog.info('💿 Loading test album...');
+  
+  // Get cached content URIs (will discover if needed)
+  const cache = await getTestContentUris(targetRoom);
+  
+  if (!cache.albumUri || !cache.albumTitle) {
+    throw new Error('Failed to find suitable test album');
+  }
+  
+  // Clear queue first
+  await fetch(`${defaultConfig.apiUrl}/${targetRoom}/clearqueue`);
+  
+  // Load the album using music search (which adds all tracks)
+  testLog.info(`   Loading album: "${cache.albumTitle}" by ${cache.albumArtist}`);
+  const response = await fetch(
+    `${defaultConfig.apiUrl}/${targetRoom}/musicsearch/${cache.service || 'apple'}/album/${encodeURIComponent(cache.albumTitle + ' ' + cache.albumArtist)}?play=${play}`
+  );
+  
+  if (!response.ok) {
+    throw new Error(`Failed to add test album to queue: ${response.status}`);
+  }
+  
+  // Verify queue has content
+  const queueResponse = await fetch(`${defaultConfig.apiUrl}/${targetRoom}/queue`);
+  const queue = await queueResponse.json();
+  
+  if (queue.length > 0) {
+    testLog.info(`   ✅ Loaded ${queue.length} tracks from album "${cache.albumTitle}"`);
+    if (play) {
+      testLog.info(`   ▶️  Playback started`);
+      // Pause for 1 second so you can hear the music
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    // Pause for 1 second so you can hear the music
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  } else {
+    throw new Error('Album loaded but queue is empty');
+  }
+}
+
+/**
+ * Get the best test favorite, respecting TEST_FAVORITE environment variable.
+ * This returns the favorite object without loading it, useful for testing the favorite endpoint.
+ * 
+ * @param room - The room name to get favorite for
+ * @returns Promise that resolves to the favorite object or null
+ */
+export async function getTestFavorite(room: string): Promise<Favorite | null> {
+  testLog.info('⭐ Getting test favorite...');
+  
+  // Check for TEST_FAVORITE environment variable
+  const testFavorite = process.env.TEST_FAVORITE;
+  if (testFavorite) {
+    testLog.info(`   Using TEST_FAVORITE: "${testFavorite}"`);
+    
+    // Get all favorites and look for the specified one
+    const favoritesResponse = await fetch(`${defaultConfig.apiUrl}/${room}/favorites/detailed`);
+    if (favoritesResponse.ok) {
+      const favorites = await favoritesResponse.json();
+      const found = favorites.find((f: any) => f.title === testFavorite);
+      
+      if (found) {
+        testLog.info(`   ✅ Found favorite: "${found.title}"`);
+        return found;
+      } else {
+        testLog.info(`   ⚠️  TEST_FAVORITE "${testFavorite}" not found, falling back to auto-selection`);
+      }
+    }
+  }
+  
+  // Fall back to auto-selection
+  return await getBestTestFavorite(room);
 }

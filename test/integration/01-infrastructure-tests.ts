@@ -2,6 +2,7 @@ import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from '../helpers/test-config.js';
+import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -10,7 +11,7 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
   let eventManager: EventManager;
   
   before(() => {
-    console.log('🏗️  Testing core infrastructure...');
+    testLog.info('🏗️  Testing core infrastructure...');
     eventManager = EventManager.getInstance();
   });
   
@@ -252,7 +253,7 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
       const response = await fetch(`${defaultConfig.apiUrl}/zones`);
       const zones = await response.json();
       testRoom = zones[0].members[0].roomName;
-      console.log(`   Using test room: ${testRoom}`);
+      testLog.info(`   Using test room: ${testRoom}`);
     });
     
     it('should get room state with proper structure', async () => {
@@ -302,6 +303,6 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
   });
   
   after(() => {
-    console.log('   ✓ Core infrastructure tests complete');
+    testLog.info('   ✓ Core infrastructure tests complete');
   });
 });

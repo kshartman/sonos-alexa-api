@@ -690,6 +690,7 @@ export class SonosDiscovery extends EventEmitter {
             
             // Emit volume change if volume changed
             if (previousState.volume !== undefined && previousState.volume !== device.state.volume) {
+              debugManager.debug('upnp', `${deviceName}: Emitting volume-change event to EventManager (${previousState.volume} -> ${device.state.volume})`);
               eventManager.emit('volume-change', {
                 deviceId: device.id,
                 roomName: device.roomName,

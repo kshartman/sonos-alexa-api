@@ -1,7 +1,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import { EventManager } from '../../src/utils/event-manager.js';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
 import { loadTestAlbum, loadTestPlaylist } from '../helpers/content-loader.js';

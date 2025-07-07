@@ -43,11 +43,25 @@ export function closeTestLogger() {
 }
 
 /**
- * Simple logger for tests that respects TEST_DEBUG environment variable
+ * Simple logger for tests that respects LOG_LEVEL environment variable
  */
 export const testLog = {
   log: (...args: any[]) => {
-    if (process.env.TEST_DEBUG === 'true' || process.env.LOG_LEVEL === 'debug') {
+    if (process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace') {
+      const message = args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' ');
+      
+      console.log(...args);
+      
+      if (logStream) {
+        logStream.write('[DEBUG] ' + message + '\n');
+      }
+    }
+  },
+  // Debug messages (shown when LOG_LEVEL is debug or trace)
+  debug: (...args: any[]) => {
+    if (process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace') {
       const message = args.map(arg => 
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
       ).join(' ');
@@ -94,9 +108,9 @@ export const testLog = {
       logStream.write('[WARN] ' + message + '\n');
     }
   },
-  // Trace messages (only shown in debug mode)
+  // Trace messages (only shown when LOG_LEVEL is trace)
   trace: (...args: any[]) => {
-    if (process.env.TEST_DEBUG === 'true' || process.env.LOG_LEVEL === 'debug' || process.env.LOG_LEVEL === 'trace') {
+    if (process.env.LOG_LEVEL === 'trace') {
       const message = args.map(arg => 
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
       ).join(' ');

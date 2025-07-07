@@ -121,6 +121,12 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - File-based triggers for TTY-independent interactive mode
   - Comprehensive test reliability improvements
   - Support for new test environment variables
+  - Added `getTestTimeout()` helper for consistent timeout management
+  - Support for `TEST_NO_TIMEOUT` environment variable
+  - Replaced `TEST_DEBUG` with `LOG_LEVEL` environment variable
+  - Added `--match` as synonym for `--grep` in test runner
+  - Enhanced EventBridge logging with trace level support
+  - Improved TTS test timing instrumentation
 
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration
@@ -140,6 +146,9 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed FV:2 browse parsing to correctly extract Pandora favorites
 - Fixed double-encoding of Pandora station URIs
 - Fixed Pandora API singleton pattern to maintain cache between requests
+- **Fixed TTS stereo pair volume restoration** - TTS announcements now correctly capture and restore volume for stereo pairs by always using the coordinator device
+- **Fixed TTS special character handling** - URLs with special characters no longer cause 500 errors
+- **Fixed TTS input validation** - Empty or whitespace-only text now returns 400 Bad Request
 
 ## Breaking Changes
 - **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies

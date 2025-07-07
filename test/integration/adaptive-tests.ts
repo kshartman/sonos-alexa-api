@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { withSavedState } from '../helpers/state-manager.js';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { testLog } from '../helpers/test-logger.js';
 
 // Skip all tests if in mock-only mode

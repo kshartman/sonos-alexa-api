@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
 import { isPandoraAvailableForTesting, getPandoraTestStation } from '../helpers/pandora-test-helpers.js';
 import { loadTestSong } from '../helpers/content-loader.js';
@@ -10,7 +10,7 @@ import { waitForContinueFlag, testLog } from '../helpers/test-logger.js';
 const skipIntegration = defaultConfig.mockOnly;
 
 // Use very long timeout in interactive mode (10 hours)
-const testTimeout = process.env.TEST_INTERACTIVE === 'true' ? 36000000 : 120000;
+const testTimeout = process.env.TEST_INTERACTIVE === 'true' ? 36000000 : getTestTimeout(120000);
 
 describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: testTimeout }, () => {
   let testContext: TestContext;

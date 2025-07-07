@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventManager } from '../../src/utils/event-manager.js';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { getSafeTestRoom } from '../helpers/discovery.js';
 import { globalTestSetup, globalTestTeardown, getDeviceIdForRoom, TestContext } from '../helpers/global-test-setup.js';
 import { loadTestSong, loadTestAlbum, loadTestFavorite, getTestFavorite } from '../helpers/content-loader.js';
@@ -10,10 +10,7 @@ import { testLog, waitForContinueFlag } from '../helpers/test-logger.js';
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-// Use 10 hours timeout in interactive mode
-const testTimeout = process.env.TEST_INTERACTIVE === 'true' ? 36000000 : 120000;
-
-describe('Generic Content Integration Tests', { skip: skipIntegration, timeout: testTimeout }, () => {
+describe('Generic Content Integration Tests', { skip: skipIntegration, timeout: getTestTimeout(120000) }, () => {
   let context: TestContext;
   let testRoom: string;
   let deviceId: string;

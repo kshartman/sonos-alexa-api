@@ -1,7 +1,7 @@
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EventManager } from '../../src/utils/event-manager.js';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode

@@ -213,16 +213,20 @@ export class EventManager extends EventEmitter {
   async waitForVolume(deviceId: string, targetVolume: number, timeout = 5000): Promise<boolean> {
     // Get all group members for this device
     const groupMembers = this.getGroupMembers(deviceId);
+    logger.trace(`EventManager: waitForVolume called for device ${deviceId}, target: ${targetVolume}, group members: ${groupMembers.join(', ')}`);
     
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
+        logger.trace(`EventManager: waitForVolume - timeout reached for device ${deviceId}`);
         this.off('volume-change', volumeHandler);
         resolve(false);
       }, timeout);
       
       const volumeHandler = (event: VolumeChangeEvent) => {
+        logger.trace(`EventManager: waitForVolume - received volume event from ${event.deviceId}: ${event.previousVolume} -> ${event.currentVolume}`);
         // Check if the event is from any device in the group
         const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
+        logger.trace(`EventManager: waitForVolume - isGroupMember: ${isGroupMember}, targetMatch: ${event.currentVolume === targetVolume}`);
         
         if (isGroupMember && event.currentVolume === targetVolume) {
           logger.trace(`EventManager: waitForVolume - received volume change from ${event.deviceId} (group member of ${deviceId})`);
@@ -415,6 +419,35 @@ export class EventManager extends EventEmitter {
       return null;
     }
     return history[history.length - 1]!.currentMute;
+  }
+  
+  // Wait for any device to reach one of the specified states
+  async waitForAnyState(targetStates: string[], timeout = 5000): Promise<boolean> {
+    logger.trace(`EventManager: waitForAnyState called for states ${targetStates.join(', ')} with timeout ${timeout}ms`);
+    
+    return new Promise((resolve) => {
+      let resolved = false;
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          logger.trace('EventManager: waitForAnyState - timeout reached');
+          this.off('state-change', stateHandler);
+          resolve(false);
+        }
+      }, timeout);
+      
+      const stateHandler = (event: StateChangeEvent) => {
+        if (targetStates.includes(event.currentState) && !resolved) {
+          resolved = true;
+          logger.trace(`EventManager: waitForAnyState - device ${event.deviceId} reached state ${event.currentState}`);
+          clearTimeout(timeoutId);
+          this.off('state-change', stateHandler);
+          resolve(true);
+        }
+      };
+      
+      this.on('state-change', stateHandler);
+    });
   }
   
   // Get state history for debugging

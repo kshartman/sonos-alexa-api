@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
 import { testLog, waitForContinueFlag } from '../helpers/test-logger.js';
 
@@ -8,7 +8,7 @@ import { testLog, waitForContinueFlag } from '../helpers/test-logger.js';
 const skipIntegration = defaultConfig.mockOnly;
 
 // Use 10 hours timeout in interactive mode
-const testTimeout = process.env.TEST_INTERACTIVE === 'true' ? 36000000 : 100000;
+const testTimeout = process.env.TEST_INTERACTIVE === 'true' ? 36000000 : getTestTimeout(100000);
 
 describe('Apple Music Content Integration Tests', { skip: skipIntegration, timeout: testTimeout }, () => {
   let testContext: TestContext;

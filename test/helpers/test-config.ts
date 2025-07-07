@@ -12,6 +12,15 @@ export const defaultConfig: TestConfig = {
   timeout: parseInt(process.env.TEST_TIMEOUT || '10000', 10)
 };
 
+/**
+ * Get test timeout value, respecting TEST_NO_TIMEOUT environment variable
+ * @param defaultTimeout - Default timeout in milliseconds
+ * @returns Timeout value (10 hours if TEST_NO_TIMEOUT is set, otherwise default)
+ */
+export function getTestTimeout(defaultTimeout: number): number {
+  return process.env.TEST_NO_TIMEOUT === 'true' ? 36000000 : defaultTimeout;
+}
+
 export interface SystemTopology {
   zones: Zone[];
   rooms: string[];

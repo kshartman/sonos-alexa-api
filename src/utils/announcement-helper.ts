@@ -20,6 +20,9 @@ export async function playAnnouncement(
   duration: number,
   discovery: SonosDiscovery
 ): Promise<void> {
+  // For stereo pairs and groups, always use the coordinator for consistent volume operations
+  const coordinator = discovery.getCoordinator(device.id) || device;
+  
   // First, get the current transport info AND volume BEFORE any changes
   let transportInfo;
   let mediaInfo;
@@ -27,11 +30,12 @@ export async function playAnnouncement(
   let currentVolume;
   try {
     // Get all current state in parallel
+    // Note: Use coordinator for volume to ensure we get the group volume, not individual speaker volume
     const [transport, media, position, volumeResult] = await Promise.all([
       device.getTransportInfo(),
       device.getMediaInfo(),
       device.getPositionInfo(),
-      device.getVolume()
+      coordinator.getVolume()  // Use coordinator for volume!
     ]);
     
     transportInfo = transport;
@@ -73,12 +77,12 @@ export async function playAnnouncement(
       backup.trackNo = parseInt(positionInfo.Track, 10);
       backup.elapsedTime = parseTime(positionInfo.RelTime);
     }
-    logger.info(`Saved transport URI for ${device.roomName}: ${backup.uri}`);
+    logger.debug(`Saved transport URI for ${device.roomName}: ${backup.uri}`);
   } else if (state.currentTrack?.uri && !state.currentTrack.uri.includes('/tts/')) {
     // Fallback to state if transport info is not available
     backup.uri = state.currentTrack.uri;
     backup.metadata = '';
-    logger.info(`Using state URI for ${device.roomName}: ${backup.uri}`);
+    logger.debug(`Using state URI for ${device.roomName}: ${backup.uri}`);
   } else {
     logger.warn(`No valid URI to save for ${device.roomName}`);
   }
@@ -93,12 +97,16 @@ export async function playAnnouncement(
     backup.groupUri = `x-rincon:${zone.coordinator}`;
   }
 
-  logger.info(`Backup state for ${device.roomName}: volume=${backup.volume}, state=${backup.playbackState}, uri=${backup.uri?.substring(0, 50) || 'none'}`);
+  logger.debug(`Backup state for ${device.roomName}: volume=${backup.volume}, state=${backup.playbackState}, uri=${backup.uri?.substring(0, 50) || 'none'}`);
 
   try {
-    // Set announce volume
-    logger.info(`Setting announce volume to ${announceVolume} for ${device.roomName} (was ${backup.volume})`);
-    await device.setVolume(announceVolume);
+    // Set announce volume only if different (use coordinator for stereo pairs/groups)
+    if (backup.volume !== announceVolume) {
+      logger.debug(`Setting announce volume to ${announceVolume} for ${device.roomName} (was ${backup.volume})`);
+      await coordinator.setVolume(announceVolume);
+    } else {
+      logger.debug(`Volume already at ${announceVolume} for ${device.roomName}, skipping volume change`);
+    }
     
     // Play announcement
     logger.info(`Playing announcement on ${device.roomName}: ${ttsUrl}`);
@@ -110,7 +118,7 @@ export async function playAnnouncement(
     
     // Restore state
     logger.info(`Restoring previous state for ${device.roomName}`);
-    await restorePlaybackState(device, backup);
+    await restorePlaybackState(device, backup, coordinator);
     
     logger.info(`Announcement completed successfully on ${device.roomName}`);
   } catch (error) {
@@ -123,7 +131,7 @@ export async function playAnnouncement(
     });
     // Try to restore state even if announcement failed
     try {
-      await restorePlaybackState(device, backup);
+      await restorePlaybackState(device, backup, coordinator);
     } catch (restoreError) {
       logger.error('Error restoring state:', restoreError);
     }
@@ -168,25 +176,35 @@ async function waitForAnnouncementEnd(device: SonosDevice, estimatedDuration: nu
 
 async function restorePlaybackState(
   device: SonosDevice, 
-  backup: BackupState
+  backup: BackupState,
+  coordinator: SonosDevice
 ): Promise<void> {
-  logger.info(`Restoring state for ${device.roomName}: uri=${backup.uri}, state=${backup.playbackState}, volume=${backup.volume}`);
+  logger.debug(`Restoring state for ${device.roomName}: uri=${backup.uri}, state=${backup.playbackState}, volume=${backup.volume}`);
   
   try {
-    // Restore volume first
-    logger.debug(`Restoring volume to ${backup.volume}`);
-    await device.setVolume(backup.volume);
+    // Restore volume first - check if it needs changing (use coordinator for stereo pairs/groups)
+    const currentVolumeResult = await coordinator.getVolume();
+    const currentVolume = typeof currentVolumeResult.CurrentVolume === 'string' 
+      ? parseInt(currentVolumeResult.CurrentVolume, 10) 
+      : currentVolumeResult.CurrentVolume;
+    
+    if (currentVolume !== backup.volume) {
+      logger.debug(`Restoring volume to ${backup.volume} (was ${currentVolume})`);
+      await coordinator.setVolume(backup.volume);
+    } else {
+      logger.debug(`Volume already at ${backup.volume}, skipping restore`);
+    }
     
     // Rejoin group if needed
     if (backup.groupUri) {
-      logger.info(`Rejoining group: ${backup.groupUri}`);
+      logger.debug(`Rejoining group: ${backup.groupUri}`);
       await device.setAVTransportURI(backup.groupUri);
       return; // Group coordinator will handle playback
     }
     
     // Restore previous content if it was playing standalone
     if (backup.uri && backup.uri !== '') {
-      logger.info(`Restoring URI: ${backup.uri}`);
+      logger.debug(`Restoring URI: ${backup.uri}`);
       await device.setAVTransportURI(backup.uri, backup.metadata || '');
       
       // Seek to previous position if applicable
@@ -201,13 +219,13 @@ async function restorePlaybackState(
       
       // Resume playback if it was playing
       if (backup.playbackState === 'PLAYING') {
-        logger.info('Resuming playback');
+        logger.debug('Resuming playback');
         try {
           await device.play();
           // Wait a bit and check if it's actually playing
           await new Promise(resolve => setTimeout(resolve, 500));
           const newState = await device.getTransportInfo();
-          logger.info(`After play() - transport state: ${newState.CurrentTransportState}`);
+          logger.debug(`After play() - transport state: ${newState.CurrentTransportState}`);
           
           if (newState.CurrentTransportState !== 'PLAYING') {
             logger.warn('Play command didn\'t work, trying alternative approach');
@@ -220,7 +238,7 @@ async function restorePlaybackState(
           logger.error('Error resuming playback:', playError);
         }
       } else if (backup.playbackState === 'PAUSED_PLAYBACK') {
-        logger.info('Restoring paused state');
+        logger.debug('Restoring paused state');
         // For paused state, we need to ensure it stays paused
         // The setAVTransportURI might have already put it in the right state
         // but let's check and pause if needed
@@ -230,12 +248,12 @@ async function restorePlaybackState(
           if (currentState.CurrentTransportState === 'STOPPED') {
             // When stopped after restoring content, we need to play then pause
             // to get to PAUSED_PLAYBACK state
-            logger.info('Device is stopped, playing then pausing to restore paused state');
+            logger.debug('Device is stopped, playing then pausing to restore paused state');
             await device.play();
             await new Promise(resolve => setTimeout(resolve, 300));
             await device.pause();
           } else if (currentState.CurrentTransportState === 'PLAYING') {
-            logger.info('Pausing playback to restore paused state');
+            logger.debug('Pausing playback to restore paused state');
             await device.pause();
           }
           // Else already paused, nothing to do
@@ -243,7 +261,7 @@ async function restorePlaybackState(
           logger.error('Error restoring paused state:', pauseError);
         }
       } else {
-        logger.info(`Not resuming - previous state was ${backup.playbackState}`);
+        logger.debug(`Not resuming - previous state was ${backup.playbackState}`);
       }
     } else {
       logger.warn(`No URI to restore (uri: ${backup.uri})`);

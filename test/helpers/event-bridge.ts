@@ -11,6 +11,8 @@ export class EventBridge {
   private eventManager: EventManager;
   private sseConnection?: http.IncomingMessage;
   private deviceIdMap: Map<string, string> = new Map();
+  private coordinatorMap: Map<string, boolean> = new Map(); // deviceId -> isCoordinator
+  private recentVolumeChanges: Map<string, number> = new Map(); // volumeChangeKey -> timestamp
 
   constructor() {
     this.eventManager = EventManager.getInstance();
@@ -88,6 +90,8 @@ export class EventBridge {
   }
   
   private processEvent(data: any): void {
+    testLog.trace(`EventBridge: Processing event type: ${data.type}`);
+    
     if (data.type === 'device-state-change') {
       const roomName = data.data.room;
       const eventDeviceId = data.data.deviceId;
@@ -96,6 +100,8 @@ export class EventBridge {
       const deviceId = eventDeviceId || mappedDeviceId || roomName;
       const newState = data.data.state.playbackState;
       const previousState = data.data.previousState?.playbackState || 'UNKNOWN';
+      
+      testLog.trace(`EventBridge: device-state-change for ${roomName} (${deviceId}), state: ${previousState} -> ${newState}`);
       
       // Create state change event
       const stateChangeEvent = {
@@ -125,13 +131,48 @@ export class EventBridge {
       // Also emit volume/mute changes if present
       if (data.data.state.volume !== undefined && 
           data.data.previousState?.volume !== data.data.state.volume) {
-        this.eventManager.emit('volume-change', {
+        // In debug mode, only log volume changes from coordinators to reduce noise
+        const isCoordinator = this.coordinatorMap.get(deviceId);
+        
+        // Create a unique key for this volume change to detect duplicates
+        const volumeChangeKey = `${roomName}-${data.data.previousState?.volume}-${data.data.state.volume}`;
+        const now = Date.now();
+        
+        // Track recent volume changes to filter duplicates
+        if (!this.recentVolumeChanges) {
+          this.recentVolumeChanges = new Map();
+        }
+        
+        // Check if we've seen this exact change recently (within 100ms)
+        const lastSeen = this.recentVolumeChanges.get(volumeChangeKey);
+        if (lastSeen && (now - lastSeen) < 100) {
+          // Skip duplicate volume change
+          testLog.trace(`EventBridge: Skipping duplicate volume change for ${roomName}`);
+        } else {
+          // Record this volume change
+          this.recentVolumeChanges.set(volumeChangeKey, now);
+          
+          // Clean up old entries (older than 1 second)
+          for (const [key, time] of this.recentVolumeChanges.entries()) {
+            if (now - time > 1000) {
+              this.recentVolumeChanges.delete(key);
+            }
+          }
+          
+          // Log the volume change
+          if (process.env.LOG_LEVEL === 'trace' || isCoordinator !== false) {
+            testLog.debug(`EventBridge: Volume change detected for ${roomName}: ${data.data.previousState?.volume} -> ${data.data.state.volume}`);
+          }
+        }
+        const volumeEvent = {
           deviceId,
           roomName,
           previousVolume: data.data.previousState?.volume || 0,
           currentVolume: data.data.state.volume,
           timestamp: Date.now()
-        });
+        };
+        testLog.trace(`EventBridge: Emitting volume-change event:`, volumeEvent);
+        this.eventManager.emit('volume-change', volumeEvent);
       }
       
       if (data.data.state.mute !== undefined && 
@@ -174,7 +215,7 @@ export class EventBridge {
       });
     } else if (data.type === 'track-change') {
       // Forward track change events
-      testLog.info(`EventBridge: Received track-change event for ${data.data.roomName} (${data.data.deviceId})`);
+      testLog.trace(`EventBridge: Received track-change event for ${data.data.roomName} (${data.data.deviceId})`);
       this.eventManager.emit('track-change', {
         deviceId: data.data.deviceId,
         roomName: data.data.roomName,
@@ -194,13 +235,15 @@ export class EventBridge {
       if (response.ok) {
         const zones = await response.json();
         
-        // Clear existing map
+        // Clear existing maps
         this.deviceIdMap.clear();
+        this.coordinatorMap.clear();
         
-        // Build new map
+        // Build new maps
         for (const zone of zones) {
           for (const member of zone.members) {
             this.deviceIdMap.set(member.roomName, member.id);
+            this.coordinatorMap.set(member.id, member.isCoordinator);
           }
         }
         
@@ -235,7 +278,7 @@ export class EventBridge {
           }
         }
         
-        testLog.info(`EventBridge: Updated group members cache with ${groupMembersCache.size} entries`);
+        testLog.debug(`EventBridge: Updated group members cache with ${groupMembersCache.size} entries`);
       }
     } catch (error) {
       testLog.error('EventBridge: Failed to update group members cache:', error);

@@ -1,6 +1,6 @@
 import { after, afterEach, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
 import { getSearchTerm, getSafeSearchQuery } from '../helpers/test-search-terms.js';
 import { testLog } from '../helpers/test-logger.js';
@@ -8,7 +8,7 @@ import { testLog } from '../helpers/test-logger.js';
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Default Service Content Integration Tests', { skip: skipIntegration, timeout: 210000 }, () => {
+describe('Default Service Content Integration Tests', { skip: skipIntegration, timeout: getTestTimeout(210000) }, () => {
   let testContext: TestContext;
   let testRoom: string;
   let deviceId: string;

@@ -22,16 +22,20 @@ const noServer = args.includes('--no-server') || process.env.NO_SERVER === 'true
 const enableInteractive = args.includes('--interactive');
 const noTimeout = args.includes('--no-timeout') || enableInteractive; // Interactive mode implies no timeout
 const enableLogging = args.includes('--log');
+const debugMode = args.includes('--debug');
+const traceMode = args.includes('--trace');
 
-// Extract grep pattern if provided
+// Extract grep pattern if provided (--match is an undocumented synonym for --grep)
 let grepPattern: string | undefined;
-const grepIndex = args.findIndex(arg => arg === '--grep' || arg.startsWith('--grep='));
+const grepIndex = args.findIndex(arg => arg === '--grep' || arg.startsWith('--grep=') || arg === '--match' || arg.startsWith('--match='));
 if (grepIndex !== -1) {
   const grepArg = args[grepIndex];
-  if (grepArg === '--grep' && args[grepIndex + 1]) {
+  if ((grepArg === '--grep' || grepArg === '--match') && args[grepIndex + 1]) {
     grepPattern = args[grepIndex + 1];
   } else if (grepArg.startsWith('--grep=')) {
     grepPattern = grepArg.substring('--grep='.length);
+  } else if (grepArg.startsWith('--match=')) {
+    grepPattern = grepArg.substring('--match='.length);
   }
 }
 
@@ -46,7 +50,11 @@ process.env.TEST_MODE = testMode;
 process.env.MOCK_ONLY = mockOnly ? 'true' : 'false';
 
 // Set log level for test process (affects EventBridge and other helpers that use the logger)
-if (!process.env.LOG_LEVEL) {
+if (traceMode) {
+  process.env.LOG_LEVEL = 'trace';
+} else if (debugMode) {
+  process.env.LOG_LEVEL = 'debug';
+} else if (!process.env.LOG_LEVEL) {
   process.env.LOG_LEVEL = 'error';  // Only show errors during tests unless explicitly set
 }
 
@@ -81,6 +89,9 @@ if (enableLogging && logFilename) {
 }
 if (enableInteractive) {
   console.log(`   Interactive: Enabled (will pause for user input, timeouts disabled)`);
+}
+if (debugMode || traceMode) {
+  console.log(`   Log Level: ${process.env.LOG_LEVEL}`);
 }
 console.log();
 
@@ -159,13 +170,19 @@ async function runTests() {
     const testEnv = { 
       ...process.env,
       TEST_LOGGING: enableLogging ? 'true' : 'false',
-      TEST_INTERACTIVE: enableInteractive ? 'true' : 'false'
+      TEST_INTERACTIVE: enableInteractive ? 'true' : 'false',
+      TEST_NO_TIMEOUT: (noTimeout || enableInteractive) ? 'true' : 'false'
     };
     
     // Generate log file path if logging is enabled
     if (enableLogging && logFilename) {
       testEnv.TEST_LOG_PATH = join(__dirname, '..', 'logs', logFilename);
       console.log(`📝 Test output will be logged to: ${testEnv.TEST_LOG_PATH}\n`);
+    }
+    
+    // Debug: Show the actual command being run
+    if (debugMode || traceMode) {
+      console.log(`🔍 Running: npx ${testArgs.join(' ')}\n`);
     }
     
     // Run tests with proper stdio configuration
@@ -217,6 +234,8 @@ Options:
   --no-timeout    Disable test timeouts (for interactive debugging)
   --log           Log test output to file
   --interactive   Enable interactive mode (pause for user input, implies --no-timeout)
+  --debug         Enable debug logging (sets LOG_LEVEL=debug)
+  --trace         Enable trace logging (sets LOG_LEVEL=trace)
   --grep PATTERN  Filter tests by name pattern
   --help          Show this help
 

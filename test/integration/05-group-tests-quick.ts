@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventManager } from '../../src/utils/event-manager.js';
-import { defaultConfig } from '../helpers/test-config.js';
+import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
 import { testLog } from '../helpers/test-logger.js';
@@ -9,7 +9,7 @@ import { testLog } from '../helpers/test-logger.js';
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Group Management Quick Tests', { skip: skipIntegration, timeout: 30000 }, () => {
+describe('Group Management Quick Tests', { skip: skipIntegration, timeout: getTestTimeout(30000) }, () => {
   let topology: SystemTopology;
   let room1: string;
   let room2: string;

@@ -554,6 +554,9 @@ export class ApiRouter {
     }
 
     const params: RouteParams = {};
+    
+    // Check if this is a TTS route
+    const isTTSRoute = pattern.includes('/say/') || pattern.includes('/sayall/');
 
     for (let i = 0; i < patternParts.length; i++) {
       const patternPart = patternParts[i]!;
@@ -561,7 +564,20 @@ export class ApiRouter {
 
       if (patternPart.startsWith('{') && patternPart.endsWith('}')) {
         const paramName = patternPart.slice(1, -1);
-        params[paramName] = decodeURIComponent(actualPart);
+        
+        // Special handling for TTS text parameter
+        if (isTTSRoute && paramName === 'text') {
+          // Don't decode here - the TTS handler will do safe decoding
+          params[paramName] = actualPart;
+        } else {
+          try {
+            params[paramName] = decodeURIComponent(actualPart);
+          } catch (e) {
+            // For non-TTS routes, malformed URLs are an error
+            logger.debug(`Malformed URL parameter '${paramName}' in path '${actualPath}': ${actualPart}`);
+            return null;
+          }
+        }
       } else if (patternPart.includes('{') && patternPart.includes('}')) {
         // Handle patterns like +{delta} or -{delta}
         const paramMatch = patternPart.match(/^(.*)\{([^}]+)\}(.*)$/);
@@ -569,7 +585,13 @@ export class ApiRouter {
           const [, prefix, paramName, suffix] = paramMatch;
           if (actualPart.startsWith(prefix!) && actualPart.endsWith(suffix!)) {
             const value = actualPart.slice(prefix!.length, actualPart.length - suffix!.length);
-            params[paramName!] = decodeURIComponent(value);
+            try {
+              params[paramName!] = decodeURIComponent(value);
+            } catch (e) {
+              // For non-TTS routes, malformed URLs are an error
+              logger.debug(`Malformed URL parameter '${paramName}' in path '${actualPath}': ${value}`);
+              return null;
+            }
           } else {
             return null;
           }

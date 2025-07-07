@@ -3,12 +3,25 @@ import type { SonosDevice } from '../sonos-device.js';
 import type { SonosDiscovery } from '../discovery.js';
 
 interface BackupState {
-  volume: number;
-  playbackState: 'PLAYING' | 'PAUSED_PLAYBACK' | 'STOPPED';
-  uri?: string;
-  metadata?: string;
+  // Transport state
+  transportURI?: string;
+  transportMetadata?: string;
+  
+  // Queue state
+  hasQueue: boolean;
+  queueWasEmpty: boolean;
+  
+  // Position state
   trackNo?: number;
   elapsedTime?: number;
+  
+  // Playback state
+  playbackState: 'PLAYING' | 'PAUSED_PLAYBACK' | 'STOPPED';
+  
+  // Volume state
+  volume: number;
+  
+  // Group state
   groupUri?: string;
   wasCoordinator: boolean;
 }
@@ -55,36 +68,55 @@ export async function playAnnouncement(
     currentVolume = device.state.volume;
   }
 
-  // Save current state
-  const state = device.state;
+  // Check queue state FIRST
+  let queueInfo;
+  try {
+    queueInfo = await device.getQueue(0, 1);
+  } catch (error) {
+    logger.warn(`Failed to get queue info for ${device.roomName}:`, error);
+    queueInfo = { items: [] };
+  }
+  
+  // Determine if we're playing from queue or direct URI
+  const isPlayingFromQueue = mediaInfo?.CurrentURI?.startsWith('x-rincon-queue:');
+  const queueIsEmpty = queueInfo.items.length === 0;
+  
+  // Save complete state snapshot
   const backup: BackupState = {
-    volume: typeof currentVolume === 'string' ? parseInt(currentVolume, 10) : (currentVolume || state.volume), // Ensure it's a number
-    // Use transport info for accurate playback state
+    // Volume state
+    volume: typeof currentVolume === 'string' ? parseInt(currentVolume, 10) : (currentVolume || device.state.volume),
+    
+    // Playback state
     playbackState: transportInfo?.CurrentTransportState === 'PAUSED_PLAYBACK' ? 'PAUSED_PLAYBACK' :
       transportInfo?.CurrentTransportState === 'PLAYING' ? 'PLAYING' : 
         'STOPPED',
+    
+    // Queue state
+    hasQueue: isPlayingFromQueue || false,
+    queueWasEmpty: queueIsEmpty,
+    
+    // Coordinator state
     wasCoordinator: device.isCoordinator()
   };
 
-  // Save transport details for restoration
+  // Save transport URI - this could be a queue URI or direct URI
   if (mediaInfo?.CurrentURI && !mediaInfo.CurrentURI.includes('/tts/')) {
-    // Use media info if it's not a TTS URL
-    backup.uri = mediaInfo.CurrentURI;
-    backup.metadata = mediaInfo.CurrentURIMetaData;
+    backup.transportURI = mediaInfo.CurrentURI;
+    backup.transportMetadata = mediaInfo.CurrentURIMetaData;
     
     // Only save position for non-streaming sources
-    if (!isStreamingSource(backup.uri) && positionInfo) {
+    if (!isStreamingSource(backup.transportURI) && positionInfo) {
       backup.trackNo = parseInt(positionInfo.Track, 10);
       backup.elapsedTime = parseTime(positionInfo.RelTime);
     }
-    logger.debug(`Saved transport URI for ${device.roomName}: ${backup.uri}`);
-  } else if (state.currentTrack?.uri && !state.currentTrack.uri.includes('/tts/')) {
-    // Fallback to state if transport info is not available
-    backup.uri = state.currentTrack.uri;
-    backup.metadata = '';
-    logger.debug(`Using state URI for ${device.roomName}: ${backup.uri}`);
+    logger.debug(`Saved transport URI for ${device.roomName}: ${backup.transportURI}`);
+  } else if (!queueIsEmpty) {
+    // No current URI but queue has content - we should restore to queue
+    backup.hasQueue = true;
+    backup.transportURI = `x-rincon-queue:${device.id.replace('uuid:', '')}#0`;
+    logger.debug(`No current URI but queue has content for ${device.roomName}`);
   } else {
-    logger.warn(`No valid URI to save for ${device.roomName}`);
+    logger.debug(`No URI and empty queue for ${device.roomName} - will clear after TTS`);
   }
 
   // Check if we're in a group
@@ -97,7 +129,9 @@ export async function playAnnouncement(
     backup.groupUri = `x-rincon:${zone.coordinator}`;
   }
 
-  logger.debug(`Backup state for ${device.roomName}: volume=${backup.volume}, state=${backup.playbackState}, uri=${backup.uri?.substring(0, 50) || 'none'}`);
+  logger.debug(`Backup state for ${device.roomName}: volume=${backup.volume}, state=${backup.playbackState}, ` +
+    `hasQueue=${backup.hasQueue}, queueWasEmpty=${backup.queueWasEmpty}, ` +
+    `uri=${backup.transportURI?.substring(0, 50) || 'none'}`);
 
   try {
     // Set announce volume only if different (use coordinator for stereo pairs/groups)
@@ -179,10 +213,12 @@ async function restorePlaybackState(
   backup: BackupState,
   coordinator: SonosDevice
 ): Promise<void> {
-  logger.debug(`Restoring state for ${device.roomName}: uri=${backup.uri}, state=${backup.playbackState}, volume=${backup.volume}`);
+  logger.debug(`Restoring state for ${device.roomName}: ` +
+    `hasQueue=${backup.hasQueue}, queueWasEmpty=${backup.queueWasEmpty}, ` +
+    `state=${backup.playbackState}, volume=${backup.volume}`);
   
   try {
-    // Restore volume first - check if it needs changing (use coordinator for stereo pairs/groups)
+    // Step 1: Restore volume (use coordinator for stereo pairs/groups)
     const currentVolumeResult = await coordinator.getVolume();
     const currentVolume = typeof currentVolumeResult.CurrentVolume === 'string' 
       ? parseInt(currentVolumeResult.CurrentVolume, 10) 
@@ -191,80 +227,92 @@ async function restorePlaybackState(
     if (currentVolume !== backup.volume) {
       logger.debug(`Restoring volume to ${backup.volume} (was ${currentVolume})`);
       await coordinator.setVolume(backup.volume);
-    } else {
-      logger.debug(`Volume already at ${backup.volume}, skipping restore`);
     }
     
-    // Rejoin group if needed
+    // Step 2: Rejoin group if needed
     if (backup.groupUri) {
       logger.debug(`Rejoining group: ${backup.groupUri}`);
       await device.setAVTransportURI(backup.groupUri);
       return; // Group coordinator will handle playback
     }
     
-    // Restore previous content if it was playing standalone
-    if (backup.uri && backup.uri !== '') {
-      logger.debug(`Restoring URI: ${backup.uri}`);
-      await device.setAVTransportURI(backup.uri, backup.metadata || '');
-      
-      // Seek to previous position if applicable
-      if (backup.trackNo && backup.elapsedTime && !isStreamingSource(backup.uri)) {
-        try {
-          logger.debug(`Seeking to track ${backup.trackNo} at ${backup.elapsedTime}s`);
-          await device.seek(backup.trackNo, backup.elapsedTime);
-        } catch (error) {
-          logger.error('Error seeking to previous position:', error);
+    // Step 3: Restore content based on original state
+    
+    // Case 1: Queue was empty - clear it
+    if (backup.queueWasEmpty) {
+      logger.debug('Queue was empty before TTS, clearing queue');
+      await device.clearQueue();
+      // Nothing more to do - device should be stopped
+      return;
+    }
+    
+    // Case 2: Had a transport URI (queue or direct)
+    if (backup.transportURI) {
+      // For queue URIs, the queue should still be intact
+      if (backup.transportURI.startsWith('x-rincon-queue:')) {
+        logger.debug(`Restoring queue playback: ${backup.transportURI}`);
+        
+        // Set transport back to queue
+        await device.setAVTransportURI(backup.transportURI, '');
+        
+        // Seek to saved position if needed
+        if (backup.trackNo && backup.elapsedTime) {
+          try {
+            logger.debug(`Seeking to track ${backup.trackNo} at ${backup.elapsedTime}s`);
+            await device.seek(backup.trackNo, backup.elapsedTime);
+          } catch (error) {
+            logger.error('Error seeking to previous position:', error);
+          }
+        }
+      } else {
+        // Direct URI (not queue)
+        logger.debug(`Restoring direct URI: ${backup.transportURI}`);
+        await device.setAVTransportURI(backup.transportURI, backup.transportMetadata || '');
+        
+        // Seek if needed
+        if (backup.trackNo && backup.elapsedTime && !isStreamingSource(backup.transportURI)) {
+          try {
+            logger.debug(`Seeking to track ${backup.trackNo} at ${backup.elapsedTime}s`);
+            await device.seek(backup.trackNo, backup.elapsedTime);
+          } catch (error) {
+            logger.error('Error seeking to previous position:', error);
+          }
         }
       }
       
-      // Resume playback if it was playing
+      // Step 4: Restore playback state
       if (backup.playbackState === 'PLAYING') {
         logger.debug('Resuming playback');
-        try {
-          await device.play();
-          // Wait a bit and check if it's actually playing
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const newState = await device.getTransportInfo();
-          logger.debug(`After play() - transport state: ${newState.CurrentTransportState}`);
-          
-          if (newState.CurrentTransportState !== 'PLAYING') {
-            logger.warn('Play command didn\'t work, trying alternative approach');
-            // Try stopping first then playing
-            await device.stop();
-            await device.setAVTransportURI(backup.uri, backup.metadata || '');
-            await device.play();
-          }
-        } catch (playError) {
-          logger.error('Error resuming playback:', playError);
+        await device.play();
+        
+        // Verify it's actually playing
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const state = await device.getTransportInfo();
+        if (state.CurrentTransportState !== 'PLAYING') {
+          logger.warn(`Play failed, transport state is ${state.CurrentTransportState}`);
         }
       } else if (backup.playbackState === 'PAUSED_PLAYBACK') {
         logger.debug('Restoring paused state');
-        // For paused state, we need to ensure it stays paused
-        // The setAVTransportURI might have already put it in the right state
-        // but let's check and pause if needed
-        try {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          const currentState = await device.getTransportInfo();
-          if (currentState.CurrentTransportState === 'STOPPED') {
-            // When stopped after restoring content, we need to play then pause
-            // to get to PAUSED_PLAYBACK state
-            logger.debug('Device is stopped, playing then pausing to restore paused state');
-            await device.play();
-            await new Promise(resolve => setTimeout(resolve, 300));
-            await device.pause();
-          } else if (currentState.CurrentTransportState === 'PLAYING') {
-            logger.debug('Pausing playback to restore paused state');
-            await device.pause();
-          }
-          // Else already paused, nothing to do
-        } catch (pauseError) {
-          logger.error('Error restoring paused state:', pauseError);
+        
+        // Check current state after URI restore
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const state = await device.getTransportInfo();
+        
+        if (state.CurrentTransportState === 'STOPPED') {
+          // Need to play then pause to get to PAUSED_PLAYBACK
+          logger.debug('Playing then pausing to restore paused state');
+          await device.play();
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await device.pause();
+        } else if (state.CurrentTransportState === 'PLAYING') {
+          // Just pause it
+          await device.pause();
         }
-      } else {
-        logger.debug(`Not resuming - previous state was ${backup.playbackState}`);
+        // Already paused - nothing to do
       }
+      // STOPPED - nothing to do, already stopped after URI set
     } else {
-      logger.warn(`No URI to restore (uri: ${backup.uri})`);
+      logger.debug('No transport URI to restore');
     }
   } catch (error) {
     logger.error('Error restoring playback state:', error);

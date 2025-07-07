@@ -20,12 +20,26 @@ export interface TestContext {
   deviceIdMapping: Map<string, string>;
   musicsearchSongTerm: string;
   musicsearchAlbumTerm: string;
+  testRoom: string;
+  testDeviceId: string;
+}
+
+/**
+ * Options for global test setup
+ */
+export interface TestSetupOptions {
+  /** Ensure a song is playing in the test room */
+  ensurePlaying?: boolean;
+  /** Room to ensure playing in (defaults to TEST_ROOM or first available) */
+  testRoom?: string;
+  /** Volume to set when ensuring playback */
+  playbackVolume?: number;
 }
 
 /**
  * Global test setup - called before test suites
  */
-export async function globalTestSetup(testSuiteName: string): Promise<TestContext> {
+export async function globalTestSetup(testSuiteName: string, options?: TestSetupOptions): Promise<TestContext> {
   testLog.info(`\n🚀 Global test setup for: ${testSuiteName}`);
   
   // Initialize test logger if requested
@@ -92,12 +106,76 @@ export async function globalTestSetup(testSuiteName: string): Promise<TestContex
     testLog.info(`🔍 Using custom album search term: "${musicsearchAlbumTerm}"`);
   }
   
+  // Determine test room and device ID
+  const testRoom = process.env.TEST_ROOM || topology.rooms[0];
+  const testDeviceId = await getDeviceIdForRoom(testRoom);
+  testLog.info(`📍 Test room: ${testRoom} (${testDeviceId})`);
+  
+  // Handle ensurePlaying option
+  if (options?.ensurePlaying) {
+    const playbackVolume = options.playbackVolume || 20;
+    
+    testLog.info(`🎵 Ensuring music is playing in ${testRoom}...`);
+    
+    // Import loadTestSong dynamically to avoid circular dependency
+    const { loadTestSong } = await import('./content-loader.js');
+    
+    // First stop any current playback
+    testLog.info(`   Stopping current playback in ${testRoom}...`);
+    await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Clear queue to remove any TTS content
+    testLog.info(`   Clearing queue in ${testRoom}...`);
+    await fetch(`${defaultConfig.apiUrl}/${testRoom}/clearqueue`);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Load and play a test song
+    testLog.info(`   Loading test song...`);
+    await loadTestSong(testRoom, true);
+    
+    // Set volume
+    await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/${playbackVolume}`);
+    
+    // Wait for playback to start
+    let playing = await eventManager.waitForState(testDeviceId, 'PLAYING', 10000);
+    
+    // If not playing, try explicit play command
+    if (!playing) {
+      testLog.info(`   Playback didn't start automatically, sending explicit play command...`);
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
+      playing = await eventManager.waitForState(testDeviceId, 'PLAYING', 5000);
+    }
+    
+    if (playing) {
+      // Verify what's actually playing and it's not TTS
+      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
+      const state = await stateResponse.json();
+      const trackInfo = state.currentTrack?.title || state.currentTrack?.uri || 'Unknown';
+      
+      // Check if it's TTS content
+      if (state.currentTrack?.uri?.includes('/tts/')) {
+        throw new Error(`TTS content detected instead of music: ${trackInfo}`);
+      }
+      
+      testLog.info(`✅ Music playing in ${testRoom} at volume ${playbackVolume}: ${trackInfo}`);
+      
+      // Pause so user can hear the music is actually playing
+      testLog.info(`   Pausing 2 seconds so you can hear the music...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      throw new Error(`Failed to start playback in ${testRoom} - tests cannot proceed without music playing`);
+    }
+  }
+  
   return {
     eventManager,
     topology,
     deviceIdMapping,
     musicsearchSongTerm,
-    musicsearchAlbumTerm
+    musicsearchAlbumTerm,
+    testRoom,
+    testDeviceId
   };
 }
 

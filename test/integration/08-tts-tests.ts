@@ -10,54 +10,45 @@ const skipIntegration = defaultConfig.mockOnly;
 
 describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTestTimeout(180000) }, () => {
   let testContext: TestContext;
-  let room: string;
-  let deviceId: string;
   let originalVolume: number;
   
   before(async () => {
     testLog.info('🗣️  Testing text-to-speech...');
     
-    // Use global test setup
-    testContext = await globalTestSetup('TTS tests');
-    const { eventManager, topology } = testContext;
-    
-    // Get test room from environment or use first available
-    room = process.env.TEST_ROOM || topology.rooms[0];
-    if (!room) {
-      throw new Error('No suitable test room found');
-    }
-    
-    testLog.info(`   Test room: ${room}`);
-    
-    // Get device ID for event tracking
-    const zone = topology.zones.find(z => z.members.some(m => m.roomName === room));
-    if (!zone) {
-      throw new Error(`Zone not found for room ${room}`);
-    }
-    
-    // Use coordinator device ID (important for stereo pairs)
-    const coordinatorMember = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinatorMember!.id;
-    testLog.info(`   Device ID: ${deviceId}`);
+    // Use global test setup with ensurePlaying option
+    testContext = await globalTestSetup('TTS tests', {
+      ensurePlaying: true,
+      playbackVolume: parseInt(process.env.TEST_VOLUME_DEFAULT || '20', 10)
+    });
     
     // Get initial volume
-    const stateResponse = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+    const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
     const state = await stateResponse.json();
     originalVolume = state.volume;
     testLog.info(`   Original volume: ${originalVolume}`);
+    
+    // Global setup already ensured music is playing, just verify
+    if (state.playbackState !== 'PLAYING') {
+      throw new Error(`Expected music to be playing from global setup, but state is: ${state.playbackState}`);
+    }
+    testLog.info(`   ✅ Music already playing: ${state.currentTrack?.title || 'Unknown'}`);
+    
+    // Add a pause so you can hear the music before tests start
+    testLog.info('   Pausing 2 seconds before starting tests...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
   });
   
   after(async () => {
     testLog.info('\n🧹 Cleaning up TTS tests...\n');
     
     // Stop playback
-    if (room) {
-      await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
+    if (testContext.testRoom) {
+      await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/stop`);
     }
     
     // Restore original volume
-    if (room && originalVolume > 0) {
-      await fetch(`${defaultConfig.apiUrl}/${room}/volume/${originalVolume}`);
+    if (testContext.testRoom && originalVolume > 0) {
+      await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/volume/${originalVolume}`);
       testLog.info(`✅ Restored volume to ${originalVolume}`);
     }
     
@@ -69,22 +60,27 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     it('Test 1: Say to playing room with different volume, verify playback and volume restore', { timeout: getTestTimeout(45000) }, async () => {
       const testStartTime = Date.now();
       const { eventManager } = testContext;
-      testLog.info('   Test 1: Setting up - playing song at low volume');
+      testLog.info('   Test 1: Testing TTS with volume change');
       
-      // Load content and start playing
-      const loadStartTime = Date.now();
-      await loadTestSong(room, true);
-      await eventManager.waitForState(deviceId, 'PLAYING', 10000);
-      testLog.info(`   ⏱️  Load and play took: ${Date.now() - loadStartTime}ms`);
+      // Music should already be playing from global setup
+      // Just verify it's playing
+      const verifyStartTime = Date.now();
+      const currentState = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
+      const state = await currentState.json();
+      if (state.playbackState !== 'PLAYING') {
+        throw new Error(`Expected music to be playing, but state is: ${state.playbackState}`);
+      }
+      testLog.info(`   ✅ Music is playing: ${state.currentTrack?.title || 'Unknown'}`);
+      testLog.info(`   ⏱️  Verify playing took: ${Date.now() - verifyStartTime}ms`);
       
       // Set low volume (20)
       const volumeSetStartTime = Date.now();
-      await fetch(`${defaultConfig.apiUrl}/${room}/volume/20`);
-      await eventManager.waitForVolume(deviceId, 20, 5000);
+      await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/volume/20`);
+      await eventManager.waitForVolume(testContext.testDeviceId, 20, 5000);
       testLog.info(`   ⏱️  Volume set to 20 took: ${Date.now() - volumeSetStartTime}ms`);
       
       // Get current track info
-      const beforeState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const beforeState = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
       const stateBefore = await beforeState.json();
       testLog.info(`   Playing: ${stateBefore.currentTrack?.title || 'Stream'} at volume 20`);
       
@@ -93,10 +89,10 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       const ttsMessage = 'Test case 1: Volume and playback restore';
       
       // Set up volume change listener BEFORE making the request
-      const volumeChangePromise = eventManager.waitForVolume(deviceId, 50, 5000);
+      const volumeChangePromise = eventManager.waitForVolume(testContext.testDeviceId, 50, 5000);
       
       const ttsStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/${encodeURIComponent(ttsMessage)}/50`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/${encodeURIComponent(ttsMessage)}/50`);
       assert.strictEqual(response.status, 200);
       const ttsRequestTime = Date.now() - ttsStartTime;
       testLog.info(`   ⏱️  TTS request took: ${ttsRequestTime}ms`);
@@ -114,17 +110,17 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Check volume restored
       const volumeRestoreStart = Date.now();
-      const volumeRestored = await eventManager.waitForVolume(deviceId, 20, 15000);
+      const volumeRestored = await eventManager.waitForVolume(testContext.testDeviceId, 20, 15000);
       testLog.info(`   ⏱️  Wait for volume restore took: ${Date.now() - volumeRestoreStart}ms`);
       
       // Get current state for debugging
-      const afterState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const afterState = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
       const stateAfter = await afterState.json();
       testLog.info(`   Current state after TTS: volume=${stateAfter.volume}, playback=${stateAfter.playbackState}`);
       
       // Check playback restored
       const playbackRestoreStart = Date.now();
-      const playbackRestored = await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+      const playbackRestored = await eventManager.waitForState(testContext.testDeviceId, 'PLAYING', 10000);
       assert(playbackRestored, 'Playback should be restored');
       testLog.info(`   ⏱️  Wait for playback restore took: ${Date.now() - playbackRestoreStart}ms`);
       
@@ -142,9 +138,9 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Make sure we have a default room set
       const setDefaultStartTime = Date.now();
-      const setDefaultResponse = await fetch(`${defaultConfig.apiUrl}/default/room/${room}`);
+      const setDefaultResponse = await fetch(`${defaultConfig.apiUrl}/default/room/${testContext.testRoom}`);
       assert.strictEqual(setDefaultResponse.status, 200);
-      testLog.info(`   Set default room to: ${room}`);
+      testLog.info(`   Set default room to: ${testContext.testRoom}`);
       testLog.info(`   ⏱️  Set default room took: ${Date.now() - setDefaultStartTime}ms`);
       
       // Since there's no roomless TTS endpoint, we'll test that default room was set correctly
@@ -152,20 +148,20 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       const defaultsResponse = await fetch(`${defaultConfig.apiUrl}/default`);
       assert.strictEqual(defaultsResponse.status, 200);
       const defaults = await defaultsResponse.json();
-      assert.strictEqual(defaults.room, room, 'Default room should be set');
+      assert.strictEqual(defaults.room, testContext.testRoom, 'Default room should be set');
       testLog.info(`   ⏱️  Verify default room took: ${Date.now() - verifyDefaultStartTime}ms`);
       
       // Make announcement to the room (not roomless)
       const ttsMessage = 'Test case 2: TTS after setting default room';
       const ttsStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/${encodeURIComponent(ttsMessage)}`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/${encodeURIComponent(ttsMessage)}`);
       assert.strictEqual(response.status, 200);
       const ttsRequestTime = Date.now() - ttsStartTime;
       testLog.info(`   ⏱️  TTS request took: ${ttsRequestTime}ms`);
       
       // Wait for TTS to start playing
       const waitTrackStartTime = Date.now();
-      await eventManager.waitForTrackChange(deviceId, 5000);
+      await eventManager.waitForTrackChange(testContext.testDeviceId, 5000);
       testLog.info(`   ⏱️  Wait for track change took: ${Date.now() - waitTrackStartTime}ms`);
       
       // Wait for announcement to complete
@@ -183,34 +179,36 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Make sure we're playing first
       const setupStartTime = Date.now();
-      const currentState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const currentState = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
       const state = await currentState.json();
       
       if (state.playbackState !== 'PLAYING') {
-        await loadTestSong(room, true);
-        await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+        // Resume playback instead of loading new content
+        testLog.info('   Music not playing, resuming...');
+        await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/play`);
+        await eventManager.waitForState(testContext.testDeviceId, 'PLAYING', 10000);
       }
       testLog.info(`   ⏱️  Setup (ensure playing) took: ${Date.now() - setupStartTime}ms`);
       
       // Now pause
       testLog.info('   Pausing playback');
       const pauseStartTime = Date.now();
-      await fetch(`${defaultConfig.apiUrl}/${room}/pause`);
-      await eventManager.waitForState(deviceId, state => 
+      await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/pause`);
+      await eventManager.waitForState(testContext.testDeviceId, state => 
         state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 5000);
       testLog.info(`   ⏱️  Pause and wait took: ${Date.now() - pauseStartTime}ms`);
       
       // Make announcement
       const ttsMessage = 'Test case 3: TTS on paused room';
       const ttsStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/${encodeURIComponent(ttsMessage)}`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/${encodeURIComponent(ttsMessage)}`);
       assert.strictEqual(response.status, 200);
       const ttsRequestTime = Date.now() - ttsStartTime;
       testLog.info(`   ⏱️  TTS request took: ${ttsRequestTime}ms`);
       
       // Wait for TTS to start
       const waitPlayingStartTime = Date.now();
-      await eventManager.waitForState(deviceId, 'PLAYING', 5000);
+      await eventManager.waitForState(testContext.testDeviceId, 'PLAYING', 5000);
       testLog.info(`   ⏱️  Wait for TTS playing took: ${Date.now() - waitPlayingStartTime}ms`);
       
       // Wait for announcement to complete and state to be restored
@@ -220,14 +218,14 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Wait for state to be restored to paused/stopped
       const restoreWaitStart = Date.now();
-      const stateRestored = await eventManager.waitForState(deviceId, state => 
+      const stateRestored = await eventManager.waitForState(testContext.testDeviceId, state => 
         state === 'PAUSED_PLAYBACK' || state === 'STOPPED', 10000);
       assert(stateRestored, 'State should be restored to paused/stopped');
       testLog.info(`   ⏱️  Wait for state restore took: ${Date.now() - restoreWaitStart}ms`);
       
       // Verify final state
       const verifyStartTime = Date.now();
-      const finalState = await fetch(`${defaultConfig.apiUrl}/${room}/state`);
+      const finalState = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/state`);
       const stateFinal = await finalState.json();
       assert(['PAUSED_PLAYBACK', 'STOPPED'].includes(stateFinal.playbackState), 
         `Should be paused/stopped, got ${stateFinal.playbackState}`);
@@ -276,7 +274,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       const playingPromise = eventManager.waitForAnyState(['PLAYING'], 10000);
       
       const sayallStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/sayall/Test%20case%205:%20Say%20all%20from%20room`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/sayall/Test%20case%205:%20Say%20all%20from%20room`);
       assert.strictEqual(response.status, 200);
       
       const result = await response.json();
@@ -306,14 +304,14 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       // Test with various special characters including & % $ #
       const specialText = encodeURIComponent('Test & verify: 50% complete! Price = $5 #awesome');
       const ttsStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/${specialText}`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/${specialText}`);
       assert.strictEqual(response.status, 200);
       const ttsRequestTime = Date.now() - ttsStartTime;
       testLog.info(`   ⏱️  TTS request took: ${ttsRequestTime}ms`);
       
       // Wait for TTS to start
       const waitTrackStartTime = Date.now();
-      await eventManager.waitForTrackChange(deviceId, 5000);
+      await eventManager.waitForTrackChange(testContext.testDeviceId, 5000);
       testLog.info(`   ⏱️  Wait for track change took: ${Date.now() - waitTrackStartTime}ms`);
       
       // Wait for announcement
@@ -336,14 +334,14 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
         'Any additional text beyond the limit will be cut off.';
       
       const ttsStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/${encodeURIComponent(longText)}`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/${encodeURIComponent(longText)}`);
       assert.strictEqual(response.status, 200);
       const ttsRequestTime = Date.now() - ttsStartTime;
       testLog.info(`   ⏱️  TTS request took: ${ttsRequestTime}ms`);
       
       // Wait for TTS to start
       const waitTrackStartTime = Date.now();
-      await eventManager.waitForTrackChange(deviceId, 5000);
+      await eventManager.waitForTrackChange(testContext.testDeviceId, 5000);
       testLog.info(`   ⏱️  Wait for track change took: ${Date.now() - waitTrackStartTime}ms`);
       
       // Wait for announcement
@@ -362,13 +360,13 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Test truly empty text
       const emptyStartTime = Date.now();
-      const response1 = await fetch(`${defaultConfig.apiUrl}/${room}/say/`);
+      const response1 = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/`);
       assert([400, 404].includes(response1.status), 'Should reject empty text');
       testLog.info(`   ⏱️  Empty text request took: ${Date.now() - emptyStartTime}ms (status: ${response1.status})`);
       
       // Test whitespace-only text
       const whitespaceStartTime = Date.now();
-      const response2 = await fetch(`${defaultConfig.apiUrl}/${room}/say/%20%20%20`);
+      const response2 = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/%20%20%20`);
       assert.strictEqual(response2.status, 400, 'Should reject whitespace-only text');
       testLog.info(`   ⏱️  Whitespace-only request took: ${Date.now() - whitespaceStartTime}ms`);
       testLog.info(`   ⏱️  Empty text test total time: ${Date.now() - testStartTime}ms`);
@@ -391,7 +389,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
       
       // Test with incomplete percent encoding
       const requestStartTime = Date.now();
-      const response = await fetch(`${defaultConfig.apiUrl}/${room}/say/Test%2`);
+      const response = await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/say/Test%2`);
       assert.strictEqual(response.status, 200, 'Should handle malformed URL encoding gracefully');
       testLog.info(`   ⏱️  Malformed URL request took: ${Date.now() - requestStartTime}ms`);
       testLog.info(`   ⏱️  Malformed URL test total time: ${Date.now() - testStartTime}ms`);

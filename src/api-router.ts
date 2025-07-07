@@ -3213,6 +3213,9 @@ export class ApiRouter {
         
         const track = results[0]!;
         
+        // Clear queue first to ensure clean state
+        await coordinator.clearQueue();
+        
         // Play the first result
         const uri = track.uri;
         const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">

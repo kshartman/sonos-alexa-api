@@ -286,11 +286,14 @@ GET /{room}/musicsearch/spotify/station/{query} # Search stations (same as artis
 
 ### Pandora
 ```
-GET /{room}/pandora/play/{name}   # Play Pandora station
-GET /{room}/pandora/stations      # List Pandora stations
-GET /{room}/pandora/thumbsup      # Thumbs up current track
-GET /{room}/pandora/thumbsdown    # Thumbs down current track
+GET /{room}/pandora/play/{name}        # Play Pandora station
+GET /{room}/pandora/stations           # List Pandora stations (names only)
+GET /{room}/pandora/stations/detailed  # List Pandora stations with full info
+GET /{room}/pandora/thumbsup           # Thumbs up current track
+GET /{room}/pandora/thumbsdown         # Thumbs down current track
 ```
+
+**Note**: Pandora station discovery works best when stations are added as Sonos favorites. The API will attempt to use Pandora credentials if configured, but falls back to browsing favorites when the API is unavailable.
 
 ### SiriusXM
 ```

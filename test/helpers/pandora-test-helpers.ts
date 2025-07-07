@@ -91,55 +91,166 @@ export async function isPandoraAvailableForTesting(deviceIP: string): Promise<bo
   }
 }
 
+// Track stations that have been selected across test runs
+const usedStations = new Set<string>();
+
 /**
- * Get a Pandora station name for testing
+ * Get the count of available valid Pandora stations for testing
  * @param room - The room to use for API calls
- * @param n - Which test station to get (1, 2, or 3). Defaults to 1.
- * @returns A station name from TEST_PANDORA_STATIONS env var or from API
+ * @returns Number of valid stations available
  */
-export async function getPandoraTestStation(room: string, n: number = 1): Promise<string> {
-  // Default fallback stations
-  const defaultStations = ['Thumbprint Radio', 'QuickMix', 'The Beatles Radio'];
-  
-  // Check if TEST_PANDORA_STATIONS is configured
-  if (process.env.TEST_PANDORA_STATIONS) {
-    const configuredStations = process.env.TEST_PANDORA_STATIONS.split(';').map(s => s.trim()).filter(s => s);
-    
-    // Get the requested station (n-1 for 0-based index)
-    const index = n - 1;
-    if (index >= 0 && index < configuredStations.length) {
-      return configuredStations[index];
-    }
-    
-    // If n is out of bounds but we have some stations, use modulo to wrap around
-    if (configuredStations.length > 0) {
-      return configuredStations[index % configuredStations.length];
-    }
-  }
-  
-  // Try to get stations from the API
+export async function getAvailablePandoraStationCount(room: string): Promise<number> {
   try {
     const stationsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/pandora/stations`);
     if (stationsResponse.ok) {
-      const stations = await stationsResponse.json();
-      if (Array.isArray(stations) && stations.length > 0) {
-        // Get the requested station
-        const index = n - 1;
-        if (index >= 0 && index < stations.length) {
-          return stations[index];
-        }
-        // Wrap around if needed
-        return stations[index % stations.length];
+      const allStations = await stationsResponse.json();
+      if (Array.isArray(allStations)) {
+        // Filter out QuickMix and Thumbprint as they behave differently
+        const validStations = allStations.filter(s => 
+          s !== 'QuickMix' && 
+          s !== 'Thumbprint Radio' &&
+          !s.includes('Thumbprint') &&
+          !s.includes('QuickMix')
+        );
+        return validStations.length;
       }
     }
   } catch (error) {
-    testLog.info('Could not get stations from API:', error);
+    testLog.warn('Could not get station count:', error);
+  }
+  return 0;
+}
+
+/**
+ * Get a Pandora station name for testing
+ * @param room - The room to use for API calls
+ * @param n - Which test station to get (1-5). Throws if n > 5.
+ * @returns A unique station name from TEST_PANDORA_STATIONS env var or from API
+ */
+export async function getPandoraTestStation(room: string, n: number = 1): Promise<string> {
+  // Validate index
+  if (n < 1 || n > 5) {
+    throw new Error(`Station index ${n} out of bounds. Must be between 1 and 5.`);
   }
   
-  // Fallback to default stations
-  const index = n - 1;
-  if (index >= 0 && index < defaultStations.length) {
-    return defaultStations[index];
+  // First, get the actual available stations from the API
+  let actualStations: string[] = [];
+  try {
+    const stationsResponse = await fetch(`${defaultConfig.apiUrl}/${room}/pandora/stations`);
+    if (stationsResponse.ok) {
+      const allStations = await stationsResponse.json();
+      if (Array.isArray(allStations) && allStations.length > 0) {
+        actualStations = allStations;
+        testLog.info(`   Found ${actualStations.length} Pandora stations from API`);
+      } else {
+        testLog.warn(`   API returned empty or non-array stations: ${JSON.stringify(allStations)}`);
+      }
+    } else {
+      const errorText = await stationsResponse.text();
+      testLog.warn(`   Failed to get stations from API: ${stationsResponse.status} - ${errorText}`);
+      // Don't try to use fake stations - if the API fails, we have no valid stations
+    }
+  } catch (error) {
+    testLog.warn('Could not get stations from API:', error);
   }
-  return defaultStations[0];
+  
+  // Build our final list of stations to use
+  const finalStations: string[] = [];
+  
+  // Check if TEST_PANDORA_STATIONS is configured and not empty
+  if (process.env.TEST_PANDORA_STATIONS && process.env.TEST_PANDORA_STATIONS.trim()) {
+    const configuredStations = process.env.TEST_PANDORA_STATIONS.split(';').map(s => s.trim()).filter(s => s);
+    
+    // If we have actualStations, validate configured stations
+    if (actualStations.length > 0) {
+      // Process each configured station
+      for (let i = 0; i < configuredStations.length && finalStations.length < 5; i++) {
+        const configStation = configuredStations[i];
+        
+        // Look for exact match only
+        const exactMatch = actualStations.find(s => s === configStation);
+        
+        if (exactMatch) {
+          // Found exact match
+          if (!finalStations.includes(exactMatch) && !usedStations.has(exactMatch)) {
+            finalStations.push(exactMatch);
+            testLog.info(`   ✅ Using configured station: "${exactMatch}"`);
+          }
+        } else {
+          // No exact match found - warn and select a replacement
+          testLog.warn(`   ⚠️ Configured station "${configStation}" not found (exact match required)`);
+          
+          // Find a replacement from actual stations
+          // Filter out QuickMix and Thumbprint Radio as they behave differently
+          const userStations = actualStations.filter(s => 
+            s !== 'QuickMix' && 
+            s !== 'Thumbprint Radio' &&
+            !s.includes('Thumbprint') &&
+            !s.includes('QuickMix') &&
+            !finalStations.includes(s) &&
+            !usedStations.has(s)
+          );
+          
+          if (userStations.length > 0) {
+            const replacement = userStations[0];
+            finalStations.push(replacement);
+            testLog.info(`   → Replaced with: "${replacement}"`);
+          }
+        }
+      }
+    } else {
+      // No actual stations available - just use configured ones as-is
+      for (let i = 0; i < configuredStations.length && finalStations.length < 5; i++) {
+        const configStation = configuredStations[i];
+        if (!finalStations.includes(configStation) && !usedStations.has(configStation)) {
+          finalStations.push(configStation);
+          testLog.warn(`   ⚠️ Using configured station without validation: "${configStation}" (API unavailable)`);
+        }
+      }
+    }
+  }
+  
+  // If we don't have enough stations yet, fill from actual stations or use defaults
+  if (finalStations.length < 5) {
+    if (actualStations.length > 0) {
+      // Filter out QuickMix and Thumbprint Radio as they behave differently
+      const userStations = actualStations.filter(s => 
+        s !== 'QuickMix' && 
+        s !== 'Thumbprint Radio' &&
+        !s.includes('Thumbprint') &&
+        !s.includes('QuickMix') &&
+        !finalStations.includes(s) &&
+        !usedStations.has(s)
+      );
+      
+      // Add stations until we have 5
+      for (const station of userStations) {
+        if (finalStations.length >= 5) break;
+        finalStations.push(station);
+        if (!process.env.TEST_PANDORA_STATIONS) {
+          testLog.info(`   Added station: "${station}"`);
+        }
+      }
+    } else {
+      // No actual stations available - use default station names
+      const defaultStations = ['Thumbprint Radio', 'QuickMix', 'Today\'s Hits Radio', 'Classic Rock Radio', 'Pop Hits Radio'];
+      for (const station of defaultStations) {
+        if (finalStations.length >= 5) break;
+        if (!finalStations.includes(station) && !usedStations.has(station)) {
+          finalStations.push(station);
+          testLog.warn(`   Using default station name: "${station}" (API unavailable)`);
+        }
+      }
+    }
+  }
+  
+  // Return the requested station
+  if (finalStations.length >= n) {
+    const station = finalStations[n - 1];
+    usedStations.add(station);
+    return station;
+  }
+  
+  // If we still don't have enough stations, throw error
+  throw new Error(`Could not find enough Pandora stations for testing (need ${n}, have ${finalStations.length})`);
 }

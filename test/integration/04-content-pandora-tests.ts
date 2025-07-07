@@ -113,6 +113,10 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       // Wait for track change and stable state
       const waitStartTime = Date.now();
+
+      // Pandora is slow
+      await new Promise(resolve => setTimeout(resolve, 3000));      
+
       const trackChanged = await trackChangePromise;
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForTrackChange took: ${waitTime}ms`);
@@ -173,8 +177,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
         testLog.warn(`⚠️  Pandora state: ${state.playbackState} - test may fail`);
       }
       
-      // Always wait for user input in interactive mode to debug issues
-      testLog.info('\n🔍 Check your Sonos app to see the current state');
+      // Wait for user input in interactive mode to debug issues
       await waitForContinueFlag();
       
       // Now do the assertion after user has had a chance to see what's happening
@@ -282,8 +285,9 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       }
       
       // Use test stations from env var or API
-      let firstStation = await getPandoraTestStation(testRoom, 1);
-      let secondStation = await getPandoraTestStation(testRoom, 2);
+      // Note: We use index 2 for first station to avoid using the same station that was played in the previous test
+      let firstStation = await getPandoraTestStation(testRoom, 2);
+      let secondStation = await getPandoraTestStation(testRoom, 3);
       
       // If we got the same station twice, try to find different ones from the available list
       if (firstStation === secondStation && availableStations.length >= 2) {
@@ -306,12 +310,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       testLog.info(`📻 Selected stations for test: "${firstStation}" and "${secondStation}"`);
       
-      // Stop current playback to ensure clean state
-      testLog.info('⏹️  Stopping current playback before station switch test');
-      await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-      // Give Pandora more time to release the session
-      testLog.info('⏳ Waiting 5 seconds for Pandora session to release...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // No need to clear session - pandora/play endpoint does it automatically
       
       // First, ensure we're playing a Pandora station
       testLog.info(`📻 Playing first station: ${firstStation}`);
@@ -327,6 +326,10 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       // Wait for it to start playing
       const waitStartTime = Date.now();
+
+      // Pandora is slow
+      await new Promise(resolve => setTimeout(resolve, 3000));      
+
       await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5000);
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForState took: ${waitTime}ms`);
@@ -341,21 +344,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       // Wait for user to press Enter
       await waitForContinueFlag();
       
-      // Play a test song to clear Pandora session before switching
-      testLog.info('🎵 Playing test song to clear Pandora session before switch...');
-      try {
-        await loadTestSong(testRoom);
-        await testContext.eventManager.waitForState(deviceId, 'PLAYING', 3000);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Let it play briefly
-        
-        // Stop and wait for clean state
-        await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-        await testContext.eventManager.waitForState(deviceId, 'STOPPED', 2000);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Extra wait for Pandora to fully release
-        testLog.info('✅ Cleared Pandora session with test song');
-      } catch (error) {
-        testLog.warn('⚠️  Could not play test song between switches, continuing anyway');
-      }
+      // No need to clear session - pandora/play endpoint does it automatically
       
       // Now switch to the second station
       testLog.info(`📻 Switching to second station: ${secondStation}`);
@@ -420,18 +409,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       // Optional: Try switching to a third station to test multiple switches
       const thirdStation = await getPandoraTestStation(testRoom, 3);
       if (thirdStation !== firstStation && thirdStation !== secondStation) {
-        // Play test song again to clear session
-        testLog.info('🎵 Playing test song before third station switch...');
-        try {
-          await loadTestSong(testRoom);
-          await testContext.eventManager.waitForState(deviceId, 'PLAYING', 3000);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
-          await testContext.eventManager.waitForState(deviceId, 'STOPPED', 2000);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          testLog.warn('⚠️  Could not play test song, continuing anyway');
-        }
+        // No need to clear session - pandora/play endpoint does it automatically
         
         testLog.info(`📻 Attempting to switch to third station: ${thirdStation}`);
         response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/pandora/play/${encodeURIComponent(thirdStation)}`);

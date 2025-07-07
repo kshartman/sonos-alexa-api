@@ -145,7 +145,7 @@ export class PandoraAPI {
       }
       
       PandoraAPI.backoffLoaded = true;
-    } catch (error) {
+    } catch (_error) {
       // File doesn't exist or is invalid, that's okay
       PandoraAPI.backoffLoaded = true;
     }

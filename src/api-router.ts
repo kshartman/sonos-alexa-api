@@ -572,7 +572,7 @@ export class ApiRouter {
         } else {
           try {
             params[paramName] = decodeURIComponent(actualPart);
-          } catch (e) {
+          } catch (_e) {
             // For non-TTS routes, malformed URLs are an error
             logger.debug(`Malformed URL parameter '${paramName}' in path '${actualPath}': ${actualPart}`);
             return null;
@@ -587,7 +587,7 @@ export class ApiRouter {
             const value = actualPart.slice(prefix!.length, actualPart.length - suffix!.length);
             try {
               params[paramName!] = decodeURIComponent(value);
-            } catch (e) {
+            } catch (_e) {
               // For non-TTS routes, malformed URLs are an error
               logger.debug(`Malformed URL parameter '${paramName}' in path '${actualPath}': ${value}`);
               return null;
@@ -2869,13 +2869,13 @@ export class ApiRouter {
     let decodedText: string;
     try {
       decodedText = decodeURIComponent(text);
-    } catch (e) {
+    } catch (_e) {
       // If decoding fails, try to fix common issues
       // Remove any incomplete % encodings at the end
       const cleanedText = text.replace(/%(?![0-9a-fA-F]{2})/g, '%25');
       try {
         decodedText = decodeURIComponent(cleanedText);
-      } catch (e2) {
+      } catch (_e2) {
         // If still failing, just use the original text
         logger.warn('Failed to decode TTS text, using raw text');
         decodedText = text;

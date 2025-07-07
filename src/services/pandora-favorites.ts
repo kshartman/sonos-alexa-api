@@ -76,7 +76,7 @@ export class PandoraFavoritesBrowser {
       }
       
       const result = response.Result;
-      const didlLite = parseXML<any>(result);
+      const didlLite = parseXML<unknown>(result);
       if (!didlLite?.['DIDL-Lite']?.item) {
         logger.warn('No items found in favorites');
         return [];
@@ -127,10 +127,10 @@ export class PandoraFavoritesBrowser {
             let metadata = '';
             if (resMD) {
               const decodedMD = resMD.replace(/&amp;/g, '&')
-                                    .replace(/&lt;/g, '<')
-                                    .replace(/&gt;/g, '>')
-                                    .replace(/&quot;/g, '"')
-                                    .replace(/&apos;/g, "'");
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&apos;/g, '\'');
               metadata = decodedMD;
             }
             

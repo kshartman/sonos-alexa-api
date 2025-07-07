@@ -293,7 +293,7 @@ router.handleRequest = async (req, res) => {
         'Cache-Control': 'public, max-age=3600'
       });
       res.end(fileData);
-    } catch (error) {
+    } catch (_error) {
       res.writeHead(404);
       res.end('Not found');
     }

@@ -176,7 +176,7 @@ export class TTSService {
       // First generate as AIFF, then convert to MP3
       const tempFile = outputFile.replace('.mp3', '.aiff');
       // Escape single quotes in text for shell safety
-      const safeText = text.replace(/'/g, "'\"'\"'");
+      const safeText = text.replace(/'/g, '\'"\'"\'');
       await execAsync(`say -v ${voice} -r ${rate} -o '${tempFile}' '${safeText}'`);
       
       // Convert AIFF to MP3 using ffmpeg or afconvert

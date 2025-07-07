@@ -59,17 +59,26 @@ export class TTSService {
    * @returns Path to the generated MP3 file
    */
   async generateTTS(text: string, language = 'en'): Promise<string> {
+    // Limit text length based on provider
+    // Google Translate TTS (free) has ~200 character limit
+    // Other providers may support longer text
+    const maxLength = this.config.voicerss || (this.config.macSay && process.platform === 'darwin') ? 256 : 200;
+    const truncatedText = text.substring(0, maxLength);
+    if (text.length > maxLength) {
+      logger.warn(`TTS text truncated from ${text.length} to ${maxLength} characters`);
+    }
+    
     // Generate cache key
-    const cacheKey = crypto.createHash('md5').update(`${text}-${language}`).digest('hex');
+    const cacheKey = crypto.createHash('md5').update(`${truncatedText}-${language}`).digest('hex');
     const cacheFile = path.join(this.cacheDir, `${cacheKey}.mp3`);
 
     // Check cache first
     try {
       await fs.access(cacheFile);
-      logger.debug(`TTS cache hit for: ${text}`);
+      logger.debug(`TTS cache hit for: ${truncatedText}`);
       return cacheFile;
     } catch {
-      logger.debug(`TTS cache miss for: ${text}, will generate new file`);
+      logger.debug(`TTS cache miss for: ${truncatedText}, will generate new file`);
       // Not in cache, generate it
     }
 
@@ -80,40 +89,47 @@ export class TTSService {
       logger.error('Failed to create TTS cache directory:', err);
     }
 
-    // Try configured TTS providers in order
+    // Try configured TTS providers in order - pass truncated text
     if (this.config.voicerss) {
-      return this.generateVoiceRSS(text, language, cacheFile);
+      return this.generateVoiceRSS(truncatedText, language, cacheFile);
     } else if (this.config.macSay && process.platform === 'darwin') {
-      return this.generateMacSay(text, cacheFile);
+      return this.generateMacSay(truncatedText, cacheFile);
     } else {
       // Default to Google TTS (free but unofficial)
-      return this.generateGoogleTTS(text, language, cacheFile);
+      return this.generateGoogleTTS(truncatedText, language, cacheFile);
     }
   }
 
   private async generateGoogleTTS(text: string, language: string, outputFile: string): Promise<string> {
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${language}&q=${encodeURIComponent(text)}`;
+    const encodedText = encodeURIComponent(text);
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${language}&q=${encodedText}`;
     
     logger.debug(`Generating Google TTS for: ${text}`);
     
-    // Download using curl (cross-platform)
     try {
-      const { stderr } = await execAsync(`curl -s -o "${outputFile}" "${url}" -H "User-Agent: Mozilla/5.0"`);
-      if (stderr) {
-        logger.error('Google TTS curl error:', stderr);
-      }
-      
-      // Verify file was created and has content
-      try {
-        const stats = await fs.stat(outputFile);
-        if (stats.size === 0) {
-          throw new Error('Generated TTS file is empty');
+      // Download using native fetch
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
-      } catch (statError) {
-        throw new Error(`TTS file was not created: ${statError}`);
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Google TTS API returned ${response.status}: ${response.statusText}`);
       }
       
-      logger.debug(`Google TTS generated: ${outputFile}`);
+      // Get the audio data as a buffer
+      const buffer = Buffer.from(await response.arrayBuffer());
+      
+      // Verify we got actual audio data
+      if (buffer.length === 0) {
+        throw new Error('Google TTS returned empty response');
+      }
+      
+      // Write to file
+      await fs.writeFile(outputFile, buffer);
+      
+      logger.debug(`Google TTS generated: ${outputFile} (${buffer.length} bytes)`);
       return outputFile;
     } catch (error) {
       logger.error('Google TTS generation failed:', error);
@@ -159,7 +175,9 @@ export class TTSService {
     try {
       // First generate as AIFF, then convert to MP3
       const tempFile = outputFile.replace('.mp3', '.aiff');
-      await execAsync(`say -v ${voice} -r ${rate} -o "${tempFile}" "${text}"`);
+      // Escape single quotes in text for shell safety
+      const safeText = text.replace(/'/g, "'\"'\"'");
+      await execAsync(`say -v ${voice} -r ${rate} -o '${tempFile}' '${safeText}'`);
       
       // Convert AIFF to MP3 using ffmpeg or afconvert
       try {

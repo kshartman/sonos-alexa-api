@@ -139,28 +139,34 @@ describe('Text-to-Speech (TTS) Integration Tests', { skip: skipIntegration, time
     const ttsText = 'Testing text to speech with volume control';
     const volume = 30;
     
-    // Set up state tracking
+    // Get original volume first
+    const originalStateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
+    const originalState = await originalStateResponse.json();
+    const originalVolume = originalState.volume;
+    
+    // Set up state and volume tracking
     const playingPromise = eventManager.waitForState(deviceId, 'PLAYING', 5000);
+    const volumeChangePromise = eventManager.waitForVolume(deviceId, volume, 5000);
     
     // Make TTS request with volume
     const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/say/${encodeURIComponent(ttsText)}/${volume}`);
     assert.strictEqual(response.status, 200);
     
-    // Wait for playback
-    const playing = await playingPromise;
+    // Wait for playback and volume change
+    const [playing, volumeChanged] = await Promise.all([playingPromise, volumeChangePromise]);
     assert(playing, 'TTS with volume should play');
+    assert(volumeChanged, 'Volume should change to requested level');
     
-    // Verify volume was set
-    const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
-    const state = await stateResponse.json();
-    assert.strictEqual(state.volume, volume, 'Volume should be set to requested level');
+    testLog.info(`   TTS playing at volume ${volume}, waiting for completion...`);
     
-    testLog.info(`   TTS playing at volume ${volume}, stopping...`);
+    // Wait for TTS to complete and state to change
+    await eventManager.waitForState(deviceId, 'STOPPED', 10000);
     
-    // Stop playback
-    await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
+    // Wait for volume to be restored to original
+    const volumeRestored = await eventManager.waitForVolume(deviceId, originalVolume, 5000);
+    assert(volumeRestored, `Volume should be restored to original level ${originalVolume}`);
     
-    testLog.info('✅ TTS with volume parameter handled correctly');
+    testLog.info('✅ TTS with volume parameter handled correctly - volume was set during playback and restored after');
   });
 
   it('should handle empty TTS text gracefully', async () => {

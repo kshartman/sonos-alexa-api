@@ -2842,7 +2842,28 @@ export class ApiRouter {
     const device = this.getDevice(room);
     const language = queryParams?.get('language') || 'en';
     const volume = parseInt(queryParams?.get('volume') || String(this.config.announceVolume || 40), 10);
-    const decodedText = decodeURIComponent(text);
+    
+    // Safely decode the text - handle potential malformed URIs
+    let decodedText: string;
+    try {
+      decodedText = decodeURIComponent(text);
+    } catch (e) {
+      // If decoding fails, try to fix common issues
+      // Remove any incomplete % encodings at the end
+      const cleanedText = text.replace(/%(?![0-9a-fA-F]{2})/g, '%25');
+      try {
+        decodedText = decodeURIComponent(cleanedText);
+      } catch (e2) {
+        // If still failing, just use the original text
+        logger.warn('Failed to decode TTS text, using raw text');
+        decodedText = text;
+      }
+    }
+    
+    // Validate that text is not empty after decoding and trimming
+    if (!decodedText.trim()) {
+      throw { status: 400, message: 'Text cannot be empty' };
+    }
     
     // Get the base URL for TTS - Sonos needs direct HTTP access to the host
     let ttsHost: string;

@@ -684,6 +684,31 @@ export class SonosDiscovery extends EventEmitter {
           if (stateChanged) {
             debugManager.info('upnp', `${deviceName}: RenderingControl state changed`);
             device.emit('state-change', device.state, previousState);
+            
+            // Emit events to EventManager for proper event tracking
+            const eventManager = EventManager.getInstance();
+            
+            // Emit volume change if volume changed
+            if (previousState.volume !== undefined && previousState.volume !== device.state.volume) {
+              eventManager.emit('volume-change', {
+                deviceId: device.id,
+                roomName: device.roomName,
+                previousVolume: previousState.volume,
+                currentVolume: device.state.volume,
+                timestamp: Date.now()
+              });
+            }
+            
+            // Emit mute change if mute changed
+            if (previousState.mute !== undefined && previousState.mute !== device.state.mute) {
+              eventManager.emit('mute-change', {
+                deviceId: device.id,
+                roomName: device.roomName,
+                previousMute: previousState.mute,
+                currentMute: device.state.mute,
+                timestamp: Date.now()
+              });
+            }
           }
         }
       }

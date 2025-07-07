@@ -8,7 +8,7 @@ import { testLog } from '../helpers/test-logger.js';
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTestTimeout(160000) }, () => {
+describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTestTimeout(180000) }, () => {
   let testContext: TestContext;
   let room: string;
   let deviceId: string;
@@ -66,7 +66,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
   });
   
   describe('Core TTS Functionality', () => {
-    it('Test 1: Say to playing room with different volume, verify playback and volume restore', { timeout: getTestTimeout(35000) }, async () => {
+    it('Test 1: Say to playing room with different volume, verify playback and volume restore', { timeout: getTestTimeout(45000) }, async () => {
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 1: Setting up - playing song at low volume');

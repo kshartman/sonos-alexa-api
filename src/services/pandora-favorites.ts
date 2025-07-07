@@ -11,6 +11,12 @@ interface PandoraFavorite {
   sessionNumber: string;
 }
 
+interface DIDLLite {
+  'DIDL-Lite'?: {
+    item?: any | any[];
+  };
+}
+
 // Cache for discovered stations
 interface StationCache {
   stations: Map<string, PandoraFavorite>;
@@ -76,7 +82,7 @@ export class PandoraFavoritesBrowser {
       }
       
       const result = response.Result;
-      const didlLite = parseXML<unknown>(result);
+      const didlLite = parseXML<DIDLLite>(result) as DIDLLite;
       if (!didlLite?.['DIDL-Lite']?.item) {
         logger.warn('No items found in favorites');
         return [];

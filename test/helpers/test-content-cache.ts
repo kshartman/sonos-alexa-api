@@ -192,6 +192,18 @@ export async function discoverTestContent(room: string): Promise<TestContentCach
 }
 
 /**
+ * Clear the test content cache
+ */
+export async function clearTestContentCache(): Promise<void> {
+  try {
+    await fs.unlink(CACHE_FILE);
+    console.log('🗑️  Cleared test content cache');
+  } catch (error) {
+    // File doesn't exist, that's fine
+  }
+}
+
+/**
  * Get or discover test content URIs
  */
 export async function getTestContentUris(room: string): Promise<TestContentCache> {

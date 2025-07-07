@@ -288,6 +288,116 @@ location /spotify/callback {
 
 See the `deploy/` directory for complete proxy configuration examples.
 
+## Pandora Setup
+
+The API supports Pandora playback with some important considerations:
+
+### Recommended Approach: Use Favorites
+
+**The most reliable way to use Pandora with this API is to add your stations as Sonos favorites first.** This is the approach we strongly recommend because:
+
+1. **Reliability** - Favorites always work and don't depend on external APIs
+2. **No API Blocks** - The unofficial Pandora API can block access or change without notice
+3. **Faster** - No need to query external services
+4. **Official Support** - Uses Sonos's built-in favorite system
+
+#### How to Add Pandora Stations as Favorites
+
+1. Open the Sonos app
+2. Navigate to Pandora and find your station
+3. Press and hold (or right-click) on the station
+4. Select "Add to My Sonos" or "Add to Favorites"
+5. The station is now available via the API:
+   ```bash
+   # List all favorites
+   curl http://localhost:5005/favorites
+   
+   # Play a Pandora favorite
+   curl http://localhost:5005/OfficeSpeakers/favorite/Classic%20Rock%20Radio
+   ```
+
+### Alternative: Direct Station Play (Not Recommended)
+
+The API also supports playing Pandora stations directly by name, but this method:
+- Requires Pandora credentials in settings.json
+- Uses an unofficial API that may stop working
+- Can trigger Pandora's bot detection and block your IP
+- Is slower and less reliable
+
+**⚠️ Bot Detection Warning**: Pandora has implemented aggressive bot detection that can temporarily block logins even with correct credentials. This happens when the unofficial API makes frequent requests or exhibits bot-like behavior.
+
+The API now includes automatic bot detection backoff:
+- If Pandora blocks a login attempt, the API enters a backoff period starting at 24 hours
+- Subsequent failures increase the backoff to 36 hours, then 48 hours maximum
+- The backoff resets only after a successful login
+- During backoff, all login attempts are blocked locally to prevent further triggering Pandora's bot detection
+
+If you still want to use this method:
+
+```json
+{
+  "pandora": {
+    "username": "your-pandora-username",
+    "password": "your-pandora-password"
+  }
+}
+```
+
+Then you can play stations directly:
+```bash
+curl http://localhost:5005/OfficeSpeakers/pandora/play/Classic%20Rock%20Radio
+```
+
+**Important:** When Pandora API credentials are not configured, incorrect, or blocked by Pandora, the API automatically falls back to searching your Sonos favorites. This fallback only works for stations you've already added as favorites in the Sonos app.
+
+### Technical Details
+
+- The API automatically manages Pandora session locks using a silence file technique
+- Station switching is reliable and takes about 3-5 seconds
+- Thumbs up/down functionality is supported
+- Station discovery works through both the unofficial API (if credentials are valid) and by browsing your Sonos favorites
+- Cached station information expires after 1 hour
+
+### Troubleshooting: Ghost Pandora Favorites
+
+A common issue occurs when you delete and re-add a Pandora account in Sonos. The old favorites remain but won't play because they reference the deleted account's session number. These "ghost" favorites will fail with SOAP 500/501 errors.
+
+#### Identifying Ghost Favorites
+
+Use the included diagnostic script to find problematic Pandora favorites:
+
+```bash
+cd scripts
+./pandoradump.sh
+
+# Output shows session numbers (SN) for each Pandora favorite:
+# Ambient Radio         | 25   | 236   | 8296  | ST | 4115366826458437828  | Pandora
+# Chicago Blues        | 3    | 236   | 8296  | ST | 142640745130511057   | Pandora  <- Old SN
+# Classic Rock Radio   | 25   | 236   | 8296  | ST | 116482263994085703   | Pandora
+```
+
+In this example, "Chicago Blues" has SN=3 while others have SN=25, indicating it's from an old account.
+
+#### Fixing Ghost Favorites
+
+1. **Remove the old favorite** in the Sonos app:
+   - Go to My Sonos/Favorites
+   - Find the problematic station
+   - Remove it from favorites
+
+2. **Re-add from current Pandora account**:
+   - Navigate to Pandora in the Sonos app
+   - Find the station again
+   - Add it back to favorites
+
+3. **Verify the fix**:
+   ```bash
+   ./pandoradump.sh
+   # All stations should now show the same SN
+   ```
+
+The API automatically uses the highest session number found, but ghost favorites will still fail to play. It's best to clean them up for a better experience.
+
 ## Credits
 
 This project is built on the excellent foundation of:

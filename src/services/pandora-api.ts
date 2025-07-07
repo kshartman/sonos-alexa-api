@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
 import logger from '../utils/logger.js';
 
 interface PartnerInfo {
@@ -79,10 +81,29 @@ export class PandoraAPI {
   private partnerInfo: PartnerInfo;
   private authData: AuthData | null = null;
   private static readonly ENDPOINT = '://tuner.pandora.com/services/json/';
+  
+  // Cache for station list
+  private stationListCache: { stations: PandoraStation[], timestamp: number } | null = null;
+  private static readonly CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  
+  // Bot detection backoff
+  private static lastLoginFailure: number = 0;
+  private static backoffHours: number = 0;
+  private static readonly INITIAL_BACKOFF = 24; // 24 hours
+  private static readonly MAX_BACKOFF = 48; // 48 hours
+  private static readonly BACKOFF_FILE = path.join('data', 'pandora-backoff.json');
+  private static backoffLoaded = false;
 
   constructor(username: string, password: string, partnerInfo?: Partial<PartnerInfo>) {
     this.username = username;
     this.password = password;
+    
+    // Load backoff state on first instance creation
+    if (!PandoraAPI.backoffLoaded) {
+      PandoraAPI.loadBackoffState().catch(error => {
+        logger.debug('Could not load backoff state:', error);
+      });
+    }
     
     // Default partner info for Android client
     this.partnerInfo = {
@@ -94,6 +115,58 @@ export class PandoraAPI {
       version: '5',
       ...partnerInfo
     };
+  }
+
+  private static async loadBackoffState(): Promise<void> {
+    if (PandoraAPI.backoffLoaded) {
+      return; // Already loaded
+    }
+    
+    try {
+      const data = await fs.readFile(PandoraAPI.BACKOFF_FILE, 'utf8');
+      const state = JSON.parse(data);
+      
+      if (state.lastLoginFailure && state.backoffHours) {
+        PandoraAPI.lastLoginFailure = state.lastLoginFailure;
+        PandoraAPI.backoffHours = state.backoffHours;
+        
+        // Check if backoff has expired
+        const hoursSinceFailure = (Date.now() - PandoraAPI.lastLoginFailure) / (1000 * 60 * 60);
+        if (hoursSinceFailure >= PandoraAPI.backoffHours) {
+          // Backoff expired, reset
+          PandoraAPI.lastLoginFailure = 0;
+          PandoraAPI.backoffHours = 0;
+          await PandoraAPI.saveBackoffState();
+          logger.info('Pandora backoff period has expired and been reset');
+        } else {
+          const remainingHours = Math.ceil(PandoraAPI.backoffHours - hoursSinceFailure);
+          logger.warn(`Pandora backoff loaded: ${remainingHours} hours remaining`);
+        }
+      }
+      
+      PandoraAPI.backoffLoaded = true;
+    } catch (error) {
+      // File doesn't exist or is invalid, that's okay
+      PandoraAPI.backoffLoaded = true;
+    }
+  }
+  
+  private static async saveBackoffState(): Promise<void> {
+    try {
+      // Ensure data directory exists
+      await fs.mkdir('data', { recursive: true });
+      
+      const state = {
+        lastLoginFailure: PandoraAPI.lastLoginFailure,
+        backoffHours: PandoraAPI.backoffHours,
+        lastUpdate: new Date().toISOString()
+      };
+      
+      await fs.writeFile(PandoraAPI.BACKOFF_FILE, JSON.stringify(state, null, 2));
+      logger.debug('Pandora backoff state saved');
+    } catch (error) {
+      logger.error('Failed to save backoff state:', error);
+    }
   }
 
   private encrypt(password: string, data: string): string {
@@ -258,6 +331,21 @@ export class PandoraAPI {
   }
 
   async login(): Promise<void> {
+    // Ensure backoff state is loaded
+    if (!PandoraAPI.backoffLoaded) {
+      await PandoraAPI.loadBackoffState();
+    }
+    
+    // Check if we're in backoff period
+    if (PandoraAPI.lastLoginFailure > 0) {
+      const hoursSinceFailure = (Date.now() - PandoraAPI.lastLoginFailure) / (1000 * 60 * 60);
+      if (hoursSinceFailure < PandoraAPI.backoffHours) {
+        const remainingHours = Math.ceil(PandoraAPI.backoffHours - hoursSinceFailure);
+        logger.warn(`Pandora login blocked due to bot detection. Waiting ${remainingHours} more hours before retry.`);
+        throw new Error(`Pandora API is in backoff period. ${remainingHours} hours remaining.`);
+      }
+    }
+    
     try {
       logger.debug('Starting Pandora login process');
       const partnerData = await this.partnerLogin();
@@ -274,8 +362,32 @@ export class PandoraAPI {
       };
       
       logger.info('Successfully authenticated with Pandora');
+      
+      // Reset backoff on successful login
+      if (PandoraAPI.lastLoginFailure > 0 || PandoraAPI.backoffHours > 0) {
+        PandoraAPI.lastLoginFailure = 0;
+        PandoraAPI.backoffHours = 0;
+        await PandoraAPI.saveBackoffState();
+      }
     } catch (error) {
       logger.error('Pandora login failed:', error);
+      
+      // Check if this might be bot detection
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('Invalid username and/or password') || 
+          errorMessage.includes('1001') || 
+          errorMessage.includes('1002')) {
+        // Set or increase backoff
+        PandoraAPI.lastLoginFailure = Date.now();
+        if (PandoraAPI.backoffHours === 0) {
+          PandoraAPI.backoffHours = PandoraAPI.INITIAL_BACKOFF; // 24 hours
+        } else if (PandoraAPI.backoffHours < PandoraAPI.MAX_BACKOFF) {
+          PandoraAPI.backoffHours = Math.min(PandoraAPI.backoffHours * 1.5, PandoraAPI.MAX_BACKOFF); // Increase by 50%
+        }
+        logger.warn(`Possible Pandora bot detection. Setting backoff to ${PandoraAPI.backoffHours} hours.`);
+        await PandoraAPI.saveBackoffState();
+      }
+      
       throw new Error(`Failed to authenticate with Pandora: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -307,7 +419,15 @@ export class PandoraAPI {
   }
 
   // Convenience methods for common operations
-  async getStationList(includeStationArtUrl = true): Promise<{ stations: PandoraStation[] }> {
+  async getStationList(includeStationArtUrl = true, forceRefresh = false): Promise<{ stations: PandoraStation[] }> {
+    // Check cache first
+    if (!forceRefresh && this.stationListCache && 
+        (Date.now() - this.stationListCache.timestamp) < PandoraAPI.CACHE_TTL) {
+      logger.debug('Returning cached Pandora station list');
+      return { stations: this.stationListCache.stations };
+    }
+    
+    logger.debug('Fetching fresh Pandora station list from API');
     const response = await this.request('user.getStationList', { includeStationArtUrl });
     
     // Enhance station data with additional metadata
@@ -325,6 +445,13 @@ export class PandoraAPI {
         };
         return enhanced;
       });
+      
+      // Update cache
+      this.stationListCache = {
+        stations: response.stations,
+        timestamp: Date.now()
+      };
+      logger.info(`Cached ${response.stations.length} Pandora stations`);
     }
     
     return response;

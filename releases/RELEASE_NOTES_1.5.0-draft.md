@@ -3,7 +3,7 @@
 ## Release Date: TBD
 
 ## Overview
-Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentication, enabling full search functionality alongside the existing URL-based preset support and direct playback capabilities.
+Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentication, enabling full search functionality alongside the existing URL-based preset support and direct playback capabilities. This release also includes major improvements to Pandora reliability with automatic session management.
 
 ## New Features
 
@@ -57,6 +57,20 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - Detect stale NOTIFY events (90+ seconds without updates)
   - Monitor event timing and listener health
 - **Enhanced Diagnostics**: Better visibility into system operation
+
+### Pandora Reliability Improvements
+- **Automatic Session Management**: All Pandora play requests now automatically clear the session using a silence file technique
+  - Eliminates SOAP 500/501 errors when switching stations
+  - Station switching now reliable and takes only 3-5 seconds
+  - No manual intervention required
+- **Enhanced Station Discovery**: Falls back to browsing Sonos favorites when API fails
+  - Works even when Pandora credentials are incorrect or blocked
+  - Automatically discovers station IDs from FV:2 container
+  - Caches discovered stations for 1 hour
+- **Session Number Detection**: Automatically uses the highest session number found
+  - Handles multiple Pandora account additions/removals
+  - Identifies ghost favorites from deleted accounts
+- **Improved Error Handling**: Returns proper 404 errors with helpful messages when stations aren't found
 
 ### New API Endpoints
 - **Artist Search**: `/{room}/musicsearch/{service}/artist/{name}` - Search for artists by name
@@ -122,6 +136,10 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed EventManager max listeners warnings
 - Fixed volume endpoint to use GET instead of POST
 - Enhanced error handling for SOAP operations with proper retry logic
+- Fixed Pandora station switching failures due to session locks
+- Fixed FV:2 browse parsing to correctly extract Pandora favorites
+- Fixed double-encoding of Pandora station URIs
+- Fixed Pandora API singleton pattern to maintain cache between requests
 
 ## Breaking Changes
 - **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies

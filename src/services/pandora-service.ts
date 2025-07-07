@@ -66,7 +66,7 @@ export class PandoraService {
 
     return `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
       xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-      <item id="000c0000ST%3a${encodedId}" parentID="-1" restricted="true">
+      <item id="100c206cST%3a${encodedId}" parentID="-1" restricted="true">
         <dc:title>${encodedName}</dc:title>
         <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
         <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">SA_RINCON${this.PANDORA_SERVICE_TYPE}_X_#Svc${this.PANDORA_SERVICE_TYPE}-${accountToken}</desc>

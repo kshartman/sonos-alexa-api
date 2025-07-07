@@ -231,6 +231,36 @@ router.handleRequest = async (req, res) => {
     return;
   }
   
+  // Handle static audio file serving
+  if (url.startsWith('/static/audio/')) {
+    const filename = url.substring(14);
+    try {
+      const path = await import('path');
+      const fs = await import('fs/promises');
+      const filePath = path.join(process.cwd(), 'static', 'audio', filename);
+      
+      // Security: ensure the path doesn't escape the audio directory
+      if (!filePath.includes('static/audio') || filename.includes('..')) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+      
+      const fileData = await fs.readFile(filePath);
+      res.writeHead(200, {
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': fileData.length,
+        'Cache-Control': 'public, max-age=3600'
+      });
+      res.end(fileData);
+    } catch (error) {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+    
+    return;
+  }
+  
   return originalHandler(req, res);
 };
 

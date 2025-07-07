@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { startServer, stopServer, isServerRunning, waitForServer } from './helpers/server-manager.js';
 import { defaultConfig } from './helpers/test-config.js';
+import { clearTestContentCache } from './helpers/test-content-cache.js';
 import * as dotenv from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -127,7 +128,9 @@ async function runTests() {
     } else if (isRemoteApi) {
       console.log(`🌐 Using remote API at ${apiUrl}\n`);
     }
-      
+    
+    // Clear test content cache to ensure fresh discovery
+    await clearTestContentCache();
 
     // Run tests using tsx to handle TypeScript files
     // IMPORTANT: Using --test-concurrency=1 to run tests sequentially

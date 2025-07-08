@@ -12,6 +12,9 @@ export function createMockRequest(url: string, method: string = 'GET'): Incoming
     method,
     url,
     headers: {},
+    socket: {
+      remoteAddress: '127.0.0.1'
+    },
     on: () => {},
     once: () => {},
     emit: () => {},

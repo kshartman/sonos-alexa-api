@@ -220,3 +220,28 @@ export interface BrowseResult {
   numberReturned: number;
   totalMatches: number;
 }
+
+// Additional common types to reduce duplication
+export interface QueueItem {
+  title: string;
+  artist: string;
+  album: string;
+  albumArtUri?: string;
+  uri?: string;
+}
+
+export interface PandoraStation {
+  stationId: string;
+  stationName: string;
+  sessionNumber?: number;
+  uri: string;
+  isInSonosFavorites?: boolean;
+  isQuickMix?: boolean;
+  isThumbprint?: boolean;
+  isUserCreated?: boolean;
+}
+
+// Helper function for consistent error objects
+export function createError(status: number, message: string): { status: number; message: string } {
+  return { status, message };
+}

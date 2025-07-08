@@ -131,7 +131,6 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Load and play a test song
-    testLog.info(`   Loading test song...`);
     await loadTestSong(testRoom, true);
     
     // Set volume
@@ -168,6 +167,11 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
     }
   }
   
+  // Print clear separator to indicate setup is complete
+  testLog.info('\n' + '═'.repeat(80));
+  testLog.info('✅ GLOBAL SETUP COMPLETE - STARTING TESTS');
+  testLog.info('═'.repeat(80) + '\n');
+  
   return {
     eventManager,
     topology,
@@ -183,7 +187,12 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
  * Global test teardown - called after test suites
  */
 export async function globalTestTeardown(testSuiteName: string, context: TestContext): Promise<void> {
-  testLog.info(`\n🧹 Global test teardown for: ${testSuiteName}`);
+  // Print clear separator to indicate tests are complete and teardown is starting
+  testLog.info('\n' + '═'.repeat(80));
+  testLog.info('✅ TESTS COMPLETE - STARTING TEARDOWN');
+  testLog.info('═'.repeat(80) + '\n');
+  
+  testLog.info(`🧹 Global test teardown for: ${testSuiteName}`);
   
   try {
     // Clear all queues to clean up test content

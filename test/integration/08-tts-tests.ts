@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { globalTestSetup, globalTestTeardown, type TestContext } from '../helpers/global-test-setup.js';
 import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
@@ -8,7 +8,7 @@ import { testLog } from '../helpers/test-logger.js';
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTestTimeout(180000) }, () => {
+describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTestTimeout(210000) }, () => {
   let testContext: TestContext;
   let originalVolume: number;
   
@@ -57,7 +57,21 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
   });
   
   describe('Core TTS Functionality', () => {
+    let testNumber = 0;
+    
+    // Add settling time between tests to ensure restoration completes
+    afterEach(async () => {
+      // Wait longer after sayall tests (Tests 4 & 5) for multi-room restoration
+      const isSayallTest = testNumber === 4 || testNumber === 5;
+      const settleTime = isSayallTest ? 5000 : 2000;
+      
+      testLog.info(`   ⏳ Waiting ${settleTime}ms for system to settle after Test ${testNumber}...`);
+      testLog.flush();
+      await new Promise(resolve => setTimeout(resolve, settleTime));
+    });
+    
     it('Test 1: Say to playing room with different volume, verify playback and volume restore', { timeout: getTestTimeout(45000) }, async () => {
+      testNumber = 1;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 1: Testing TTS with volume change');
@@ -132,6 +146,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     });
     
     it('Test 2: TTS using default room', { timeout: getTestTimeout(15000) }, async () => {
+      testNumber = 2;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 2: Testing TTS via default room');
@@ -173,6 +188,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     });
     
     it('Test 3: Say to paused room, verify stays paused', { timeout: getTestTimeout(20000) }, async () => {
+      testNumber = 3;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 3: Testing TTS on paused room');
@@ -231,10 +247,17 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
         `Should be paused/stopped, got ${stateFinal.playbackState}`);
       testLog.info(`   ⏱️  Final state verification took: ${Date.now() - verifyStartTime}ms`);
       testLog.info('   ✓ Room stayed paused after TTS');
+      
+      // Resume playback for subsequent tests
+      testLog.info('   Resuming playback for next tests...');
+      await fetch(`${defaultConfig.apiUrl}/${testContext.testRoom}/play`);
+      await eventManager.waitForState(testContext.testDeviceId, 'PLAYING', 5000);
+      
       testLog.info(`   ⏱️  Test 3 total time: ${Date.now() - testStartTime}ms`);
     });
     
     it('Test 4: Sayall with no room specified', { timeout: getTestTimeout(20000) }, async () => {
+      testNumber = 4;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 4: Testing sayall without room');
@@ -266,6 +289,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     });
     
     it('Test 5: Sayall from specific room', { timeout: getTestTimeout(15000) }, async () => {
+      testNumber = 5;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 5: Testing sayall from specific room');
@@ -297,6 +321,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     });
     
     it('Test 6: TTS with special characters', { timeout: getTestTimeout(15000) }, async () => {
+      testNumber = 6;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 6: Testing TTS with special characters');
@@ -323,6 +348,7 @@ describe('Text-to-Speech (TTS) Tests', { skip: skipIntegration, timeout: getTest
     });
     
     it('Test 7: TTS with long text (truncation)', { timeout: getTestTimeout(30000) }, async () => {
+      testNumber = 7;
       const testStartTime = Date.now();
       const { eventManager } = testContext;
       testLog.info('   Test 7: Testing TTS with long text (truncation)');

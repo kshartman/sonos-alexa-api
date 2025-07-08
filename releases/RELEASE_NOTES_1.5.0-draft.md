@@ -127,6 +127,9 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - Added `--match` as synonym for `--grep` in test runner
   - Enhanced EventBridge logging with trace level support
   - Improved TTS test timing instrumentation
+  - Added test settling time between TTS tests (2s normally, 5s after multi-room tests)
+  - Enhanced test setup/teardown with clear visual separators
+  - Fixed TTS test reliability with proper playback state management
 
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration
@@ -147,6 +150,8 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed double-encoding of Pandora station URIs
 - Fixed Pandora API singleton pattern to maintain cache between requests
 - **Fixed TTS stereo pair volume restoration** - TTS announcements now correctly capture and restore volume for stereo pairs by always using the coordinator device
+- **Fixed TTS empty queue restoration** - TTS announcements now properly clear the transport URI when restoring an empty queue state, preventing TTS files from remaining as the current track
+- **Fixed TTS playback restoration** - TTS now correctly restores direct URI playback (e.g., from music search) even when the queue is empty, ensuring music continues after announcements
 - **Fixed TTS special character handling** - URLs with special characters no longer cause 500 errors
 - **Fixed TTS input validation** - Empty or whitespace-only text now returns 400 Bad Request
 

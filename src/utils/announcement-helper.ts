@@ -238,11 +238,41 @@ async function restorePlaybackState(
     
     // Step 3: Restore content based on original state
     
-    // Case 1: Queue was empty - clear it
-    if (backup.queueWasEmpty) {
-      logger.debug('Queue was empty before TTS, clearing queue');
+    // Case 1: Queue was empty AND no saved transport URI - clear everything
+    if (backup.queueWasEmpty && !backup.transportURI) {
+      logger.debug('Queue was empty and no transport URI before TTS, clearing queue and transport');
+      
+      // Stop playback first to ensure we're in a clean state
+      await device.stop();
+      
+      // Small delay to ensure stop completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Clear the queue
       await device.clearQueue();
-      // Nothing more to do - device should be stopped
+      
+      // Another small delay
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Clear the transport URI by setting it to the device's own empty queue
+      // This removes the TTS file from being the current track
+      const emptyQueueURI = `x-rincon-queue:${device.id.replace('uuid:', '')}#0`;
+      logger.debug(`Setting transport to empty queue: ${emptyQueueURI}`);
+      
+      try {
+        await device.setAVTransportURI(emptyQueueURI, '');
+        logger.debug('Successfully set transport to empty queue');
+      } catch (error) {
+        logger.error('Failed to set empty queue URI:', error);
+        // Try alternative approach - set to empty string
+        try {
+          await device.setAVTransportURI('', '');
+          logger.debug('Set transport to empty string as fallback');
+        } catch (fallbackError) {
+          logger.error('Fallback also failed:', fallbackError);
+        }
+      }
+      
       return;
     }
     

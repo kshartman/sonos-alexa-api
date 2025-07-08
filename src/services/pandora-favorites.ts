@@ -11,9 +11,25 @@ interface PandoraFavorite {
   sessionNumber: string;
 }
 
+interface DIDLItem {
+  '@_id'?: string;
+  '_attr_id'?: string;
+  'id'?: string;
+  'dc:title'?: string | { _text?: string };
+  res?: string | { 
+    _text?: string;
+    '#text'?: string;
+    '@_protocolInfo'?: string;
+  };
+  'r:description'?: string;
+  'r:resMD'?: string | { _text?: string };
+  'upnp:class'?: string;
+  [key: string]: unknown; // Allow other properties
+}
+
 interface DIDLLite {
   'DIDL-Lite'?: {
-    item?: any | any[];
+    item?: DIDLItem | DIDLItem[];
   };
 }
 

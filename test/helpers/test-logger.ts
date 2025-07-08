@@ -121,6 +121,19 @@ export const testLog = {
         logStream.write('[TRACE] ' + message + '\n');
       }
     }
+  },
+  // Flush any buffered output
+  flush: () => {
+    // Force flush stdout to ensure console output is displayed immediately
+    if (process.stdout.write('')) {
+      // Write an empty string to force flush
+    }
+    
+    // Flush the log file stream if it exists
+    if (logStream && typeof logStream.cork === 'function') {
+      logStream.cork();
+      logStream.uncork();
+    }
   }
 };
 

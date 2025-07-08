@@ -14,7 +14,7 @@ import { createSpotifyAuthService, SpotifyAuthService } from './services/spotify
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
-import { createError, type Config, type ApiResponse, type RouteParams, type ErrorResponse, type SuccessResponse, type MusicSearchSuccessResponse, type LibrarySearchSuccessResponse, type BrowseItem, type QueueItem } from './types/sonos.js';
+import { createError, type Config, type ApiResponse, type RouteParams, type ErrorResponse, type SuccessResponse, type MusicSearchSuccessResponse, type LibrarySearchSuccessResponse, type BrowseItem, type QueueItem, type PandoraStation } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
 import { EventManager } from './utils/event-manager.js';
@@ -2547,6 +2547,7 @@ export class ApiRouter {
                 mergedStations.push({
                   stationName: fav.title,
                   stationId: fav.stationId || '',
+                  uri: fav.uri,
                   isInSonosFavorites: true,
                   isQuickMix: fav.title === 'QuickMix',
                   isThumbprint: fav.title.includes('Thumbprint'),
@@ -2591,13 +2592,13 @@ export class ApiRouter {
             stations: favoriteStations.map(s => ({
               stationId: s.stationId,
               stationName: s.title,
-              sessionNumber: s.sessionNumber,
+              sessionNumber: s.sessionNumber ? parseInt(s.sessionNumber, 10) : undefined,
               uri: s.uri,
               isInSonosFavorites: true,
               isQuickMix: s.title === 'QuickMix',
               isThumbprint: s.title.includes('Thumbprint'),
               isUserCreated: true
-            }))
+            } satisfies PandoraStation))
           }
         };
       } else {

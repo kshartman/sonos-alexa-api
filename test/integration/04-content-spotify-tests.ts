@@ -316,7 +316,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       }
 
       // Try to search for a station/radio
-      const stationQuery = 'rock';
+      const stationQuery = 'classic rock';
       testLog.info(`   📻 Searching for station: "${stationQuery}"`);
       
       const searchStartTime = Date.now();

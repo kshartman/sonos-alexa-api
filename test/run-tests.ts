@@ -24,6 +24,7 @@ const noTimeout = args.includes('--no-timeout') || enableInteractive; // Interac
 const enableLogging = args.includes('--log');
 const debugMode = args.includes('--debug');
 const traceMode = args.includes('--trace');
+const clearCache = args.includes('--clear-cache');
 
 // Extract grep pattern if provided (--match is an undocumented synonym for --grep)
 let grepPattern: string | undefined;
@@ -93,6 +94,9 @@ if (enableInteractive) {
 if (debugMode || traceMode) {
   console.log(`   Log Level: ${process.env.LOG_LEVEL}`);
 }
+if (clearCache) {
+  console.log(`   Clear cache: Yes (test content will be rediscovered)`);
+}
 console.log();
 
 if (!mockOnly) {
@@ -140,8 +144,10 @@ async function runTests() {
       console.log(`🌐 Using remote API at ${apiUrl}\n`);
     }
     
-    // Clear test content cache to ensure fresh discovery
-    await clearTestContentCache();
+    // Clear test content cache if requested
+    if (clearCache) {
+      await clearTestContentCache();
+    }
 
     // Run tests using tsx to handle TypeScript files
     // IMPORTANT: Using --test-concurrency=1 to run tests sequentially

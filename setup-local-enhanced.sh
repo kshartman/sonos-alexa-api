@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# setup-local-enhanced.sh [home]
+# setup-local-enhanced.sh [--dryrun] [home]
 #
 # Sets up environment based on network location or explicit home parameter
+#
+# Options:
+#   --dryrun    Show what would be done without making changes
 #
 # Homes: worf, talon, mbpro4
 #
@@ -15,7 +18,32 @@
 # - ../private/.env-* to ./.env
 # - ../private/presets-{home}/ to ./presets/
 # - ../private/data-{home}/ to ./data/
+# - ../private/test/.env-test-{hostname}-{home} to ./test/.env
 #
+
+# Parse command line arguments
+DRY_RUN=false
+ARGS=()
+
+for arg in "$@"; do
+    case $arg in
+        --dryrun)
+            DRY_RUN=true
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+
+# Function to execute or display command based on dry run mode
+execute_cmd() {
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would execute: $@"
+    else
+        "$@"
+    fi
+}
 
 # Function to get current IP address
 get_ip_address() {
@@ -47,9 +75,9 @@ ip_in_subnet() {
 }
 
 # Determine home based on argument or network
-if [[ -n "$1" ]]; then
+if [[ -n "${ARGS[0]}" ]]; then
     # Home explicitly specified
-    HOME_NAME="$1"
+    HOME_NAME="${ARGS[0]}"
     
     # Validate home name
     if [[ "$HOME_NAME" != "worf" && "$HOME_NAME" != "talon" && "$HOME_NAME" != "mbpro4" ]]; then
@@ -79,21 +107,36 @@ else
     fi
 fi
 
+echo "Current directory: $(pwd)"
+
 echo ""
+if [ "$DRY_RUN" = true ]; then
+    echo "*** DRY RUN MODE - No changes will be made ***"
+    echo ""
+fi
 echo "Setting up for home: $HOME_NAME"
 echo ""
 
 # Remove settings.json if it exists (using env vars instead)
 if [ -f settings.json ]; then
-    echo "✓ Removing settings.json (using environment variables instead)"
-    rm -f settings.json
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would remove settings.json (using environment variables instead)"
+    else
+        echo "✓ Removing settings.json (using environment variables instead)"
+        rm -f settings.json
+    fi
 fi
 
 # Clean up any settings symlinks
-rm -f settings-*.json 2>/dev/null || true
+if [ "$DRY_RUN" = true ]; then
+    if ls settings-*.json 2>/dev/null >/dev/null; then
+        echo "[DRY RUN] Would remove settings-*.json symlinks"
+    fi
+else
+    rm -f settings-*.json 2>/dev/null || true
+fi
 
 # Copy environment file based on home
-rm -f .env
 if [ "$HOME_NAME" = "mbpro4" ]; then
     ENV_FILE="../private/.env-mbpro4-enhanced"
 else
@@ -101,88 +144,180 @@ else
 fi
 
 if [ -f "$ENV_FILE" ]; then
-    cp "$ENV_FILE" .env
-    echo "✓ Copied $ENV_FILE to .env"
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would copy $ENV_FILE to .env"
+    else
+        rm -f .env
+        cp "$ENV_FILE" .env
+        echo "✓ Copied $ENV_FILE to .env"
+    fi
 else
     echo "! Error: $ENV_FILE not found"
-    exit 1
+    if [ "$DRY_RUN" != true ]; then
+        exit 1
+    fi
 fi
 
 # Copy presets directory
 PRESETS_SOURCE="../presets/presets-${HOME_NAME}"
 
-# Remove existing presets
-if [ -L ./presets ]; then
-    rm ./presets
-elif [ -d ./presets ]; then
-    rm -rf ./presets
-elif [ -f ./presets ]; then
-    rm ./presets
-fi
-
-# Copy presets (create empty if source doesn't exist)
-if [ -d "$PRESETS_SOURCE" ]; then
-    mkdir ./presets
-    if [ -n "$(ls -A "$PRESETS_SOURCE" 2>/dev/null)" ]; then
-        (cd "$PRESETS_SOURCE" && tar cf - .) | (cd ./presets && tar xf -)
-        echo "✓ Copied $PRESETS_SOURCE to ./presets"
+if [ "$DRY_RUN" = true ]; then
+    # Dry run mode - just show what would happen
+    if [ -L ./presets ] || [ -d ./presets ] || [ -f ./presets ]; then
+        echo "[DRY RUN] Would remove existing ./presets"
+    fi
+    
+    if [ -d "$PRESETS_SOURCE" ]; then
+        if [ -n "$(ls -A "$PRESETS_SOURCE" 2>/dev/null)" ]; then
+            echo "[DRY RUN] Would copy $PRESETS_SOURCE to ./presets"
+        else
+            echo "[DRY RUN] Would create empty ./presets (source is empty)"
+        fi
     else
-        echo "✓ Created empty ./presets (source was empty)"
+        echo "[DRY RUN] Would create empty ./presets (no source found)"
     fi
 else
-    mkdir -p ./presets
-    echo "✓ Created empty ./presets (no source found)"
+    # Remove existing presets
+    if [ -L ./presets ]; then
+        rm ./presets
+    elif [ -d ./presets ]; then
+        rm -rf ./presets
+    elif [ -f ./presets ]; then
+        rm ./presets
+    fi
+    
+    # Copy presets (create empty if source doesn't exist)
+    if [ -d "$PRESETS_SOURCE" ]; then
+        mkdir ./presets
+        if [ -n "$(ls -A "$PRESETS_SOURCE" 2>/dev/null)" ]; then
+            (cd "$PRESETS_SOURCE" && tar cf - .) | (cd ./presets && tar xf -)
+            echo "✓ Copied $PRESETS_SOURCE to ./presets"
+        else
+            echo "✓ Created empty ./presets (source was empty)"
+        fi
+    else
+        mkdir -p ./presets
+        echo "✓ Created empty ./presets (no source found)"
+    fi
 fi
 
 # For mbpro4, check if presets are empty and add CREATE_DEFAULT_PRESETS if needed
 if [ "$HOME_NAME" = "mbpro4" ] && [ -z "$(ls -A ./presets 2>/dev/null)" ]; then
-    echo "✓ Empty presets detected for mbpro4, adding CREATE_DEFAULT_PRESETS=true"
-    
-    # Add CREATE_DEFAULT_PRESETS to .env
-    if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY RUN] Would add CREATE_DEFAULT_PRESETS=true to .env (empty presets for mbpro4)"
+    else
+        echo "✓ Empty presets detected for mbpro4, adding CREATE_DEFAULT_PRESETS=true"
+        
+        # Add CREATE_DEFAULT_PRESETS to .env
+        if [ -s .env ] && [ "$(tail -c 1 .env | wc -l)" -eq 0 ]; then
+            echo "" >> .env
+        fi
+        echo "" >> .env
+        echo "# Auto-generate presets from favorites since presets folder is empty" >> .env
+        echo "CREATE_DEFAULT_PRESETS=true" >> .env
         echo "" >> .env
     fi
-    echo "" >> .env
-    echo "# Auto-generate presets from favorites since presets folder is empty" >> .env
-    echo "CREATE_DEFAULT_PRESETS=true" >> .env
-    echo "" >> .env
 fi
 
 
 # Copy data directory
 DATA_SOURCE="../private/data-${HOME_NAME}"
 
-# Remove existing data directory or symlink
-if [ -L ./data ]; then
-    rm ./data
-elif [ -d ./data ]; then
-    rm -rf ./data
-elif [ -f ./data ]; then
-    rm ./data
-fi
-
-# Copy data (create empty if source doesn't exist)
-if [ -d "$DATA_SOURCE" ]; then
-    mkdir ./data
-    if [ -n "$(ls -A "$DATA_SOURCE" 2>/dev/null)" ]; then
-        (cd "$DATA_SOURCE" && tar cf - .) | (cd ./data && tar xf -)
-        echo "✓ Copied $DATA_SOURCE to ./data"
-        
-        # Check for compressed cache files and decompress them
-        if [ -f ./data/music-library.cache.gz ]; then
-            echo "✓ Decompressing music-library.cache.gz"
-            gunzip ./data/music-library.cache.gz
-        fi
-        if [ -f ./data/services-cache.json.gz ]; then
-            echo "✓ Decompressing services-cache.json.gz"
-            gunzip ./data/services-cache.json.gz
+if [ "$DRY_RUN" = true ]; then
+    # Dry run mode - just show what would happen
+    if [ -L ./data ] || [ -d ./data ] || [ -f ./data ]; then
+        echo "[DRY RUN] Would remove existing ./data"
+    fi
+    
+    if [ -d "$DATA_SOURCE" ]; then
+        if [ -n "$(ls -A "$DATA_SOURCE" 2>/dev/null)" ]; then
+            echo "[DRY RUN] Would copy $DATA_SOURCE to ./data"
+            
+            # Check for compressed files that would be decompressed
+            if [ -f "$DATA_SOURCE/music-library.cache.gz" ]; then
+                echo "[DRY RUN] Would decompress music-library.cache.gz"
+            fi
+            if [ -f "$DATA_SOURCE/services-cache.json.gz" ]; then
+                echo "[DRY RUN] Would decompress services-cache.json.gz"
+            fi
+        else
+            echo "[DRY RUN] Would create empty ./data (source is empty)"
         fi
     else
-        echo "✓ Created empty ./data (source was empty)"
+        echo "[DRY RUN] Would create empty ./data (no source found)"
     fi
 else
-    mkdir -p ./data
-    echo "✓ Created empty ./data (no source found)"
+    # Remove existing data directory or symlink
+    if [ -L ./data ]; then
+        rm ./data
+    elif [ -d ./data ]; then
+        rm -rf ./data
+    elif [ -f ./data ]; then
+        rm ./data
+    fi
+    
+    # Copy data (create empty if source doesn't exist)
+    if [ -d "$DATA_SOURCE" ]; then
+        mkdir ./data
+        if [ -n "$(ls -A "$DATA_SOURCE" 2>/dev/null)" ]; then
+            (cd "$DATA_SOURCE" && tar cf - .) | (cd ./data && tar xf -)
+            echo "✓ Copied $DATA_SOURCE to ./data"
+            
+            # Check for compressed cache files and decompress them
+            if [ -f ./data/music-library.cache.gz ]; then
+                echo "✓ Decompressing music-library.cache.gz"
+                gunzip ./data/music-library.cache.gz
+            fi
+            if [ -f ./data/services-cache.json.gz ]; then
+                echo "✓ Decompressing services-cache.json.gz"
+                gunzip ./data/services-cache.json.gz
+            fi
+        else
+            echo "✓ Created empty ./data (source was empty)"
+        fi
+    else
+        mkdir -p ./data
+        echo "✓ Created empty ./data (no source found)"
+    fi
+fi
+
+# Copy test environment file based on hostname and home
+# Get hostname without domain, in lowercase
+HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]')
+TEST_ENV_SOURCE="../private/test/.env-test-${HOSTNAME}-${HOME_NAME}"
+TEST_ENV_DEST="test/.env"
+
+if [ "$DRY_RUN" = true ]; then
+    # Dry run mode
+    if [ ! -d test ]; then
+        echo "[DRY RUN] Would create test directory"
+    fi
+    
+    if [ -f "$TEST_ENV_SOURCE" ]; then
+        echo "[DRY RUN] Would copy $TEST_ENV_SOURCE to $TEST_ENV_DEST"
+    else
+        echo "[DRY RUN] Test environment file not found: $TEST_ENV_SOURCE"
+        if [ ! -f "$TEST_ENV_DEST" ]; then
+            echo "[DRY RUN] Would create minimal test/.env"
+        fi
+    fi
+else
+    # Create test directory if it doesn't exist
+    mkdir -p test
+    
+    # Copy test environment file if it exists
+    if [ -f "$TEST_ENV_SOURCE" ]; then
+        cp "$TEST_ENV_SOURCE" "$TEST_ENV_DEST"
+        echo "✓ Copied $TEST_ENV_SOURCE to $TEST_ENV_DEST"
+    else
+        echo "! Test environment file not found: $TEST_ENV_SOURCE"
+        # Create minimal test/.env if it doesn't exist
+        if [ ! -f "$TEST_ENV_DEST" ]; then
+            echo "✓ Creating minimal test/.env"
+            echo "# Test environment configuration" > "$TEST_ENV_DEST"
+            echo "" >> "$TEST_ENV_DEST"
+        fi
+    fi
 fi
 
 # Update test/.env with DEFAULT_ROOM from main .env
@@ -191,25 +326,35 @@ if [ -f .env ] && [ -f test/.env ]; then
     DEFAULT_ROOM=$(grep "^DEFAULT_ROOM=" .env | cut -d'=' -f2)
     
     if [ -n "$DEFAULT_ROOM" ]; then
-        echo "✓ Updating test/.env with TEST_ROOM=${DEFAULT_ROOM}"
-        
-        # Update or add TEST_ROOM in test/.env
-        if grep -q "^TEST_ROOM=" test/.env; then
-            # Update existing TEST_ROOM line
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' "s/^TEST_ROOM=.*/TEST_ROOM=${DEFAULT_ROOM}/" test/.env
+        if [ "$DRY_RUN" = true ]; then
+            if grep -q "^TEST_ROOM=" test/.env; then
+                echo "[DRY RUN] Would update TEST_ROOM in test/.env to ${DEFAULT_ROOM}"
             else
-                sed -i "s/^TEST_ROOM=.*/TEST_ROOM=${DEFAULT_ROOM}/" test/.env
+                echo "[DRY RUN] Would add TEST_ROOM=${DEFAULT_ROOM} to test/.env"
             fi
         else
-            # Add TEST_ROOM line with newline if needed
-            if [ -s test/.env ] && [ "$(tail -c 1 test/.env | wc -l)" -eq 0 ]; then
-                echo "" >> test/.env
+            echo "✓ Updating test/.env with TEST_ROOM=${DEFAULT_ROOM}"
+            
+            # Update or add TEST_ROOM in test/.env
+            if grep -q "^TEST_ROOM=" test/.env; then
+                # Update existing TEST_ROOM line
+                if [[ "$OSTYPE" == "darwin"* ]]; then
+                    sed -i '' "s/^TEST_ROOM=.*/TEST_ROOM=${DEFAULT_ROOM}/" test/.env
+                else
+                    sed -i "s/^TEST_ROOM=.*/TEST_ROOM=${DEFAULT_ROOM}/" test/.env
+                fi
+            else
+                # Add TEST_ROOM line with newline if needed
+                if [ -s test/.env ] && [ "$(tail -c 1 test/.env | wc -l)" -eq 0 ]; then
+                    echo "" >> test/.env
+                fi
+                echo "TEST_ROOM=${DEFAULT_ROOM}" >> test/.env
             fi
-            echo "TEST_ROOM=${DEFAULT_ROOM}" >> test/.env
         fi
     else
-        echo "✓ No DEFAULT_ROOM found in .env, leaving test/.env unchanged"
+        if [ "$DRY_RUN" != true ]; then
+            echo "✓ No DEFAULT_ROOM found in .env, leaving test/.env unchanged"
+        fi
     fi
 else
     if [ ! -f .env ]; then
@@ -223,7 +368,9 @@ fi
 echo ""
 echo "Setup complete!"
 echo "- Home: ${HOME_NAME}"
+echo "- Hostname: ${HOSTNAME}"
 echo "- Environment: ${ENV_FILE##*/}"
+echo "- Test Environment: .env-test-${HOSTNAME}-${HOME_NAME}"
 echo "- Presets: presets-${HOME_NAME}"
 echo "- Data: data-${HOME_NAME}"
 if [ "$HOME_NAME" = "mbpro4" ] && [ -z "$(ls -A ./presets 2>/dev/null)" ]; then

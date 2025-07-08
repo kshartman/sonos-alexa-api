@@ -10,7 +10,10 @@ import { testLog } from '../helpers/test-logger.js';
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
+// Increase timeout to account for content loading and stabilization delays
+const testTimeout = getTestTimeout(60000);
+
+describe('Basic Playback Control Tests', { skip: skipIntegration, timeout: testTimeout }, () => {
   let eventManager: EventManager;
   let topology: SystemTopology;
   let testRoom: string;
@@ -81,7 +84,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
   });
   
   describe('State Management', () => {
-    it('should handle TRANSITIONING state gracefully', async () => {
+    it('should handle TRANSITIONING state gracefully', { timeout: 30000 }, async () => {
       // Always start from STOPPED state with content
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
       await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -96,6 +99,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       if (!state.currentTrack) {
         testLog.info('   Loading content first...');
         await loadTestSong(testRoom, true);
+        // Give device time to process the content
+        await new Promise(resolve => setTimeout(resolve, 2000));
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -108,11 +113,10 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
       assert.strictEqual(response.status, 200);
       
-      // Wait for stable state (not TRANSITIONING)
-      const stableState = await eventManager.waitForStableState(deviceId, 10000);
-      assert(stableState !== null, 'Device should reach stable state');
-      assert(stableState !== 'TRANSITIONING', 'Device should not be stuck in TRANSITIONING');
-      testLog.info(`   Stable state reached: ${stableState}`);
+      // Wait for device to reach PLAYING state
+      const success = await eventManager.waitForState(deviceId, 'PLAYING', 15000);
+      assert(success, 'Device should reach PLAYING state');
+      testLog.info(`   Device is now playing`);
     });
     
     it('should track state history', async () => {
@@ -129,6 +133,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       
       if (!state.currentTrack) {
         await loadTestSong(testRoom, true);
+        // Give device time to process the content
+        await new Promise(resolve => setTimeout(resolve, 2000));
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -353,7 +359,7 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
   });
   
   describe('PlayPause Toggle', () => {
-    it('should toggle between play and pause states', async () => {
+    it('should toggle between play and pause states', { timeout: 30000 }, async () => {
       // Always start from STOPPED state with content
       await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
       await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -367,6 +373,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       
       if (!state.currentTrack) {
         await loadTestSong(testRoom, true);
+        // Give device time to process the content
+        await new Promise(resolve => setTimeout(resolve, 2000));
         // Stop again to ensure we're in STOPPED state
         await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
         await eventManager.waitForState(deviceId, 'STOPPED', 5000);
@@ -384,8 +392,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       assert(success, 'Should start playing after first toggle');
       testLog.info(`   First toggle successful - now PLAYING`);
       
-      // Wait for stabilization
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait longer for stabilization - some devices need more time
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Second toggle - should pause
       testLog.info(`   Second toggle: calling playpause (expecting PAUSED/STOPPED)`);

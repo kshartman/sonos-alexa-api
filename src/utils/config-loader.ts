@@ -1,5 +1,4 @@
 import { readFileSync } from 'fs';
-import os from 'os';
 import logger from './logger.js';
 import { applicationVersion } from '../version.js';
 import type { Config, WebhookConfig } from '../types/sonos.js';
@@ -46,12 +45,32 @@ function parseBooleanEnv(value: string | undefined): boolean | undefined {
 }
 
 /**
+ * Result of configuration loading
+ */
+export interface ConfigLoadResult {
+  config: Config;
+  sources: string[];
+  envOverrides: string[];
+}
+
+/**
+ * Format the configuration loading info as a message
+ */
+export function formatConfigInfo(result: ConfigLoadResult): string {
+  return result.envOverrides.length > 0 
+    ? `Configuration loaded from: ${result.sources.join(' → ')} (${result.envOverrides.join(', ')})`
+    : `Configuration loaded from: ${result.sources.join(' → ')}`;
+}
+
+/**
  * Load configuration from multiple sources with precedence:
  * 1. Default values
  * 2. settings.json (if exists)
  * 3. Environment variables (highest priority)
+ * 
+ * @returns Configuration and metadata about how it was loaded
  */
-export function loadConfiguration(): Config {
+export function loadConfiguration(): ConfigLoadResult {
   // Start with defaults (we'll add computed fields at the end)
   let config: Partial<Config> = { ...defaultConfig };
 
@@ -221,19 +240,6 @@ export function loadConfiguration(): Config {
     logger.level = config.logLevel;
   }
   
-  // Show startup banner first
-  const hostname = os.hostname();
-  const buildDate = process.env.BUILD_SOURCE_DATE || new Date().toISOString();
-  logger.always(`🎵 Sonos Alexa API v${applicationVersion.version} starting...`);
-  logger.always(`🖥️  Host: ${hostname}`);
-  logger.always(`🌐 Address: ${config.host || '0.0.0.0'}:${config.port}`);
-  logger.always(`📅 Build Date: ${buildDate}`);
-  
-  const configMessage = envOverrides.length > 0 
-    ? `Configuration loaded from: ${configSources.join(' → ')} (${envOverrides.join(', ')})`
-    : `Configuration loaded from: ${configSources.join(' → ')}`;
-  logger.info(configMessage);
-  
   // Add computed environment helpers and version
   const finalConfig = config as Config;
   Object.defineProperty(finalConfig, 'isDevelopment', {
@@ -257,7 +263,11 @@ export function loadConfiguration(): Config {
     enumerable: true
   });
   
-  return finalConfig;
+  return {
+    config: finalConfig,
+    sources: configSources,
+    envOverrides: envOverrides
+  };
 }
 
 /**

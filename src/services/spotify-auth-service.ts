@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
-import { loadConfiguration } from '../utils/config-loader.js';
 import { scheduler } from '../utils/scheduler.js';
 import { SpotifyTokenManager, SpotifyTokens } from './spotify-token-manager.js';
 import { httpRequest } from '../utils/http.js';
@@ -15,9 +14,9 @@ export class SpotifyAuthService {
   private pendingStates = new Map<string, { instanceId: string; expiresAt: number }>();
   private readonly CLEANUP_TASK_ID = 'spotify-auth-cleanup';
 
-  constructor(config?: Config) {
-    // Accept optional config to avoid multiple loadConfiguration() calls during testing
-    this.config = config || loadConfiguration();
+  constructor(config: Config) {
+    // Config is required
+    this.config = config;
     this.tokenManager = new SpotifyTokenManager(
       this.config.dataDir || './data',
       process.env.INSTANCE_ID
@@ -239,11 +238,7 @@ export class SpotifyAuthService {
   }
 }
 
-// Export singleton instance
-// Create singleton instance with default config
-export const spotifyAuthService = new SpotifyAuthService();
-
-// Factory function for creating instances with custom config
+// Factory function for creating instances
 export function createSpotifyAuthService(config: Config): SpotifyAuthService {
   return new SpotifyAuthService(config);
 }

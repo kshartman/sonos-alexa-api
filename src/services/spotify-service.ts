@@ -1,8 +1,7 @@
 import { MusicService, MusicSearchResult, MusicServiceConfig, ServiceAccount } from './music-service.js';
 import logger from '../utils/logger.js';
 import type { SonosDevice } from '../sonos-device.js';
-import { spotifyAuthService, createSpotifyAuthService, SpotifyAuthService } from './spotify-auth-service.js';
-import { loadConfiguration } from '../utils/config-loader.js';
+import { createSpotifyAuthService, SpotifyAuthService } from './spotify-auth-service.js';
 import type { Config } from '../types/sonos.js';
 
 interface SpotifySearchResponse {
@@ -104,7 +103,7 @@ export class SpotifyService extends MusicService {
   private device?: SonosDevice;
   private missingPrefixCache = new Map<string, string>();
   
-  constructor(appConfig?: Config) {
+  constructor(appConfig: Config) {
     const musicServiceConfig: MusicServiceConfig = {
       country: 'US',
       search: {
@@ -131,10 +130,10 @@ export class SpotifyService extends MusicService {
     
     super(musicServiceConfig);
     
-    // Accept optional config to avoid multiple loadConfiguration() calls during testing
-    this.appConfig = appConfig || loadConfiguration();
-    // Create auth service with same config to avoid multiple loadConfiguration() calls
-    this.authService = appConfig ? createSpotifyAuthService(appConfig) : spotifyAuthService;
+    // Config is required
+    this.appConfig = appConfig;
+    // Create auth service with same config
+    this.authService = createSpotifyAuthService(appConfig);
     
     // Initialize OAuth if refresh token is in config
     this.initializeAuth();

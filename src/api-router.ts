@@ -10,7 +10,7 @@ import type { DefaultRoomManager } from './utils/default-room-manager.js';
 import type { TTSService } from './services/tts-service.js';
 import { AppleMusicService } from './services/apple-music-service.js';
 import { SpotifyService } from './services/spotify-service.js';
-import { spotifyAuthService } from './services/spotify-auth-service.js';
+import { createSpotifyAuthService, SpotifyAuthService } from './services/spotify-auth-service.js';
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
@@ -35,6 +35,7 @@ export class ApiRouter {
   private ttsService: TTSService;
   private appleMusicService: AppleMusicService;
   private spotifyService: SpotifyService;
+  private spotifyAuthService: SpotifyAuthService;
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
   private servicesCache: ServicesCache;
@@ -82,6 +83,7 @@ export class ApiRouter {
     this.ttsService = ttsService!;
     this.appleMusicService = new AppleMusicService();
     this.spotifyService = new SpotifyService(config);
+    this.spotifyAuthService = createSpotifyAuthService(config);
     this.servicesCache = new ServicesCache(discovery);
     this.accountService = new AccountService(this.servicesCache);
     
@@ -356,8 +358,9 @@ export class ApiRouter {
     const { method, url } = req;
     const [path, queryString] = (url || '/').split('?');
     const queryParams = new URLSearchParams(queryString || '');
+    const clientIp = getClientIp(req);
     
-    debugManager.info('api', `${method} ${path}`);
+    debugManager.info('api', `${method} ${path}`, { ip: clientIp });
 
     // Enable CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -3728,7 +3731,7 @@ export class ApiRouter {
   // Spotify OAuth handlers
   private async spotifyGetAuthUrl(): Promise<ApiResponse> {
     try {
-      const { authUrl, state } = spotifyAuthService.generateAuthUrl();
+      const { authUrl, state } = this.spotifyAuthService.generateAuthUrl();
       
       return {
         status: 200,
@@ -3778,7 +3781,7 @@ export class ApiRouter {
       
       // Construct callback URL from request
       const callbackUrl = `http://localhost:8888/callback?code=${code}&state=${state}`;
-      await spotifyAuthService.processCallbackUrl(callbackUrl);
+      await this.spotifyAuthService.processCallbackUrl(callbackUrl);
       
       // Return success HTML for browser
       return {
@@ -3828,7 +3831,7 @@ export class ApiRouter {
         throw { status: 400, message: 'callbackUrl is required in request body' };
       }
       
-      await spotifyAuthService.processCallbackUrl(callbackUrl);
+      await this.spotifyAuthService.processCallbackUrl(callbackUrl);
       
       return {
         status: 200,
@@ -3850,7 +3853,7 @@ export class ApiRouter {
   }
 
   private async spotifyAuthStatus(): Promise<ApiResponse> {
-    const isAuthenticated = spotifyAuthService.isAuthenticated();
+    const isAuthenticated = this.spotifyAuthService.isAuthenticated();
     const instanceId = process.env.INSTANCE_ID || 'default';
     
     return {

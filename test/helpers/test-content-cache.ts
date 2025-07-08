@@ -215,7 +215,8 @@ export async function getTestContentUris(room: string): Promise<TestContentCache
     cache = await discoverTestContent(room);
     await saveTestContentCache(cache);
   } else {
-    console.log('📦 Using cached test content');
+    console.log(`📦 Using cached test content (last updated: ${cache.lastUpdated || 'unknown'})`);
+    console.log(`   To rediscover content, run tests with --clear-cache`);
   }
   
   return cache;

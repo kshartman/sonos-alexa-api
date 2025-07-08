@@ -174,7 +174,13 @@ export class EventManager extends EventEmitter {
     });
   }
   
-  // Wait for device to exit TRANSITIONING state
+  /**
+   * Wait for device to exit TRANSITIONING state
+   * WARNING: This method has a known issue - it only listens to the coordinator device,
+   * which may not be the device actually emitting state changes. This can cause timeouts
+   * in grouped setups. Consider using waitForState() instead.
+   * @deprecated Use waitForState() instead for more reliable behavior
+   */
   async waitForStableState(deviceId: string, timeout = 10000): Promise<string | null> {
     logger.trace(`EventManager: waitForStableState called for device ${deviceId}, timeout: ${timeout}ms`);
     

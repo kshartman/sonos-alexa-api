@@ -7,13 +7,20 @@ import { debugManager, initializeDebugManager } from './utils/debug-manager.js';
 import { DefaultRoomManager } from './utils/default-room-manager.js';
 import { TTSService } from './services/tts-service.js';
 import { applicationVersion } from './version.js';
-import { loadConfiguration } from './utils/config-loader.js';
+import { loadConfiguration, formatConfigInfo } from './utils/config-loader.js';
 import { PresetGenerator } from './utils/preset-generator.js';
 import { EventManager } from './utils/event-manager.js';
 import type { Config } from './types/sonos.js';
 
-// Load configuration from multiple sources (this will show the startup banner)
-const config: Config = loadConfiguration();
+// Load configuration from multiple sources
+const configResult = loadConfiguration();
+const config: Config = configResult.config;
+
+// Show startup banner immediately
+logger.info('═══════════════════════════════════════');
+logger.info(`🎵 Sonos Alexa API Version ${applicationVersion.version}`);
+logger.info('═══════════════════════════════════════');
+logger.info(formatConfigInfo(configResult));
 
 // Initialize debug manager with the loaded config
 initializeDebugManager(config);
@@ -453,8 +460,6 @@ async function start(): Promise<void> {
       }
       
       // Show detailed summary only if log level allows
-      logger.info('═══════════════════════════════════════');
-      logger.info(`🎵 Sonos Alexa API Version ${applicationVersion.version}`);
       logger.info('═══════════════════════════════════════');
       logger.info(`🌐 Server running on ${config.host || 'http://localhost'}:${config.port}`);
       logger.info(`🔊 Discovered ${devices.length} Sonos device${devices.length !== 1 ? 's' : ''}`);

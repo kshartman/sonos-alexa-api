@@ -22,6 +22,7 @@ export interface TestContext {
   musicsearchAlbumTerm: string;
   testRoom: string;
   testDeviceId: string;
+  defaultVolume: number;
 }
 
 /**
@@ -172,6 +173,9 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
   testLog.info('✅ GLOBAL SETUP COMPLETE - STARTING TESTS');
   testLog.info('═'.repeat(80) + '\n');
   
+  // Get the default volume that was set (or use a sensible default)
+  const defaultVolume = process.env.TEST_VOLUME_DEFAULT ? parseInt(process.env.TEST_VOLUME_DEFAULT) : 50;
+  
   return {
     eventManager,
     topology,
@@ -179,7 +183,8 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
     musicsearchSongTerm,
     musicsearchAlbumTerm,
     testRoom,
-    testDeviceId
+    testDeviceId,
+    defaultVolume
   };
 }
 
@@ -224,7 +229,8 @@ export async function globalTestTeardown(testSuiteName: string, context: TestCon
 
 /**
  * Get device ID for a room name
- * This function uses the /zones API to find the device ID for a given room
+ * This function uses the /zones API to find the coordinator's device ID for a given room.
+ * For stereo pairs, this ensures we get the coordinator device ID.
  */
 export async function getDeviceIdForRoom(room: string): Promise<string> {
   try {
@@ -235,15 +241,38 @@ export async function getDeviceIdForRoom(room: string): Promise<string> {
     }
     
     const zones = await response.json();
-    for (const zone of zones) {
-      for (const member of zone.members) {
-        if (member.roomName === room) {
-          return member.id;
-        }
-      }
+    
+    // Find the zone containing this room
+    const zone = zones.find(z => z.members.some(m => m.roomName === room));
+    if (!zone) {
+      throw new Error(`Room '${room}' not found in any zone`);
     }
     
-    throw new Error(`Room '${room}' not found in topology`);
+    // For stereo pairs or groups, we need the coordinator's device ID
+    const coordinator = zone.members.find(m => m.isCoordinator);
+    if (!coordinator) {
+      throw new Error(`No coordinator found for zone containing room '${room}'`);
+    }
+    
+    // If the room is the coordinator, return its ID
+    if (coordinator.roomName === room) {
+      return coordinator.id;
+    }
+    
+    // For stereo pairs where the room is not the coordinator,
+    // we still return the coordinator's ID because that's where events come from
+    const roomMembers = zone.members.filter(m => m.roomName === room);
+    if (roomMembers.length === 2) {
+      // This is a stereo pair
+      testLog.info(`   Note: ${room} is part of a stereo pair, using coordinator device ID`);
+      return coordinator.id;
+    }
+    
+    // For grouped rooms, if the requested room is not the coordinator,
+    // we might want to return that room's device ID for some tests
+    // But for event tracking, we should use the coordinator
+    testLog.info(`   Note: ${room} is in a group with coordinator ${coordinator.roomName}, using coordinator device ID`);
+    return coordinator.id;
   } catch (error) {
     throw new Error(`Failed to get device ID for room '${room}': ${error}`);
   }

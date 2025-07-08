@@ -336,6 +336,50 @@ export async function getSafeTestRoom(topology: SystemTopology): Promise<string>
 }
 
 /**
+ * Get the coordinator device ID for a room.
+ * For stereo pairs, this ensures we track events from the coordinator device.
+ * 
+ * @param room - The room name
+ * @returns The coordinator's device ID for the room
+ */
+export async function getCoordinatorDeviceId(room: string): Promise<string> {
+  const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
+  if (!zonesResponse.ok) {
+    throw new Error(`Failed to fetch zones: ${zonesResponse.statusText}`);
+  }
+  
+  const zones = await zonesResponse.json() as Zone[];
+  
+  // Find the zone containing this room
+  const zone = zones.find(z => z.members.some(m => m.roomName === room));
+  if (!zone) {
+    throw new Error(`Room '${room}' not found in any zone`);
+  }
+  
+  // Find the coordinator for this zone
+  const coordinator = zone.members.find(m => m.isCoordinator);
+  if (!coordinator) {
+    throw new Error(`No coordinator found for zone containing room '${room}'`);
+  }
+  
+  // If this is a stereo pair and the requested room is the coordinator, return its ID
+  // Otherwise return the coordinator's ID (which handles grouped speakers too)
+  if (coordinator.roomName === room) {
+    return coordinator.id;
+  }
+  
+  // For stereo pairs where we asked for the non-coordinator member,
+  // we still need to return the coordinator's ID
+  const roomMembers = zone.members.filter(m => m.roomName === room);
+  if (roomMembers.length === 2) {
+    // This is a stereo pair room
+    testLog.info(`   Note: ${room} is a stereo pair, using coordinator device ID`);
+  }
+  
+  return coordinator.id;
+}
+
+/**
  * Check if a specific service is available
  */
 export function isServiceAvailable(topology: SystemTopology, service: string): boolean {

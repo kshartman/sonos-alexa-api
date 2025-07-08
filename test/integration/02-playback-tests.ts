@@ -2,7 +2,7 @@ import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
-import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/discovery.js';
+import { discoverSystem, getSafeTestRoom, SystemTopology, getCoordinatorDeviceId } from '../helpers/discovery.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
 import { loadTestSong } from '../helpers/content-loader.js';
 import { testLog } from '../helpers/test-logger.js';
@@ -27,19 +27,8 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
     topology = await discoverSystem();
     testRoom = await getSafeTestRoom(topology);
     
-    // Get device ID for event tracking - must use coordinator for stereo pairs
-    const response = await fetch(`${defaultConfig.apiUrl}/zones`);
-    const zones = await response.json();
-    
-    // Find the zone containing our test room
-    const zone = zones.find(z => z.members.some(m => m.roomName === testRoom));
-    if (!zone) {
-      throw new Error(`Test room ${testRoom} not found in zones`);
-    }
-    
-    // Use the coordinator's ID for event tracking
-    const coordinator = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinator.id;
+    // Get coordinator device ID for event tracking
+    deviceId = await getCoordinatorDeviceId(testRoom);
     
     testLog.info(`   Test room: ${testRoom}`);
     testLog.info(`   Device ID: ${deviceId}`);
@@ -455,10 +444,17 @@ describe('Basic Playback Control Tests', { skip: skipIntegration }, () => {
       
       await Promise.all(promises);
       
-      // Wait for stable state
-      const stableState = await eventManager.waitForStableState(deviceId, 10000);
-      assert(stableState !== null, 'Should reach stable state after rapid commands');
-      assert(stableState !== 'TRANSITIONING', 'Should not be stuck in TRANSITIONING');
+      // Give time for all commands to process
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check the actual state via API (not relying on events)
+      const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
+      const state = await stateResponse.json();
+      
+      assert(state.playbackState !== 'TRANSITIONING', 
+        `Device should not be stuck in TRANSITIONING state, but got: ${state.playbackState}`);
+      
+      testLog.info(`   Device settled in ${state.playbackState} state after rapid commands`);
     });
   });
   

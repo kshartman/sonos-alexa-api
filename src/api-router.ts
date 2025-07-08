@@ -14,7 +14,7 @@ import { createSpotifyAuthService, SpotifyAuthService } from './services/spotify
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
-import type { Config, ApiResponse, RouteParams, ErrorResponse, SuccessResponse, MusicSearchSuccessResponse, LibrarySearchSuccessResponse, BrowseItem } from './types/sonos.js';
+import { createError, type Config, type ApiResponse, type RouteParams, type ErrorResponse, type SuccessResponse, type MusicSearchSuccessResponse, type LibrarySearchSuccessResponse, type BrowseItem, type QueueItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
 import { EventManager } from './utils/event-manager.js';
@@ -543,7 +543,7 @@ export class ApiRouter {
     }
 
     if (!handler) {
-      throw { status: 404, message: 'Not found' };
+      throw createError(404, 'Not found');
     }
 
     return handler(params, queryParams, body);
@@ -629,12 +629,12 @@ export class ApiRouter {
     const resolvedRoom = this.defaultRoomManager.getRoom(roomName);
     
     if (!resolvedRoom) {
-      throw { status: 400, message: 'No room specified and no default room configured' };
+      throw createError(400, 'No room specified and no default room configured');
     }
     
     const device = this.discovery.getDevice(resolvedRoom);
     if (!device) {
-      throw { status: 404, message: `Room '${resolvedRoom}' not found` };
+      throw createError(404, `Room '${resolvedRoom}' not found`);
     }
     return device;
   }
@@ -935,7 +935,7 @@ export class ApiRouter {
    * @returns Complete room state information
    */
   private async getRoomState({ room }: RouteParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     
     // Determine if we should use coordinator for certain info
@@ -1067,7 +1067,7 @@ export class ApiRouter {
    * @returns Success response
    */
   private async play({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.play();
@@ -1081,7 +1081,7 @@ export class ApiRouter {
    * @returns Success response
    */
   private async pause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.pause();
@@ -1095,7 +1095,7 @@ export class ApiRouter {
    * @returns Success response
    */
   private async playPause({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
@@ -1114,7 +1114,7 @@ export class ApiRouter {
   }
 
   private async stop({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.stop();
@@ -1122,7 +1122,7 @@ export class ApiRouter {
   }
 
   private async next({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.next();
@@ -1130,7 +1130,7 @@ export class ApiRouter {
   }
 
   private async previous({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     await coordinator.previous();
@@ -1144,13 +1144,13 @@ export class ApiRouter {
    * @returns Success response
    */
   private async setVolume({ room, level }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!level) throw { status: 400, message: 'Level parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!level) throw createError(400, 'Level parameter is required');
     const device = this.getDevice(room);
     const volumeLevel = parseInt(level, 10);
     
     if (isNaN(volumeLevel) || volumeLevel < 0 || volumeLevel > 100) {
-      throw { status: 400, message: 'Volume must be between 0 and 100' };
+      throw createError(400, 'Volume must be between 0 and 100');
     }
     
     await device.setVolume(volumeLevel);
@@ -1158,13 +1158,13 @@ export class ApiRouter {
   }
 
   private async volumeUp({ room, delta }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!delta) throw { status: 400, message: 'Delta parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!delta) throw createError(400, 'Delta parameter is required');
     const device = this.getDevice(room);
     const deltaValue = parseInt(delta, 10);
     
     if (isNaN(deltaValue)) {
-      throw { status: 400, message: 'Volume delta must be a number' };
+      throw createError(400, 'Volume delta must be a number');
     }
     
     // Get current volume from device to ensure it's up-to-date
@@ -1175,13 +1175,13 @@ export class ApiRouter {
   }
 
   private async volumeDown({ room, delta }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!delta) throw { status: 400, message: 'Delta parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!delta) throw createError(400, 'Delta parameter is required');
     const device = this.getDevice(room);
     const deltaValue = parseInt(delta, 10);
     
     if (isNaN(deltaValue)) {
-      throw { status: 400, message: 'Volume delta must be a number' };
+      throw createError(400, 'Volume delta must be a number');
     }
     
     // Get current volume from device to ensure it's up-to-date
@@ -1192,21 +1192,21 @@ export class ApiRouter {
   }
 
   private async mute({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     await device.setMute(true);
     return { status: 200, body: { status: 'success' } };
   }
 
   private async unmute({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     await device.setMute(false);
     return { status: 200, body: { status: 'success' } };
   }
 
   private async toggleMute({ room }: RouteParams): Promise<ApiResponse<{status: string, muted: boolean}>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     const device = this.getDevice(room);
     const currentMute = device.state.mute;
     await device.setMute(!currentMute);
@@ -1214,8 +1214,8 @@ export class ApiRouter {
   }
 
   private async playPreset({ room, preset }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!preset) throw { status: 400, message: 'Preset parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!preset) throw createError(400, 'Preset parameter is required');
     
     // Get the device, but check if we need to route to coordinator
     let device = this.getDevice(room);
@@ -1234,7 +1234,7 @@ export class ApiRouter {
     }
     
     if (!presetConfig) {
-      throw { status: 404, message: `Preset '${preset}' not found` };
+      throw createError(404, `Preset '${preset}' not found`);
     }
 
     await device.playPreset(presetConfig, this.discovery);
@@ -1264,8 +1264,8 @@ export class ApiRouter {
 
   // Group management endpoints
   private async joinGroup({ room, targetRoom }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!targetRoom) throw { status: 400, message: 'Target room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!targetRoom) throw createError(400, 'Target room parameter is required');
     
     const device = this.getDevice(room);
     const targetDevice = this.getDevice(targetRoom);
@@ -1299,7 +1299,7 @@ export class ApiRouter {
   }
 
   private async leaveGroup({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     
@@ -1310,7 +1310,7 @@ export class ApiRouter {
     );
     
     if (!deviceZone) {
-      throw { status: 404, message: `Room '${room}' not found in any zone` };
+      throw createError(404, `Room '${room}' not found in any zone`);
     }
     
     // Only block breaking up pure stereo pairs (exactly 2 members with same room name in zone)
@@ -1319,10 +1319,7 @@ export class ApiRouter {
       const uniqueRoomNames = new Set(deviceZone.members.map(m => m.roomName));
       if (uniqueRoomNames.size === 1) {
         // This is a pure stereo pair - cannot be broken
-        throw { 
-          status: 400, 
-          message: `Cannot break stereo pair '${room}'. Stereo pairs can only be separated using the Sonos app.` 
-        };
+        throw createError(400, `Cannot break stereo pair '${room}'. Stereo pairs can only be separated using the Sonos app.`);
       }
     }
     
@@ -1334,10 +1331,7 @@ export class ApiRouter {
     } catch (error) {
       // Check if this is because the device is already the coordinator
       if (errorMessageIncludes(error, '1023') || errorMessageIncludes(error, '701')) {
-        throw { 
-          status: 400, 
-          message: `Cannot ungroup '${room}': It appears to be the group coordinator. Other members must leave first.` 
-        };
+        throw createError(400, `Cannot ungroup '${room}': It appears to be the group coordinator. Other members must leave first.`);
       }
       
       // For stereo pairs, we need to find the primary (left) speaker
@@ -1398,8 +1392,8 @@ export class ApiRouter {
   }
 
   private async addToGroup({ room, otherRoom }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!otherRoom) throw { status: 400, message: 'Other room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!otherRoom) throw createError(400, 'Other room parameter is required');
     
     const device = this.getDevice(room);
     const otherDevice = this.getDevice(otherRoom);
@@ -1416,7 +1410,7 @@ export class ApiRouter {
   // Favorites endpoints
   private async getFavorites(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed } = params;
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const { FavoritesManager } = await import('./actions/favorites.js');
@@ -1436,8 +1430,8 @@ export class ApiRouter {
   }
 
   private async playFavorite({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!name) throw { status: 400, message: 'Favorite name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!name) throw createError(400, 'Favorite name is required');
     
     const device = this.getDevice(room);
     const { FavoritesManager } = await import('./actions/favorites.js');
@@ -1446,7 +1440,7 @@ export class ApiRouter {
     const favorite = await favoritesManager.findFavoriteByName(device, name);
     
     if (!favorite) {
-      throw { status: 404, message: `Favorite '${name}' not found` };
+      throw createError(404, `Favorite '${name}' not found`);
     }
     
     // Get coordinator and play on it
@@ -1462,7 +1456,7 @@ export class ApiRouter {
   // Playlists endpoints
   private async getPlaylists(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed } = params;
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     
@@ -1481,8 +1475,8 @@ export class ApiRouter {
   }
 
   private async playPlaylist({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!name) throw { status: 400, message: 'Playlist name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!name) throw createError(400, 'Playlist name is required');
     
     const device = this.getDevice(room);
     
@@ -1495,7 +1489,7 @@ export class ApiRouter {
     );
     
     if (!playlist) {
-      throw { status: 404, message: `Playlist '${name}' not found` };
+      throw createError(404, `Playlist '${name}' not found`);
     }
     
     // Get coordinator and replace queue with playlist
@@ -1510,9 +1504,9 @@ export class ApiRouter {
 
   // Apple Music endpoint
   private async appleMusic({ room, action, id }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!action) throw { status: 400, message: 'Action parameter is required' };
-    if (!id) throw { status: 400, message: 'ID parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!action) throw createError(400, 'Action parameter is required');
+    if (!id) throw createError(400, 'ID parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -1520,7 +1514,7 @@ export class ApiRouter {
     // Parse the ID format (e.g., "song:123456")
     const [type, contentId] = id.split(':');
     if (!type || !contentId) {
-      throw { status: 400, message: 'Invalid ID format. Expected format: type:id (e.g., song:123456)' };
+      throw createError(400, 'Invalid ID format. Expected format: type:id (e.g., song:123456)');
     }
     
     // Generate Apple Music URI and metadata
@@ -1546,7 +1540,7 @@ export class ApiRouter {
       break;
       
     default:
-      throw { status: 400, message: `Invalid action '${action}'. Valid actions: now, next, queue` };
+      throw createError(400, `Invalid action '${action}'. Valid actions: now, next, queue`);
     }
     
     return { status: 200, body: { status: 'success' } };
@@ -1580,7 +1574,7 @@ export class ApiRouter {
     };
     
     if (!uriTemplates[type]) {
-      throw { status: 400, message: `Invalid type '${type}'. Valid types: song, album, playlist` };
+      throw createError(400, `Invalid type '${type}'. Valid types: song, album, playlist`);
     }
     
     const uri = uriTemplates[type];
@@ -1617,11 +1611,11 @@ export class ApiRouter {
   }
 
   private async setDebugLevel({ level }: RouteParams): Promise<ApiResponse> {
-    if (!level) throw { status: 400, message: 'Level parameter is required' };
+    if (!level) throw createError(400, 'Level parameter is required');
     
     const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug', 'trace'];
     if (!validLevels.includes(level as LogLevel)) {
-      throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
+      throw createError(400, `Invalid log level. Must be one of: ${validLevels.join(', ')}`);
     }
 
     // Note: This now sets both debugManager and winston logger levels to keep them in sync
@@ -1630,12 +1624,12 @@ export class ApiRouter {
   }
 
   private async setDebugCategory({ category, enabled }: RouteParams): Promise<ApiResponse> {
-    if (!category) throw { status: 400, message: 'Category parameter is required' };
-    if (!enabled) throw { status: 400, message: 'Enabled parameter is required' };
+    if (!category) throw createError(400, 'Category parameter is required');
+    if (!enabled) throw createError(400, 'Enabled parameter is required');
 
     const validCategories: (keyof DebugCategories)[] = ['soap', 'topology', 'discovery', 'favorites', 'presets', 'upnp', 'api', 'sse'];
     if (!validCategories.includes(category as keyof DebugCategories)) {
-      throw { status: 400, message: `Invalid category. Must be one of: ${validCategories.join(', ')}` };
+      throw createError(400, `Invalid category. Must be one of: ${validCategories.join(', ')}`);
     }
 
     const isEnabled = enabled.toLowerCase() === 'true';
@@ -1792,12 +1786,12 @@ export class ApiRouter {
   }
   
   private async setDefaultRoom({ room }: RouteParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     // Verify room exists
     const device = this.discovery.getDevice(room);
     if (!device) {
-      throw { status: 404, message: `Room '${room}' not found` };
+      throw createError(404, `Room '${room}' not found`);
     }
     
     this.defaultRoomManager.setDefaults(room);
@@ -1811,12 +1805,12 @@ export class ApiRouter {
   }
   
   private async setDefaultService({ service }: RouteParams): Promise<ApiResponse> {
-    if (!service) throw { status: 400, message: 'Service parameter is required' };
+    if (!service) throw createError(400, 'Service parameter is required');
     
     // Validate service (could expand this list as more services are implemented)
     const validServices = ['library', 'apple', 'spotify', 'amazon', 'pandora', 'tunein', 'siriusxm'];
     if (!validServices.includes(service.toLowerCase())) {
-      throw { status: 400, message: `Invalid service. Valid services: ${validServices.join(', ')}` };
+      throw createError(400, `Invalid service. Valid services: ${validServices.join(', ')}`);
     }
     
     this.defaultRoomManager.setDefaults(undefined, service);
@@ -1845,12 +1839,12 @@ export class ApiRouter {
   }
   
   private async setVolumeDefault({ level }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!level) throw { status: 400, message: 'Level parameter is required' };
+    if (!level) throw createError(400, 'Level parameter is required');
     const device = this.getDevice(undefined); // Will use default room
     const volumeLevel = parseInt(level, 10);
     
     if (isNaN(volumeLevel) || volumeLevel < 0 || volumeLevel > 100) {
-      throw { status: 400, message: 'Volume must be between 0 and 100' };
+      throw createError(400, 'Volume must be between 0 and 100');
     }
     
     await device.setVolume(volumeLevel);
@@ -1858,7 +1852,7 @@ export class ApiRouter {
   }
   
   private async playPresetDefault({ preset }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!preset) throw { status: 400, message: 'Preset parameter is required' };
+    if (!preset) throw createError(400, 'Preset parameter is required');
     
     const device = this.getDevice(undefined); // Will use default room
     
@@ -1869,7 +1863,7 @@ export class ApiRouter {
     }
     
     if (!presetConfig) {
-      throw { status: 404, message: `Preset '${preset}' not found` };
+      throw createError(404, `Preset '${preset}' not found`);
     }
     
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -1878,8 +1872,8 @@ export class ApiRouter {
   }
   
   private async playPresetInRoom({ preset, room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!preset) throw { status: 400, message: 'Preset parameter is required' };
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!preset) throw createError(400, 'Preset parameter is required');
+    if (!room) throw createError(400, 'Room parameter is required');
     
     // This is the same as playPreset but with different route format
     return this.playPreset({ room, preset });
@@ -1887,10 +1881,10 @@ export class ApiRouter {
   
   // Default music search endpoints (use default room and service)
   private async musicSearchSongDefault({ query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!query) throw { status: 400, message: 'Query is required' };
+    if (!query) throw createError(400, 'Query is required');
     
     const room = this.defaultRoomManager.getRoom();
-    if (!room) throw { status: 400, message: 'No default room set' };
+    if (!room) throw createError(400, 'No default room set');
     
     const service = this.defaultRoomManager.getMusicService();
     
@@ -1898,10 +1892,10 @@ export class ApiRouter {
   }
   
   private async musicSearchAlbumDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!name) throw { status: 400, message: 'Album name is required' };
+    if (!name) throw createError(400, 'Album name is required');
     
     const room = this.defaultRoomManager.getRoom();
-    if (!room) throw { status: 400, message: 'No default room set' };
+    if (!room) throw createError(400, 'No default room set');
     
     const service = this.defaultRoomManager.getMusicService();
     
@@ -1909,10 +1903,10 @@ export class ApiRouter {
   }
   
   private async musicSearchStationDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!name) throw { status: 400, message: 'Station name is required' };
+    if (!name) throw createError(400, 'Station name is required');
     
     const room = this.defaultRoomManager.getRoom();
-    if (!room) throw { status: 400, message: 'No default room set' };
+    if (!room) throw createError(400, 'No default room set');
     
     const service = this.defaultRoomManager.getMusicService();
     
@@ -1920,10 +1914,10 @@ export class ApiRouter {
   }
 
   private async musicSearchArtistDefault({ name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!name) throw { status: 400, message: 'Artist name is required' };
+    if (!name) throw createError(400, 'Artist name is required');
     
     const room = this.defaultRoomManager.getRoom();
-    if (!room) throw { status: 400, message: 'No default room set' };
+    if (!room) throw createError(400, 'No default room set');
     
     const service = this.defaultRoomManager.getMusicService();
     
@@ -1932,44 +1926,44 @@ export class ApiRouter {
   
   // Music search endpoints
   private async musicSearchAlbum({ room, service, name }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!service) throw { status: 400, message: 'Service parameter is required' };
-    if (!name) throw { status: 400, message: 'Album name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!service) throw createError(400, 'Service parameter is required');
+    if (!name) throw createError(400, 'Album name is required');
     
     return this.performMusicSearch(room, service, 'album', name, queryParams);
   }
   
   private async musicSearchSong({ room, service, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!service) throw { status: 400, message: 'Service parameter is required' };
-    if (!query) throw { status: 400, message: 'Query is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!service) throw createError(400, 'Service parameter is required');
+    if (!query) throw createError(400, 'Query is required');
     
     return this.performMusicSearch(room, service, 'song', query, queryParams);
   }
   
   private async musicSearchStation({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!service) throw { status: 400, message: 'Service parameter is required' };
-    if (!name) throw { status: 400, message: 'Station name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!service) throw createError(400, 'Service parameter is required');
+    if (!name) throw createError(400, 'Station name is required');
     
     return this.performMusicSearch(room, service, 'station', name);
   }
 
   private async musicSearchArtist({ room, service, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!service) throw { status: 400, message: 'Service parameter is required' };
-    if (!name) throw { status: 400, message: 'Artist name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!service) throw createError(400, 'Service parameter is required');
+    if (!name) throw createError(400, 'Artist name is required');
     
     return this.performMusicSearch(room, service, 'artist', name);
   }
   
   // Music library search endpoints
   private async musicLibrarySearchSong({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!query) throw createError(400, 'Query parameter is required');
     
     if (!this.musicLibraryCache) {
-      throw { status: 503, message: 'Music library not yet indexed' };
+      throw createError(503, 'Music library not yet indexed');
     }
     
     const device = this.getDevice(room);
@@ -1994,7 +1988,7 @@ export class ApiRouter {
       }
       
       if (results.length === 0) {
-        throw { status: 404, message: `No songs found matching: ${query}` };
+        throw createError(404, `No songs found matching: ${query}`);
       }
       
       // Check if play=false to return results only
@@ -2051,16 +2045,16 @@ export class ApiRouter {
       if (error && typeof error === 'object' && 'status' in error) {
         throw error;
       }
-      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      throw createError(500, `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
   private async musicLibrarySearchArtist({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!query) throw createError(400, 'Query parameter is required');
     
     if (!this.musicLibraryCache) {
-      throw { status: 503, message: 'Music library not yet indexed' };
+      throw createError(503, 'Music library not yet indexed');
     }
     
     const device = this.getDevice(room);
@@ -2070,7 +2064,7 @@ export class ApiRouter {
       const results = await this.musicLibraryCache.search(query, 'artist', 50);
       
       if (results.length === 0) {
-        throw { status: 404, message: `No tracks by artist matching: ${query}` };
+        throw createError(404, `No tracks by artist matching: ${query}`);
       }
       
       // Check if play=false to return results only
@@ -2130,16 +2124,16 @@ export class ApiRouter {
       if (error && typeof error === 'object' && 'status' in error) {
         throw error;
       }
-      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      throw createError(500, `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
   private async musicLibrarySearchAlbum({ room, query }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!query) throw { status: 400, message: 'Query parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!query) throw createError(400, 'Query parameter is required');
     
     if (!this.musicLibraryCache) {
-      throw { status: 503, message: 'Music library not yet indexed' };
+      throw createError(503, 'Music library not yet indexed');
     }
     
     const device = this.getDevice(room);
@@ -2149,7 +2143,7 @@ export class ApiRouter {
       const results = await this.musicLibraryCache.search(query, 'album', 50);
       
       if (results.length === 0) {
-        throw { status: 404, message: `No tracks from album matching: ${query}` };
+        throw createError(404, `No tracks from album matching: ${query}`);
       }
       
       // Check if play=false to return results only
@@ -2209,7 +2203,7 @@ export class ApiRouter {
       if (error && typeof error === 'object' && 'status' in error) {
         throw error;
       }
-      throw { status: 500, message: `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      throw createError(500, `Library search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
@@ -2274,17 +2268,17 @@ export class ApiRouter {
   
   // Service-specific endpoints
   private async siriusXM({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!name) throw { status: 400, message: 'Station name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!name) throw createError(400, 'Station name is required');
     
     // SiriusXM requires authentication and special handling
-    throw { status: 501, message: 'SiriusXM support not yet implemented' };
+    throw createError(501, 'SiriusXM support not yet implemented');
   }
   
   
   private async pandoraPlay({ room, name }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!name) throw { status: 400, message: 'Station name is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!name) throw createError(400, 'Station name is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2341,10 +2335,7 @@ export class ApiRouter {
           } else {
             // Station not found anywhere - return proper error
             logger.warn(`Station '${decodedName}' not found in API, favorites, or cache`);
-            throw { 
-              status: 404, 
-              message: `Pandora station '${decodedName}' not found. Station must be in your Pandora favorites or have been played previously.` 
-            };
+            throw createError(404, `Pandora station '${decodedName}' not found. Station must be in your Pandora favorites or have been played previously.`);
           }
         }
       }
@@ -2437,12 +2428,12 @@ export class ApiRouter {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       logger.error(`Failed to play Pandora station '${name}':`, error);
-      throw { status: 404, message: error.message || 'Failed to play Pandora station' };
+      throw createError(404, error.message || 'Failed to play Pandora station');
     }
   }
   
   private async pandoraThumbsUp({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2462,12 +2453,12 @@ export class ApiRouter {
       return { status: 200, body: { status: 'success' } };
     } catch (error) {
       logger.error('Failed to send Pandora thumbs up:', error);
-      throw { status: 400, message: getErrorMessage(error) || 'Failed to send thumbs up' };
+      throw createError(400, getErrorMessage(error) || 'Failed to send thumbs up');
     }
   }
   
   private async pandoraThumbsDown({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2495,7 +2486,7 @@ export class ApiRouter {
       return { status: 200, body: { status: 'success' } };
     } catch (error) {
       logger.error('Failed to send Pandora thumbs down:', error);
-      throw { status: 400, message: getErrorMessage(error) || 'Failed to send thumbs down' };
+      throw createError(400, getErrorMessage(error) || 'Failed to send thumbs down');
     }
   }
   
@@ -2503,7 +2494,7 @@ export class ApiRouter {
    * Clear Pandora session endpoint
    */
   private async pandoraClear({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2515,7 +2506,7 @@ export class ApiRouter {
   
   private async pandoraGetStations(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed: detailedParam } = params;
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     // Support both /detailed path parameter and ?detailed=true query parameter
     const detailed = detailedParam === 'detailed' || queryParams?.get('detailed') === 'true';
@@ -2587,7 +2578,7 @@ export class ApiRouter {
       
       // Fall back to only favorites from FV:2
       if (favoriteStations.length === 0) {
-        throw { status: 404, message: 'No Pandora stations found in favorites' };
+        throw createError(404, 'No Pandora stations found in favorites');
       }
       
       logger.info(`Using ${favoriteStations.length} Pandora stations from FV:2 only`);
@@ -2616,13 +2607,13 @@ export class ApiRouter {
     } catch (error) {
       logger.error('Failed to get Pandora stations:', error);
       if (getErrorStatus(error)) throw error;
-      throw { status: 500, message: getErrorMessage(error) || 'Failed to get Pandora stations' };
+      throw createError(500, getErrorMessage(error) || 'Failed to get Pandora stations');
     }
   }
   
   // Queue management endpoints
   private async getQueue({ room, limit, offset, detailed }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     // Use coordinator for queue operations
@@ -2650,7 +2641,7 @@ export class ApiRouter {
       return { status: 200, body: queueData.items };
     } else {
       // For simplified, return only title, artist, album, albumArtUri
-      const simplified = queueData.items.map((item: { title?: string; artist?: string; album?: string; albumArtUri?: string }) => ({
+      const simplified = queueData.items.map((item: Partial<QueueItem>) => ({
         title: item.title || '',
         artist: item.artist || '',
         album: item.album || '',
@@ -2662,7 +2653,7 @@ export class ApiRouter {
   
   // Playback control endpoints
   private async clearQueue({ room }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2672,8 +2663,8 @@ export class ApiRouter {
   }
   
   private async addToQueue({ room }: RouteParams, _queryParams?: URLSearchParams, body?: unknown): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!body) throw { status: 400, message: 'Request body is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!body) throw createError(400, 'Request body is required');
     
     // Parse body if it's a string
     let parsedBody: { uri?: string; metadata?: string };
@@ -2681,16 +2672,16 @@ export class ApiRouter {
       try {
         parsedBody = JSON.parse(body);
       } catch (_e) {
-        throw { status: 400, message: 'Invalid JSON in request body' };
+        throw createError(400, 'Invalid JSON in request body');
       }
     } else if (typeof body === 'object') {
       parsedBody = body as { uri?: string; metadata?: string };
     } else {
-      throw { status: 400, message: 'Request body must be JSON' };
+      throw createError(400, 'Request body must be JSON');
     }
     
     const { uri, metadata } = parsedBody;
-    if (!uri) throw { status: 400, message: 'URI is required in request body' };
+    if (!uri) throw createError(400, 'URI is required in request body');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2718,11 +2709,11 @@ export class ApiRouter {
   }
   
   private async setRepeat({ room, toggle }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!toggle) throw { status: 400, message: 'Toggle parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!toggle) throw createError(400, 'Toggle parameter is required');
     
     if (toggle !== 'on' && toggle !== 'off') {
-      throw { status: 400, message: 'Toggle must be "on" or "off"' };
+      throw createError(400, 'Toggle must be "on" or "off"');
     }
     
     const device = this.getDevice(room);
@@ -2733,11 +2724,11 @@ export class ApiRouter {
   }
   
   private async setShuffle({ room, toggle }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!toggle) throw { status: 400, message: 'Toggle parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!toggle) throw createError(400, 'Toggle parameter is required');
     
     if (toggle !== 'on' && toggle !== 'off') {
-      throw { status: 400, message: 'Toggle must be "on" or "off"' };
+      throw createError(400, 'Toggle must be "on" or "off"');
     }
     
     const device = this.getDevice(room);
@@ -2748,11 +2739,11 @@ export class ApiRouter {
   }
   
   private async setCrossfade({ room, toggle }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!toggle) throw { status: 400, message: 'Toggle parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!toggle) throw createError(400, 'Toggle parameter is required');
     
     if (toggle !== 'on' && toggle !== 'off') {
-      throw { status: 400, message: 'Toggle must be "on" or "off"' };
+      throw createError(400, 'Toggle must be "on" or "off"');
     }
     
     const device = this.getDevice(room);
@@ -2763,12 +2754,12 @@ export class ApiRouter {
   }
   
   private async setSleepTimer({ room, seconds }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!seconds) throw { status: 400, message: 'Seconds parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!seconds) throw createError(400, 'Seconds parameter is required');
     
     const sleepSeconds = parseInt(seconds, 10);
     if (isNaN(sleepSeconds) || sleepSeconds < 0) {
-      throw { status: 400, message: 'Seconds must be a non-negative number' };
+      throw createError(400, 'Seconds must be a non-negative number');
     }
     
     const device = this.getDevice(room);
@@ -2779,7 +2770,7 @@ export class ApiRouter {
   }
   
   private async playLineIn({ room, source }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2790,7 +2781,7 @@ export class ApiRouter {
     // Find the source device to get its UUID
     const sourceDevice = this.discovery.getDevice(sourceRoom);
     if (!sourceDevice) {
-      throw { status: 404, message: `Could not find player ${sourceRoom}` };
+      throw createError(404, `Could not find player ${sourceRoom}`);
     }
     
     await coordinator.playLineIn(sourceDevice);
@@ -2799,8 +2790,8 @@ export class ApiRouter {
   }
   
   private async spotifyPlay({ room, id }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!id) throw { status: 400, message: 'Spotify ID is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!id) throw createError(400, 'Spotify ID is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
@@ -2810,14 +2801,14 @@ export class ApiRouter {
     const parsed = SpotifyService.parseSpotifyInput(spotifyInput);
     
     if (!parsed) {
-      throw { status: 400, message: 'Invalid Spotify ID or URI format' };
+      throw createError(400, 'Invalid Spotify ID or URI format');
     }
     
     // Get Spotify account from Sonos
     logger.info('Getting Spotify account for playback...');
     const account = await this.accountService.getServiceAccount(coordinator, 'spotify');
     if (!account) {
-      throw { status: 503, message: 'Spotify service not configured in Sonos. Please add Spotify account in Sonos app.' };
+      throw createError(503, 'Spotify service not configured in Sonos. Please add Spotify account in Sonos app.');
     }
     
     logger.info(`Using Spotify account - SID: ${account.sid}, SN: ${account.serialNumber}`);
@@ -2874,20 +2865,20 @@ export class ApiRouter {
         };
       }
       
-      throw { status: 500, message: `Failed to play Spotify content: ${errorMsg}` };
+      throw createError(500, `Failed to play Spotify content: ${errorMsg}`);
     }
   }
   
   private async setGroupVolume({ room, level }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!level) throw { status: 400, message: 'Level parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!level) throw createError(400, 'Level parameter is required');
     
     const device = this.getDevice(room);
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     const volumeLevel = parseInt(level, 10);
     
     if (isNaN(volumeLevel) || volumeLevel < 0 || volumeLevel > 100) {
-      throw { status: 400, message: 'Volume must be between 0 and 100' };
+      throw createError(400, 'Volume must be between 0 and 100');
     }
     
     try {
@@ -2895,7 +2886,7 @@ export class ApiRouter {
       return { status: 200, body: { status: 'success' } };
     } catch (error) {
       logger.error(`Failed to set group volume for ${room}:`, error);
-      throw { status: 500, message: `Failed to set group volume: ${getErrorMessage(error)}` };
+      throw createError(500, `Failed to set group volume: ${getErrorMessage(error)}`);
     }
   }
   
@@ -2914,11 +2905,11 @@ export class ApiRouter {
   }
   
   private async setLogLevel({ level }: RouteParams): Promise<ApiResponse> {
-    if (!level) throw { status: 400, message: 'Level parameter is required' };
+    if (!level) throw createError(400, 'Level parameter is required');
     
     const validLevels = ['error', 'warn', 'info', 'debug', 'trace'];
     if (!validLevels.includes(level)) {
-      throw { status: 400, message: `Invalid log level. Must be one of: ${validLevels.join(', ')}` };
+      throw createError(400, `Invalid log level. Must be one of: ${validLevels.join(', ')}`);
     }
     
     // Set both winston logger level and debug manager level
@@ -2930,8 +2921,8 @@ export class ApiRouter {
   
   // TTS endpoints
   private async sayText({ room, text }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!text) throw createError(400, 'Text parameter is required');
     
     const device = this.getDevice(room);
     const language = queryParams?.get('language') || 'en';
@@ -2956,7 +2947,7 @@ export class ApiRouter {
     
     // Validate that text is not empty after decoding and trimming
     if (!decodedText.trim()) {
-      throw { status: 400, message: 'Text cannot be empty' };
+      throw createError(400, 'Text cannot be empty');
     }
     
     // Get the base URL for TTS - Sonos needs direct HTTP access to the host
@@ -3026,13 +3017,13 @@ export class ApiRouter {
         hasDevice: !!device,
         error: getErrorMessage(error)
       });
-      throw { status: 500, message: `TTS failed: ${getErrorMessage(error)}` };
+      throw createError(500, `TTS failed: ${getErrorMessage(error)}`);
     }
   }
   
   private async sayTextAll({ room, text }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!text) throw createError(400, 'Text parameter is required');
     
     // Say in specified room's group
     const device = this.getDevice(room);
@@ -3061,7 +3052,7 @@ export class ApiRouter {
   }
   
   private async sayTextAllRooms({ text }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
+    if (!text) throw createError(400, 'Text parameter is required');
     
     // Say in all rooms
     const devices = this.discovery.getAllDevices();
@@ -3076,9 +3067,9 @@ export class ApiRouter {
 
   // TTS with volume as path parameter
   private async sayTextWithVolume({ room, text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
-    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!text) throw createError(400, 'Text parameter is required');
+    if (!volume) throw createError(400, 'Volume parameter is required');
     
     // Convert volume to query parameter and delegate
     const queryParams = new URLSearchParams();
@@ -3088,9 +3079,9 @@ export class ApiRouter {
   }
 
   private async sayTextAllWithVolume({ room, text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
-    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!text) throw createError(400, 'Text parameter is required');
+    if (!volume) throw createError(400, 'Volume parameter is required');
     
     // Convert volume to query parameter and delegate
     const queryParams = new URLSearchParams();
@@ -3100,8 +3091,8 @@ export class ApiRouter {
   }
 
   private async sayTextAllRoomsWithVolume({ text, volume }: RouteParams): Promise<ApiResponse<SuccessResponse>> {
-    if (!text) throw { status: 400, message: 'Text parameter is required' };
-    if (!volume) throw { status: 400, message: 'Volume parameter is required' };
+    if (!text) throw createError(400, 'Text parameter is required');
+    if (!volume) throw createError(400, 'Volume parameter is required');
     
     // Convert volume to query parameter and delegate
     const queryParams = new URLSearchParams();
@@ -3116,13 +3107,13 @@ export class ApiRouter {
   private async performMusicSearch(roomName: string, service: string, type: 'album' | 'song' | 'station' | 'artist', term: string, queryParams?: URLSearchParams): Promise<ApiResponse<MusicSearchSuccessResponse | LibrarySearchSuccessResponse>> {
     const device = this.getDevice(roomName);
     if (!device) {
-      throw { status: 404, message: `Room '${roomName}' not found` };
+      throw createError(404, `Room '${roomName}' not found`);
     }
 
     // Get coordinator for playback
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     if (!coordinator) {
-      throw { status: 404, message: `No coordinator found for room '${roomName}'` };
+      throw createError(404, `No coordinator found for room '${roomName}'`);
     }
 
     // Check if play=false to return results only
@@ -3131,13 +3122,13 @@ export class ApiRouter {
     // Check supported services and types
     const serviceLower = service.toLowerCase();
     if (serviceLower === 'pandora' && type !== 'station' && type !== 'artist') {
-      throw { status: 400, message: `Pandora only supports station search, not ${type}` };
+      throw createError(400, `Pandora only supports station search, not ${type}`);
     }
     if (serviceLower === 'library' && type === 'station') {
-      throw { status: 400, message: 'Library does not support station search, only song, album, and artist' };
+      throw createError(400, 'Library does not support station search, only song, album, and artist');
     }
     if (serviceLower !== 'apple' && serviceLower !== 'spotify' && serviceLower !== 'pandora' && serviceLower !== 'library') {
-      throw { status: 501, message: `Music search for '${service}' not yet implemented. Only 'apple', 'spotify', 'pandora', and 'library' are supported.` };
+      throw createError(501, `Music search for '${service}' not yet implemented. Only 'apple', 'spotify', 'pandora', and 'library' are supported.`);
     }
 
     try {
@@ -3164,7 +3155,7 @@ export class ApiRouter {
         logger.info(`Searching local music library for ${type}: ${term}`);
         
         if (!this.musicLibraryCache) {
-          throw { status: 503, message: 'Music library not yet indexed' };
+          throw createError(503, 'Music library not yet indexed');
         }
         
         // Handle artist search differently - queue multiple tracks
@@ -3172,7 +3163,7 @@ export class ApiRouter {
           const results = await this.musicLibraryCache.search(term, 'artist', 1000); // Get more results for artist
           
           if (results.length === 0) {
-            throw { status: 404, message: `No songs found for artist: ${term}` };
+            throw createError(404, `No songs found for artist: ${term}`);
           }
           
           // If play=false, return search results without playing
@@ -3259,7 +3250,7 @@ export class ApiRouter {
         const results = await this.musicLibraryCache.search(term, searchType, 50);
         
         if (results.length === 0) {
-          throw { status: 404, message: `No ${type}s found matching: ${term}` };
+          throw createError(404, `No ${type}s found matching: ${term}`);
         }
         
         // If play=false, return search results without playing
@@ -3318,7 +3309,7 @@ export class ApiRouter {
       // Get service account from Sonos
       const account = await this.accountService.getServiceAccount(coordinator, service);
       if (!account) {
-        throw { status: 503, message: `${service} service not configured in Sonos. Please add ${service} account in Sonos app.` };
+        throw createError(503, `${service} service not configured in Sonos. Please add ${service} account in Sonos app.`);
       }
 
       // Set account in appropriate service
@@ -3347,7 +3338,7 @@ export class ApiRouter {
       const results = await musicService.search(searchType as 'album' | 'song' | 'station', searchTerm);
       
       if (results.length === 0) {
-        throw { status: 404, message: `No ${type}s found for: ${term}` };
+        throw createError(404, `No ${type}s found for: ${term}`);
       }
 
       // If play=false, return search results without playing
@@ -3374,7 +3365,7 @@ export class ApiRouter {
       // Use first result
       const result = results[0];
       if (!result) {
-        throw { status: 404, message: `No valid ${type} found for: ${term}` };
+        throw createError(404, `No valid ${type} found for: ${term}`);
       }
       
       // Special handling for Spotify artist search
@@ -3382,7 +3373,7 @@ export class ApiRouter {
         const result = await this.spotifyService.playArtistTopTracks(coordinator, term);
         
         if (!result.success) {
-          throw { status: 404, message: result.message };
+          throw createError(404, result.message);
         }
         
         // Update default room
@@ -3514,10 +3505,7 @@ export class ApiRouter {
         throw error; // Re-throw API errors
       }
       
-      throw { 
-        status: 500, 
-        message: `Music search failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      };
+      throw createError(500, `Music search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
@@ -3574,7 +3562,7 @@ export class ApiRouter {
   }
 
   private async debugSpotifyParse({ input }: RouteParams): Promise<ApiResponse> {
-    if (!input) throw { status: 400, message: 'Input parameter is required' };
+    if (!input) throw createError(400, 'Input parameter is required');
     
     // Parse the Spotify input
     const parsed = SpotifyService.parseSpotifyInput(input);
@@ -3664,8 +3652,8 @@ export class ApiRouter {
   }
 
   private async debugBrowseSpotify({ room, sid }: RouteParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
-    if (!sid) throw { status: 400, message: 'SID parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
+    if (!sid) throw createError(400, 'SID parameter is required');
     
     const device = this.getDevice(room);
     
@@ -3697,7 +3685,7 @@ export class ApiRouter {
   }
 
   private async debugSpotifyAccount({ room }: RouteParams): Promise<ApiResponse> {
-    if (!room) throw { status: 400, message: 'Room parameter is required' };
+    if (!room) throw createError(400, 'Room parameter is required');
     
     const device = this.getDevice(room);
     
@@ -3821,14 +3809,14 @@ export class ApiRouter {
   private async spotifySubmitCallbackUrl(_params: RouteParams, _queryParams?: URLSearchParams, body?: string): Promise<ApiResponse> {
     try {
       if (!body) {
-        throw { status: 400, message: 'Request body is required' };
+        throw createError(400, 'Request body is required');
       }
       
       const data = JSON.parse(body);
       const callbackUrl = data.callbackUrl;
       
       if (!callbackUrl) {
-        throw { status: 400, message: 'callbackUrl is required in request body' };
+        throw createError(400, 'callbackUrl is required in request body');
       }
       
       await this.spotifyAuthService.processCallbackUrl(callbackUrl);

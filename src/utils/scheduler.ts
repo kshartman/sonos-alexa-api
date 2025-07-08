@@ -17,6 +17,16 @@ interface ScheduledTask {
   runCount: number;
 }
 
+export interface TaskDetails {
+  type: 'interval' | 'timeout';
+  interval: string;
+  createdAt: string;
+  lastRun?: string;
+  nextRun?: string;
+  runCount: number;
+  status: 'pending' | 'running' | 'completed';
+}
+
 class Scheduler {
   private tasks = new Map<string, ScheduledTask>();
   private enabled: boolean;
@@ -187,24 +197,8 @@ class Scheduler {
   /**
    * Get detailed information about all tasks
    */
-  getDetailedTasks(): Record<string, {
-    type: 'interval' | 'timeout';
-    interval: string;
-    createdAt: string;
-    lastRun?: string;
-    nextRun?: string;
-    runCount: number;
-    status: 'pending' | 'running' | 'completed';
-  }> {
-    const tasks: Record<string, {
-      type: 'interval' | 'timeout';
-      interval: string;
-      createdAt: string;
-      lastRun?: string;
-      nextRun?: string;
-      runCount: number;
-      status: 'pending' | 'running' | 'completed';
-    }> = {};
+  getDetailedTasks(): Record<string, TaskDetails> {
+    const tasks: Record<string, TaskDetails> = {};
     
     for (const [id, task] of this.tasks) {
       let status: 'pending' | 'running' | 'completed' = 'pending';

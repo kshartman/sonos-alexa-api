@@ -19,6 +19,7 @@ import { debugManager, type DebugCategories, type LogLevel } from './utils/debug
 import { ServicesCache } from './utils/services-cache.js';
 import { EventManager } from './utils/event-manager.js';
 import { PandoraAPIService } from './services/pandora-api-service.js';
+import { scheduler } from './utils/scheduler.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams, body?: string) => Promise<ApiResponse>;
 
@@ -311,6 +312,7 @@ export class ApiRouter {
     this.routes.set('GET /debug/spotify/browse/{room}/{sid}', this.debugBrowseSpotify.bind(this));
     this.routes.set('GET /debug/spotify/account/{room}', this.debugSpotifyAccount.bind(this));
     this.routes.set('GET /debug/device-health', this.getDeviceHealth.bind(this));
+    this.routes.set('GET /debug/scheduler', this.getSchedulerStatus.bind(this));
     // Settings route
     this.routes.set('GET /settings', this.getSettings.bind(this));
     
@@ -1729,6 +1731,20 @@ export class ApiRouter {
           staleDeviceIds: staleDevices,
           unhealthyDeviceIds: unhealthyDevices
         }
+      }
+    };
+  }
+  
+  private async getSchedulerStatus(): Promise<ApiResponse> {
+    const status = scheduler.getStatus();
+    const tasks = scheduler.getDetailedTasks();
+    
+    return {
+      status: 200,
+      body: {
+        enabled: status.enabled,
+        taskCount: status.taskCount,
+        tasks: tasks
       }
     };
   }

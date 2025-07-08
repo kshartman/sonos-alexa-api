@@ -365,6 +365,7 @@ GET /debug/startup              # Get startup info (version, config, presets)
 GET /debug/startup/config       # Get startup configuration with version
 GET /debug/subscriptions        # Get UPnP subscription status
 GET /debug/device-health        # Get device event health monitoring
+GET /debug/scheduler            # Get scheduler task status and timing
 GET /loglevel/{level}           # Set log level (error, warn, info, debug, trace)
 ```
 

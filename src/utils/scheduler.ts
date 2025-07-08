@@ -3,11 +3,18 @@
  * Prevents persistent timers from keeping Node.js processes alive during testing
  */
 
+import logger from './logger.js';
+
 interface ScheduledTask {
   id: string;
   timer: NodeJS.Timeout;
   interval: number;
   callback: () => void | Promise<void>;
+  type: 'interval' | 'timeout';
+  createdAt: Date;
+  lastRun?: Date;
+  nextRun?: Date;
+  runCount: number;
 }
 
 class Scheduler {
@@ -37,34 +44,45 @@ class Scheduler {
     options: { unref?: boolean } = {}
   ): void {
     if (!this.enabled) {
-      console.log(`[SCHEDULER] Skipping interval task '${id}' - scheduler disabled`);
+      logger.debug(`[SCHEDULER] Skipping interval task '${id}' - scheduler disabled`);
       return;
     }
 
     // Clear existing task if it exists
     this.clearTask(id);
 
+    const task: ScheduledTask = {
+      id,
+      timer: null as any, // Will be set below
+      interval: intervalMs,
+      callback,
+      type: 'interval',
+      createdAt: new Date(),
+      nextRun: new Date(Date.now() + intervalMs),
+      runCount: 0
+    };
+
     const timer = setInterval(async () => {
       try {
+        task.lastRun = new Date();
+        task.runCount++;
+        task.nextRun = new Date(Date.now() + intervalMs);
         await callback();
       } catch (error) {
-        console.error(`[SCHEDULER] Error in task '${id}':`, error);
+        logger.error(`[SCHEDULER] Error in task '${id}':`, error);
       }
     }, intervalMs);
+
+    task.timer = timer;
 
     // Unref to prevent blocking process exit
     if (options.unref !== false) {
       timer.unref();
     }
 
-    this.tasks.set(id, {
-      id,
-      timer,
-      interval: intervalMs,
-      callback
-    });
+    this.tasks.set(id, task);
 
-    console.log(`[SCHEDULER] Scheduled interval task '${id}' every ${intervalMs}ms`);
+    logger.debug(`[SCHEDULER] Scheduled interval task '${id}' every ${intervalMs}ms`);
   }
 
   /**
@@ -81,37 +99,48 @@ class Scheduler {
     options: { unref?: boolean } = {}
   ): void {
     if (!this.enabled) {
-      console.log(`[SCHEDULER] Skipping timeout task '${id}' - scheduler disabled`);
+      logger.debug(`[SCHEDULER] Skipping timeout task '${id}' - scheduler disabled`);
       return;
     }
 
     // Clear existing task if it exists
     this.clearTask(id);
 
+    const task: ScheduledTask = {
+      id,
+      timer: null as any, // Will be set below
+      interval: delayMs,
+      callback,
+      type: 'timeout',
+      createdAt: new Date(),
+      nextRun: new Date(Date.now() + delayMs),
+      runCount: 0
+    };
+
     const timer = setTimeout(async () => {
       try {
+        task.lastRun = new Date();
+        task.runCount++;
+        task.nextRun = undefined; // No next run for timeout
         await callback();
         // Remove from tasks map since it's a one-time task
         this.tasks.delete(id);
       } catch (error) {
-        console.error(`[SCHEDULER] Error in task '${id}':`, error);
+        logger.error(`[SCHEDULER] Error in task '${id}':`, error);
         this.tasks.delete(id);
       }
     }, delayMs);
+
+    task.timer = timer;
 
     // Unref to prevent blocking process exit
     if (options.unref !== false) {
       timer.unref();
     }
 
-    this.tasks.set(id, {
-      id,
-      timer,
-      interval: delayMs,
-      callback
-    });
+    this.tasks.set(id, task);
 
-    console.log(`[SCHEDULER] Scheduled timeout task '${id}' in ${delayMs}ms`);
+    logger.debug(`[SCHEDULER] Scheduled timeout task '${id}' in ${delayMs}ms`);
   }
 
   /**
@@ -122,7 +151,7 @@ class Scheduler {
     if (task) {
       clearTimeout(task.timer); // Works for both setTimeout and setInterval
       this.tasks.delete(id);
-      console.log(`[SCHEDULER] Cleared task '${id}'`);
+      logger.trace(`[SCHEDULER] Cleared task '${id}'`);
     }
   }
 
@@ -132,7 +161,7 @@ class Scheduler {
   clearAll(): void {
     for (const [id, task] of this.tasks) {
       clearTimeout(task.timer);
-      console.log(`[SCHEDULER] Cleared task '${id}'`);
+      logger.trace(`[SCHEDULER] Cleared task '${id}'`);
     }
     this.tasks.clear();
   }
@@ -153,6 +182,53 @@ class Scheduler {
    */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Get detailed information about all tasks
+   */
+  getDetailedTasks(): Record<string, {
+    type: 'interval' | 'timeout';
+    interval: string;
+    createdAt: string;
+    lastRun?: string;
+    nextRun?: string;
+    runCount: number;
+    status: 'pending' | 'running' | 'completed';
+  }> {
+    const tasks: Record<string, any> = {};
+    
+    for (const [id, task] of this.tasks) {
+      let status: 'pending' | 'running' | 'completed' = 'pending';
+      
+      if (task.type === 'timeout' && task.lastRun) {
+        status = 'completed';
+      } else if (task.lastRun) {
+        status = 'running';
+      }
+      
+      tasks[id] = {
+        type: task.type,
+        interval: this.formatDuration(task.interval),
+        createdAt: task.createdAt.toLocaleString(),
+        lastRun: task.lastRun ? task.lastRun.toLocaleString() : undefined,
+        nextRun: task.nextRun ? task.nextRun.toLocaleString() : undefined,
+        runCount: task.runCount,
+        status
+      };
+    }
+    
+    return tasks;
+  }
+
+  /**
+   * Format duration in human-readable format
+   */
+  private formatDuration(ms: number): string {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
+    return `${(ms / 3600000).toFixed(1)}h`;
   }
 }
 

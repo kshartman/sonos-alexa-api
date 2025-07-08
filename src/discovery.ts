@@ -177,7 +177,7 @@ export class SonosDiscovery extends EventEmitter {
         
         // Extract IP from location URL
         const locationUrl = new URL(location);
-        logger.info(`Created device ${device.roomName} from SSDP discovery - IP: ${locationUrl.hostname}, UUID: ${device.id}`);
+        logger.debug(`Created device ${device.roomName} from SSDP discovery - IP: ${locationUrl.hostname}, UUID: ${device.id}`);
         debugManager.info('discovery', `Discovered Sonos device: ${device.roomName} (${device.modelName})`);
       } else {
         // Device already exists (probably from topology), update its model info
@@ -200,7 +200,7 @@ export class SonosDiscovery extends EventEmitter {
           // Replace the device in our map
           this.devices.set(deviceId, updatedDevice);
           device = updatedDevice;
-          debugManager.info('discovery', `Updated device info for ${device.roomName}: model=${deviceInfo.device.modelName}, preserved ${eventNames.length} event types`);
+          debugManager.debug('discovery', `Updated device info for ${device.roomName}: model=${deviceInfo.device.modelName}, preserved ${eventNames.length} event types`);
         }
       }
       
@@ -211,7 +211,7 @@ export class SonosDiscovery extends EventEmitter {
       if (!this.topologyDevices.has(device.id)) {
         const modelLower = device.modelName.toLowerCase();
         if (modelLower.includes('roam') || modelLower.includes('move')) {
-          logger.info(`${device.roomName} (${device.modelName}) cannot be used for topology - portable devices lack required services`);
+          logger.debug(`${device.roomName} (${device.modelName}) cannot be used for topology - portable devices lack required services`);
         } else {
           // Get initial topology state from the first device
           if (this.topologyDevices.size === 0) {
@@ -389,7 +389,7 @@ export class SonosDiscovery extends EventEmitter {
         const eventManager = EventManager.getInstance();
         eventManager.handleSubscriptionRenewal(deviceId);
         
-        logger.info(`Discovery: Successfully resubscribed ${device.roomName}`);
+        logger.debug(`Discovery: Successfully resubscribed ${device.roomName}`);
       } catch (error) {
         logger.error(`Discovery: Failed to resubscribe ${device.roomName}:`, error);
         // Device might be offline
@@ -447,7 +447,7 @@ export class SonosDiscovery extends EventEmitter {
       
       // Subscribe with the device's actual ID so we know which device sent the event
       await this.subscriber!.subscribe(baseUrl, '/ZoneGroupTopology/Event', device.id);
-      logger.info(`Subscribed to topology events via ${device.roomName} (${device.modelName})`);
+      logger.debug(`Subscribed to topology events via ${device.roomName} (${device.modelName})`);
     } catch (error) {
       logger.error(`Failed to subscribe to topology for ${device.roomName}:`, error);
     }
@@ -462,7 +462,7 @@ export class SonosDiscovery extends EventEmitter {
       const result = await device.soap('ZoneGroupTopology', 'GetZoneGroupState');
       
       if (result && result.ZoneGroupState) {
-        logger.info(`Received initial topology from ${device.roomName}, processing...`);
+        logger.debug(`Received initial topology from ${device.roomName}, processing...`);
         
         // Parse the topology to create devices for all members
         const topologyXml = this.xmlParser.parse(result.ZoneGroupState);
@@ -484,7 +484,7 @@ export class SonosDiscovery extends EventEmitter {
               if (!this.devices.has(uuid) && location && zoneName) {
                 // Extract IP from location URL
                 const locationUrl = new URL(location);
-                logger.info(`Creating stub device for ${zoneName} from topology - IP: ${locationUrl.hostname}, UUID: ${uuid}`);
+                logger.debug(`Creating stub device for ${zoneName} from topology - IP: ${locationUrl.hostname}, UUID: ${uuid}`);
                 
                 // Create a minimal device info structure
                 const deviceInfo: DeviceInfo = {
@@ -547,7 +547,7 @@ export class SonosDiscovery extends EventEmitter {
       
       // Subscribe to all UPnP services for this device
       await device.subscribe();
-      logger.info(`${device.roomName}: Initialized stub device with UPnP event subscriptions`);
+      logger.debug(`${device.roomName}: Initialized stub device with UPnP event subscriptions`);
     } catch (error) {
       logger.error(`${device.roomName}: Failed to initialize stub device:`, error);
       // Don't throw - we want the device to exist even if events don't work

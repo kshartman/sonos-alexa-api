@@ -105,6 +105,11 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - Eliminates synchronization issues between debugManager and logger
   - Simplifies configuration and runtime behavior
 - **Environment Variable Consistency**: Process environment updated when log level changes dynamically
+- **Reduced Log Verbosity**: Moved routine operations from info to debug level
+  - Device discovery and service subscription logs
+  - Scheduler task creation and execution logs
+  - UPnP event subscription success messages
+  - Significantly cleaner logs during normal operation
 
 ### Infrastructure Improvements
 - **Centralized Scheduler System**:
@@ -121,6 +126,10 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
     - UPnP Subscriber (subscription renewals)
     - PresetLoader (file watching)
     - DefaultRoomManager (debounced saves)
+  - **New Debug Endpoint**: `/debug/scheduler` provides detailed task status
+    - Shows all scheduled tasks with human-readable timing
+    - Displays last run time, next run time, and execution count
+    - Includes task type (interval or timeout) and current status
 - **EventManager Enhancements**:
   - Group-aware event handling for stereo pairs and grouped speakers
   - Device health monitoring with configurable timeouts

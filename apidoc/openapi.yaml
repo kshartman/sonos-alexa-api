@@ -1406,6 +1406,57 @@ paths:
                                 type: string
                                 format: date-time
 
+  /debug/scheduler:
+    get:
+      tags:
+        - Debug
+      summary: Get scheduler task status
+      description: Returns information about scheduled tasks including timing and execution history
+      responses:
+        '200':
+          description: Scheduler task information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    description: Whether the scheduler is enabled
+                  taskCount:
+                    type: integer
+                    description: Number of scheduled tasks
+                  tasks:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          enum: [interval, timeout]
+                          description: Type of scheduled task
+                        interval:
+                          type: string
+                          description: Human-readable interval duration
+                        createdAt:
+                          type: string
+                          description: Human-readable creation timestamp
+                        lastRun:
+                          type: string
+                          nullable: true
+                          description: Human-readable last execution timestamp
+                        nextRun:
+                          type: string
+                          nullable: true
+                          description: Human-readable next execution timestamp
+                        runCount:
+                          type: integer
+                          description: Number of times the task has executed
+                        status:
+                          type: string
+                          enum: [pending, running, completed]
+                          description: Current task status
+
   /{room}/clearqueue:
     get:
       tags:

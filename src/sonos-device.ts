@@ -125,18 +125,18 @@ export class SonosDevice extends EventEmitter {
       let targetBaseUrl = this.baseUrl;
       
       if (coordinator && coordinator.id !== this.id) {
-        logger.info(`${this.roomName}: This device is part of a stereo pair/group. Using coordinator ${coordinator.roomName} for subscriptions.`);
+        logger.debug(`${this.roomName}: This device is part of a stereo pair/group. Using coordinator ${coordinator.roomName} for subscriptions.`);
         // targetDevice = coordinator;
         targetBaseUrl = coordinator.baseUrl;
       }
       
       // Discover available services from the target device
       const services = await targetDevice.discoverServices();
-      logger.info(`${targetDevice.roomName}: Found ${services.length} services from device description`);
+      logger.debug(`${targetDevice.roomName}: Found ${services.length} services from device description`);
       
       // Log all discovered services
       services.forEach(service => {
-        logger.info(`${targetDevice.roomName}: Service: ${service.serviceType}, EventURL: ${service.eventSubURL}`);
+        logger.debug(`${targetDevice.roomName}: Service: ${service.serviceType}, EventURL: ${service.eventSubURL}`);
       });
       
       // Subscribe to services that support events
@@ -160,7 +160,7 @@ export class SonosDevice extends EventEmitter {
               : `/${service.eventSubURL}`;
             // Subscribe using this device's ID but the coordinator's URL
             await discovery.subscribeToDevice(targetBaseUrl, eventUrl, this.id);
-            logger.info(`${this.roomName}: Successfully subscribed to ${serviceName} at ${eventUrl} via ${targetDevice.roomName}`);
+            logger.debug(`${this.roomName}: Successfully subscribed to ${serviceName} at ${eventUrl} via ${targetDevice.roomName}`);
             subscribedCount++;
           } catch (err) {
             logger.warn(`${this.roomName}: Failed to subscribe to ${serviceName}:`, err);
@@ -175,14 +175,14 @@ export class SonosDevice extends EventEmitter {
       }
       
       if (subscribedCount === 0 && coordinator && coordinator.id !== this.id) {
-        logger.info(`${this.roomName}: This is a stereo pair member. Events will be handled by coordinator ${coordinator.roomName}.`);
+        logger.debug(`${this.roomName}: This is a stereo pair member. Events will be handled by coordinator ${coordinator.roomName}.`);
         // For stereo pair members, we don't need to throw an error - they get events from their coordinator
         return;
       } else if (subscribedCount === 0) {
         throw new Error(`${this.roomName}: Failed to subscribe to any UPnP events`);
       }
       
-      logger.info(`${this.roomName}: Subscribed to ${subscribedCount} UPnP event services`);
+      logger.debug(`${this.roomName}: Subscribed to ${subscribedCount} UPnP event services`);
       
       // Get initial state
       await this.updateState();
@@ -814,7 +814,7 @@ export class SonosDevice extends EventEmitter {
     
     const isCurrentlyCoordinator = discovery ? discovery.isCoordinator(this.id) : this.isCoordinator();
     
-    logger.info(`${this.roomName}: hasTopologyData=${hasTopologyData}, isCoordinator=${isCurrentlyCoordinator}`);
+    logger.debug(`${this.roomName}: hasTopologyData=${hasTopologyData}, isCoordinator=${isCurrentlyCoordinator}`);
     
     if (hasTopologyData && !isCurrentlyCoordinator) {
       // We have topology data and know we're not coordinator - break out
@@ -1047,13 +1047,13 @@ export class SonosDevice extends EventEmitter {
         // We're not the coordinator, find who is and delegate
         const coordinator = discovery.getCoordinator(this.id);
         if (coordinator && coordinator.id !== this.id) {
-          logger.info(`${this.roomName}: Delegating group volume to coordinator ${coordinator.roomName}`);
+          logger.debug(`${this.roomName}: Delegating group volume to coordinator ${coordinator.roomName}`);
           return coordinator.setGroupVolume(level);
         }
       }
       
       // We are the coordinator or can't find one, use regular volume
-      logger.info(`${this.roomName}: Using regular volume as fallback`);
+      logger.debug(`${this.roomName}: Using regular volume as fallback`);
       await this.setVolume(clampedLevel);
     }
   }

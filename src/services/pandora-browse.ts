@@ -1,12 +1,7 @@
 import logger from '../utils/logger.js';
 import { XMLParser } from 'fast-xml-parser';
 import type { SonosDevice } from '../sonos-device.js';
-
-export interface PandoraStation {
-  id: string;
-  title: string;
-  uri: string;
-}
+import type { PandoraStation } from '../types/sonos.js';
 
 export class PandoraBrowser {
   private static xmlParser = new XMLParser({
@@ -133,10 +128,31 @@ export class PandoraBrowser {
         const title = item['dc:title'];
         
         if (id && title) {
+          // Extract station ID from the URI format: x-sonosapi-radio:ST%3a12345?sid=236&flags=...&sn=9
+          let stationId = id;
+          const match = id.match(/ST%3a(\d+)/);
+          if (match) {
+            stationId = match[1];
+          }
+          
+          // Extract session number if present
+          let sessionNumber: number | undefined;
+          const snMatch = id.match(/sn=(\d+)/);
+          if (snMatch) {
+            sessionNumber = parseInt(snMatch[1], 10);
+          }
+          
           stations.push({
-            id,
-            title,
-            uri: id // The ID is the URI for Pandora stations
+            stationId,
+            stationName: title,
+            isQuickMix: title === 'QuickMix',
+            isThumbprint: title === 'Thumbprint Radio',
+            isUserCreated: title !== 'QuickMix' && title !== 'Thumbprint Radio',
+            isInSonosFavorites: false, // These are from browse, not favorites
+            favoriteProperties: {
+              uri: id,
+              sessionNumber: sessionNumber || 0
+            }
           });
         }
       }
@@ -183,18 +199,18 @@ export class PandoraBrowser {
     const searchLower = searchName.toLowerCase();
     
     // Try exact match first
-    let match = stations.find(s => s.title.toLowerCase() === searchLower);
+    let match = stations.find(s => s.stationName.toLowerCase() === searchLower);
     if (match) return match;
     
     // Try contains match
-    match = stations.find(s => s.title.toLowerCase().includes(searchLower));
+    match = stations.find(s => s.stationName.toLowerCase().includes(searchLower));
     if (match) return match;
     
     // Try fuzzy match
     if (searchLower.split(' ').length > 0) {
       match = stations.find(s => 
-        searchLower.includes(s.title.toLowerCase()) || 
-        s.title.toLowerCase().includes(searchLower.split(' ')[0] || '')
+        searchLower.includes(s.stationName.toLowerCase()) || 
+        s.stationName.toLowerCase().includes(searchLower.split(' ')[0] || '')
       );
     }
     

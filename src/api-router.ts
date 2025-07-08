@@ -2330,8 +2330,8 @@ export class ApiRouter {
           
           const station = await PandoraBrowser.findStation(coordinator, decodedName);
           if (station) {
-            stationUri = station.uri;
-            stationTitle = station.title;
+            stationUri = station.favoriteProperties?.uri || '';
+            stationTitle = station.stationName;
           } else {
             // Station not found anywhere - return proper error
             logger.warn(`Station '${decodedName}' not found in API, favorites, or cache`);
@@ -2536,7 +2536,7 @@ export class ApiRouter {
           
           if (detailed) {
             // Merge API stations with favorites, marking which are favorites
-            const mergedStations = stationData.stations.map(s => ({
+            const mergedStations: PandoraStation[] = stationData.stations.map(s => ({
               ...s,
               isInSonosFavorites: favoriteStationNames.has(s.stationName)
             }));
@@ -2547,11 +2547,14 @@ export class ApiRouter {
                 mergedStations.push({
                   stationName: fav.title,
                   stationId: fav.stationId || '',
-                  uri: fav.uri,
                   isInSonosFavorites: true,
                   isQuickMix: fav.title === 'QuickMix',
                   isThumbprint: fav.title.includes('Thumbprint'),
-                  isUserCreated: true
+                  isUserCreated: true,
+                  favoriteProperties: {
+                    uri: fav.uri,
+                    sessionNumber: parseInt(fav.sessionNumber, 10)
+                  }
                 });
               }
             }
@@ -2592,12 +2595,14 @@ export class ApiRouter {
             stations: favoriteStations.map(s => ({
               stationId: s.stationId,
               stationName: s.title,
-              sessionNumber: s.sessionNumber ? parseInt(s.sessionNumber, 10) : undefined,
-              uri: s.uri,
               isInSonosFavorites: true,
               isQuickMix: s.title === 'QuickMix',
               isThumbprint: s.title.includes('Thumbprint'),
-              isUserCreated: true
+              isUserCreated: true,
+              favoriteProperties: {
+                uri: s.uri,
+                sessionNumber: parseInt(s.sessionNumber, 10)
+              }
             } satisfies PandoraStation))
           }
         };

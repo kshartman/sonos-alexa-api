@@ -1,7 +1,7 @@
 import logger from '../utils/logger.js';
 import type { SonosDevice } from '../sonos-device.js';
-import type { Config } from '../types/sonos.js';
-import { PandoraAPI, type PandoraStation } from './pandora-api.js';
+import type { Config, PandoraStation } from '../types/sonos.js';
+import { PandoraAPI } from './pandora-api.js';
 
 interface FuzzySearchResult {
   item: PandoraStation;
@@ -98,7 +98,7 @@ export class PandoraService {
         score = 80;
       }
       // Word boundary match
-      else if (lowerName.split(/\s+/).some(word => word.startsWith(lowerQuery))) {
+      else if (lowerName.split(/\s+/).some((word: string) => word.startsWith(lowerQuery))) {
         score = 70;
       }
       
@@ -133,7 +133,9 @@ export class PandoraService {
             allStations.push({
               stationId: artist.musicToken,
               stationName: artist.artistName,
-              type: 'artist' as const
+              apiProperties: {
+                type: 'artist' as const
+              }
             });
           }
         }
@@ -146,7 +148,9 @@ export class PandoraService {
             allStations.push({
               stationId: song.musicToken,
               stationName: song.songName,
-              type: 'song' as const
+              apiProperties: {
+                type: 'song' as const
+              }
             });
           }
         }
@@ -160,7 +164,10 @@ export class PandoraService {
           allStations.push({
             stationId: genreStation.stationToken,
             stationName: genreStation.stationName,
-            stationToken: genreStation.stationToken
+            apiProperties: {
+              stationToken: genreStation.stationToken,
+              type: 'genre' as const
+            }
           });
         }
       }
@@ -184,14 +191,14 @@ export class PandoraService {
       let metadata: string;
       
       // If it's a new station (artist/song), create it first
-      if (match.item.type && match.item.type !== 'genre') {
-        logger.debug(`Creating new station from ${match.item.type}: ${match.item.stationName}`);
-        const newStation = await api.createStation(match.item.stationId, match.item.type as 'artist' | 'song');
+      if (match.item.apiProperties?.type && match.item.apiProperties.type !== 'genre') {
+        logger.debug(`Creating new station from ${match.item.apiProperties.type}: ${match.item.stationName}`);
+        const newStation = await api.createStation(match.item.stationId, match.item.apiProperties.type as 'artist' | 'song');
         uri = this.generateStationURI(newStation.stationId, sessionNumber);
         metadata = this.generateStationMetadata(newStation.stationId, newStation.stationName);
       } else {
         // Use existing station
-        const stationId = match.item.stationToken || match.item.stationId;
+        const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
         uri = this.generateStationURI(stationId, sessionNumber);
         metadata = this.generateStationMetadata(stationId, match.item.stationName);
       }
@@ -293,7 +300,9 @@ export class PandoraService {
             allStations.push({
               stationId: artist.musicToken,
               stationName: artist.artistName,
-              type: 'artist' as const
+              apiProperties: {
+                type: 'artist' as const
+              }
             });
           }
         }
@@ -306,7 +315,9 @@ export class PandoraService {
             allStations.push({
               stationId: song.musicToken,
               stationName: song.songName,
-              type: 'song' as const
+              apiProperties: {
+                type: 'song' as const
+              }
             });
           }
         }
@@ -320,7 +331,10 @@ export class PandoraService {
           allStations.push({
             stationId: genreStation.stationToken,
             stationName: genreStation.stationName,
-            stationToken: genreStation.stationToken
+            apiProperties: {
+              stationToken: genreStation.stationToken,
+              type: 'genre' as const
+            }
           });
         }
       }
@@ -339,14 +353,14 @@ export class PandoraService {
       let title: string;
       
       // If it's a new station (artist/song), create it first
-      if (match.item.type && match.item.type !== 'genre') {
-        logger.debug(`Creating new station from ${match.item.type}: ${match.item.stationName}`);
-        const newStation = await api.createStation(match.item.stationId, match.item.type as 'artist' | 'song');
+      if (match.item.apiProperties?.type && match.item.apiProperties.type !== 'genre') {
+        logger.debug(`Creating new station from ${match.item.apiProperties.type}: ${match.item.stationName}`);
+        const newStation = await api.createStation(match.item.stationId, match.item.apiProperties.type as 'artist' | 'song');
         uri = this.generateStationURI(newStation.stationId);
         title = newStation.stationName;
       } else {
         // Use existing station
-        const stationId = match.item.stationToken || match.item.stationId;
+        const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
         uri = this.generateStationURI(stationId);
         title = match.item.stationName;
       }

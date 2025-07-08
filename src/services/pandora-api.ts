@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import logger from '../utils/logger.js';
+import type { PandoraStation } from '../types/sonos.js';
 
 interface PartnerInfo {
   username: string;
@@ -37,17 +38,6 @@ interface PartnerLoginResult {
 interface UserLoginResult {
   userAuthToken: string;
   userId: string;
-}
-
-export interface PandoraStation {
-  stationId: string;
-  stationName: string;
-  stationToken?: string;
-  artUrl?: string;
-  type?: 'artist' | 'song' | 'genre';
-  isUserCreated?: boolean;
-  isQuickMix?: boolean;
-  isThumbprint?: boolean;
 }
 
 export interface PandoraSearchResult {
@@ -435,13 +425,20 @@ export class PandoraAPI {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       response.stations = response.stations.map((station: any) => {
         const enhanced: PandoraStation = {
-          ...station,
+          stationId: station.stationId,
+          stationName: station.stationName,
           isQuickMix: station.stationName === 'QuickMix' || station.isQuickMix === true,
           isThumbprint: station.stationName === 'Thumbprint Radio' || station.isThumbprint === true,
           // Stations without a specific type are typically user-created
           isUserCreated: !station.isQuickMix && !station.isThumbprint && 
                         station.stationName !== 'QuickMix' && 
-                        station.stationName !== 'Thumbprint Radio'
+                        station.stationName !== 'Thumbprint Radio',
+          // Store API-specific properties
+          apiProperties: {
+            stationToken: station.stationToken,
+            artUrl: station.artUrl,
+            type: station.type
+          }
         };
         return enhanced;
       });
@@ -466,7 +463,22 @@ export class PandoraAPI {
   }
 
   async createStation(musicToken: string, musicType: 'artist' | 'song'): Promise<PandoraStation> {
-    return await this.request('station.createStation', { musicToken, musicType });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const station: any = await this.request('station.createStation', { musicToken, musicType });
+    
+    // Transform to unified structure
+    return {
+      stationId: station.stationId,
+      stationName: station.stationName,
+      isQuickMix: station.stationName === 'QuickMix' || station.isQuickMix === true,
+      isThumbprint: station.stationName === 'Thumbprint Radio' || station.isThumbprint === true,
+      isUserCreated: true, // Created stations are user-created
+      apiProperties: {
+        stationToken: station.stationToken,
+        artUrl: station.artUrl,
+        type: musicType === 'song' ? 'song' : 'artist'
+      }
+    };
   }
 
   async addFeedback(stationToken: string, trackToken: string, isPositive: boolean): Promise<void> {

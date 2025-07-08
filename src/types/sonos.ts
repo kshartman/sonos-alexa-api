@@ -182,16 +182,6 @@ export interface LibrarySearchSuccessResponse {
   results: LibrarySearchResult[];
 }
 
-export interface StateChangeEvent {
-  type: 'device-state-change';
-  data: {
-    room: string;
-    deviceId: string;
-    state: SonosState;
-    previousState?: Partial<SonosState>;
-  };
-}
-
 export interface RouteParams {
   [key: string]: string;
 }
@@ -233,12 +223,23 @@ export interface QueueItem {
 export interface PandoraStation {
   stationId: string;
   stationName: string;
-  sessionNumber?: number;
-  uri: string;
-  isInSonosFavorites?: boolean;
   isQuickMix?: boolean;
   isThumbprint?: boolean;
   isUserCreated?: boolean;
+  isInSonosFavorites?: boolean;
+  
+  // Properties from Pandora API responses
+  apiProperties?: {
+    stationToken?: string;
+    artUrl?: string;
+    type?: "artist" | "song" | "genre";
+  };
+  
+  // Properties from Sonos favorites
+  favoriteProperties?: {
+    uri: string;
+    sessionNumber: number;
+  };
 }
 
 // Helper function for consistent error objects

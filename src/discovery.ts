@@ -702,6 +702,7 @@ export class SonosDiscovery extends EventEmitter {
             
             // Emit mute change if mute changed
             if (previousState.mute !== undefined && previousState.mute !== device.state.mute) {
+              debugManager.debug('upnp', `${deviceName}: Emitting mute-change event to EventManager (${previousState.mute} -> ${device.state.mute})`);
               eventManager.emit('mute-change', {
                 deviceId: device.id,
                 roomName: device.roomName,
@@ -709,6 +710,8 @@ export class SonosDiscovery extends EventEmitter {
                 currentMute: device.state.mute,
                 timestamp: Date.now()
               });
+            } else {
+              debugManager.debug('upnp', `${deviceName}: NOT emitting mute-change event - previousState.mute=${previousState.mute}, device.state.mute=${device.state.mute}`);
             }
           }
         }

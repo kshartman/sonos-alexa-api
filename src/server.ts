@@ -226,6 +226,46 @@ eventManagerInstance.on('volume-change', (volumeEvent: VolumeChangeEvent) => {
   });
 });
 
+// Forward mute change events
+interface MuteChangeEvent {
+  deviceId: string;
+  roomName: string;
+  previousMute: boolean;
+  currentMute: boolean;
+  timestamp: number;
+}
+
+eventManagerInstance.on('mute-change', (muteEvent: MuteChangeEvent) => {
+  // Also send as device-state-change for EventBridge compatibility
+  const event = {
+    type: 'device-state-change',
+    data: {
+      room: muteEvent.roomName,
+      deviceId: muteEvent.deviceId,
+      state: {
+        playbackState: 'UNKNOWN', // We don't know the playback state
+        volume: undefined,
+        mute: muteEvent.currentMute
+      },
+      previousState: {
+        playbackState: 'UNKNOWN',
+        mute: muteEvent.previousMute
+      },
+      timestamp: new Date().toISOString()
+    }
+  };
+  
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  webhookClients = webhookClients.filter(client => {
+    try {
+      client.write(sseData);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  });
+});
+
 // Add SSE endpoint and TTS file serving
 const originalHandler = router.handleRequest.bind(router);
 router.handleRequest = async (req, res) => {

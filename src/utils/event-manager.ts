@@ -209,30 +209,51 @@ export class EventManager extends EventEmitter {
     });
   }
   
-  // Wait for volume to reach target
+  // Wait for volume to reach target (legacy version - returns boolean)
   async waitForVolume(deviceId: string, targetVolume: number, timeout = 5000): Promise<boolean> {
+    const result = await this.waitForVolumeEx(deviceId, targetVolume, timeout);
+    return result !== null;
+  }
+  
+  // Enhanced wait for volume that returns which device reached the target
+  async waitForVolumeEx(deviceId: string, targetVolume: number, timeout = 5000): Promise<string | null> {
     // Get all group members for this device
     const groupMembers = this.getGroupMembers(deviceId);
-    logger.trace(`EventManager: waitForVolume called for device ${deviceId}, target: ${targetVolume}, group members: ${groupMembers.join(', ')}`);
+    logger.trace(`EventManager: waitForVolumeEx called for device ${deviceId}, target: ${targetVolume}, group members: ${groupMembers.join(', ')}`);
+    
+    // Track current volume for each device in the group
+    const volumeState = new Map<string, number>();
     
     return new Promise((resolve) => {
+      let resolved = false;
+      
       const timeoutId = setTimeout(() => {
-        logger.trace(`EventManager: waitForVolume - timeout reached for device ${deviceId}`);
-        this.off('volume-change', volumeHandler);
-        resolve(false);
+        if (!resolved) {
+          resolved = true;
+          logger.trace(`EventManager: waitForVolumeEx - timeout reached for device ${deviceId}`);
+          this.off('volume-change', volumeHandler);
+          resolve(null);
+        }
       }, timeout);
       
       const volumeHandler = (event: VolumeChangeEvent) => {
-        logger.trace(`EventManager: waitForVolume - received volume event from ${event.deviceId}: ${event.previousVolume} -> ${event.currentVolume}`);
         // Check if the event is from any device in the group
         const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
-        logger.trace(`EventManager: waitForVolume - isGroupMember: ${isGroupMember}, targetMatch: ${event.currentVolume === targetVolume}`);
         
-        if (isGroupMember && event.currentVolume === targetVolume) {
-          logger.trace(`EventManager: waitForVolume - received volume change from ${event.deviceId} (group member of ${deviceId})`);
-          clearTimeout(timeoutId);
-          this.off('volume-change', volumeHandler);
-          resolve(true);
+        if (isGroupMember) {
+          logger.trace(`EventManager: waitForVolumeEx - received volume event from ${event.deviceId}: ${event.previousVolume} -> ${event.currentVolume}`);
+          
+          // Update our tracking of this device's volume
+          volumeState.set(event.deviceId, event.currentVolume);
+          
+          // Check if this device has reached the target
+          if (event.currentVolume === targetVolume && !resolved) {
+            resolved = true;
+            logger.trace(`EventManager: waitForVolumeEx - device ${event.deviceId} reached target volume ${targetVolume}`);
+            clearTimeout(timeoutId);
+            this.off('volume-change', volumeHandler);
+            resolve(event.deviceId);
+          }
         }
       };
       

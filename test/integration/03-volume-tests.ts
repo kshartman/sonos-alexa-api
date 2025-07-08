@@ -7,7 +7,7 @@ import { discoverSystem, getSafeTestRoom, SystemTopology } from '../helpers/disc
 import { withSavedState } from '../helpers/state-manager.js';
 import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
 import { loadTestSong } from '../helpers/content-loader.js';
-import { testLog } from '../helpers/test-logger.js';
+import { testLog } from '../helpers/test-logger-init.js';
 
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
@@ -145,6 +145,12 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: g
       const results = await Promise.allSettled(volumePromises);
       const volumeChanged = results.some(result => result.status === 'fulfilled' && result.value === true);
       
+      // Also try the enhanced version to see which device reports the change
+      const deviceThatChanged = await eventManager.waitForVolumeEx(deviceId, targetVolume, 1000);
+      if (deviceThatChanged) {
+        testLog.info(`   Device ${deviceThatChanged} reported reaching volume ${targetVolume}`);
+      }
+      
       // Check the actual state even if no event
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await stateResponse.json();
@@ -202,11 +208,17 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: g
       const maxVolume = state.volume;
       testLog.info(`   Max volume reached: ${maxVolume}`);
       
-      // Some devices may have volume limits
-      assert(maxVolume >= 50, 'Device should support volume of at least 50');
-      if (!reachedMax && maxVolume < 100) {
-        testLog.info(`   Note: Device appears to have max volume limit of ${maxVolume}`);
-      }
+      // Verify it's actually 100 (no volume limit)
+      assert.equal(maxVolume, 100, 'Device should support volume up to 100');
+      
+      // IMMEDIATELY restore to a safe volume after testing max
+      testLog.info('   Restoring to safe volume...');
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/30`);
+      await eventManager.waitForVolume(deviceId, 30, 3000);
+      
+      // First set back to 100 to test the ceiling
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/100`);
+      await eventManager.waitForVolume(deviceId, 100, 3000)
       
       // Try to exceed maximum
       testLog.info('   Testing volume ceiling...');
@@ -215,7 +227,12 @@ describe('Volume Control Integration Tests', { skip: skipIntegration, timeout: g
       response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       state = await response.json();
       testLog.info(`   After +10 from ${maxVolume}: actual volume = ${state.volume}`);
-      assert.equal(state.volume, maxVolume, 'Should not exceed device maximum');
+      assert.equal(state.volume, 100, 'Should not exceed 100');
+      
+      // Restore to safe volume again
+      testLog.info('   Restoring to safe volume...');
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/30`);
+      await eventManager.waitForVolume(deviceId, 30, 3000);
       
       // Test minimum - with proper wait
       testLog.info('   Testing minimum volume...');

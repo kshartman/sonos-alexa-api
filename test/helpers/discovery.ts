@@ -1,5 +1,5 @@
 import { SystemTopology, Zone, defaultConfig } from './test-config.js';
-import { testLog } from './test-logger.js';
+import { testLog } from './test-logger-init.js';
 
 /**
  * Discover the Sonos system topology and available features

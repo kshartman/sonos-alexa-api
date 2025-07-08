@@ -2,7 +2,7 @@ import { defaultConfig } from './test-config.js';
 import { getSafeTestRoom, discoverSystem } from './discovery.js';
 import { getBestTestFavorite, Favorite } from './favorite-selector.js';
 import { getTestContentUris } from './test-content-cache.js';
-import { testLog } from './test-logger.js';
+import { testLog } from './test-logger-init.js';
 
 
 /**

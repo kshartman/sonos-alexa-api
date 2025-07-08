@@ -1,6 +1,6 @@
 import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig } from './test-config.js';
-import { testLog } from './test-logger.js';
+import { testLog } from './test-logger-init.js';
 import http from 'http';
 
 /**

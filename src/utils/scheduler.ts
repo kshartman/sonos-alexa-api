@@ -53,7 +53,7 @@ class Scheduler {
 
     const task: ScheduledTask = {
       id,
-      timer: null as any, // Will be set below
+      timer: null as unknown as NodeJS.Timeout, // Will be set below
       interval: intervalMs,
       callback,
       type: 'interval',
@@ -108,7 +108,7 @@ class Scheduler {
 
     const task: ScheduledTask = {
       id,
-      timer: null as any, // Will be set below
+      timer: null as unknown as NodeJS.Timeout, // Will be set below
       interval: delayMs,
       callback,
       type: 'timeout',
@@ -196,7 +196,15 @@ class Scheduler {
     runCount: number;
     status: 'pending' | 'running' | 'completed';
   }> {
-    const tasks: Record<string, any> = {};
+    const tasks: Record<string, {
+      type: 'interval' | 'timeout';
+      interval: string;
+      createdAt: string;
+      lastRun?: string;
+      nextRun?: string;
+      runCount: number;
+      status: 'pending' | 'running' | 'completed';
+    }> = {};
     
     for (const [id, task] of this.tasks) {
       let status: 'pending' | 'running' | 'completed' = 'pending';

@@ -20,6 +20,8 @@ export interface TestContext {
   deviceIdMapping: Map<string, string>;
   musicsearchSongTerm: string;
   musicsearchAlbumTerm: string;
+  musicsearchArtistTerm: string;
+  musicsearchArtistTerms: string[];
   testRoom: string;
   testDeviceId: string;
   defaultVolume: number;
@@ -64,15 +66,15 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
   testLog.info('⏹️  Stopping all playback...');
   await stopAllPlayback(topology.rooms);
   
-  // Set default volume if specified
-  const defaultVolume = process.env.TEST_VOLUME_DEFAULT;
-  if (defaultVolume) {
-    const volume = parseInt(defaultVolume);
+  // Set default volume if specified and calculate for return value
+  let defaultVolume = 50; // default fallback
+  const defaultVolumeEnv = process.env.TEST_VOLUME_DEFAULT;
+  if (defaultVolumeEnv) {
+    const volume = parseInt(defaultVolumeEnv);
     if (!isNaN(volume) && volume >= 0 && volume <= 100) {
+      defaultVolume = volume;
       testLog.info(`🔊 Setting default volume to ${volume} for all rooms...`);
       await setVolumeForAllRooms(topology.rooms, volume);
-    } else {
-      testLog.warn(`⚠️  Invalid TEST_VOLUME_DEFAULT: ${defaultVolume} (must be 0-100)`);
     }
   }
   
@@ -87,10 +89,13 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
   // Create device ID mapping (room name -> device ID)
   const deviceIdMapping = new Map<string, string>();
   
-  // Build device ID mapping from topology
+  // Build device ID mapping from topology (room name -> coordinator device ID)
   for (const zone of topology.zones) {
     for (const member of zone.members) {
-      deviceIdMapping.set(member.roomName, member.id);
+      // Only map coordinators - for stereo pairs and groups, we need the coordinator
+      if (member.isCoordinator) {
+        deviceIdMapping.set(member.roomName, member.id);
+      }
     }
   }
   
@@ -100,11 +105,35 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
   const musicsearchSongTerm = process.env.TEST_MUSICSEARCH_SONG || 'love';
   const musicsearchAlbumTerm = process.env.TEST_MUSICSEARCH_ALBUM || 'greatest';
   
+  // Parse artist search terms - semicolon separated list with defaults
+  const defaultArtists = ['Beatles', 'Rolling Stones', 'Brian Eno'];
+  let musicsearchArtistTerms: string[];
+  
+  if (process.env.TEST_MUSICSEARCH_ARTIST) {
+    musicsearchArtistTerms = process.env.TEST_MUSICSEARCH_ARTIST
+      .split(';')
+      .map(artist => artist.trim())
+      .filter(artist => artist.length > 0);
+    
+    if (musicsearchArtistTerms.length === 0) {
+      testLog.warn('⚠️  TEST_MUSICSEARCH_ARTIST was empty, using defaults');
+      musicsearchArtistTerms = defaultArtists;
+    }
+  } else {
+    musicsearchArtistTerms = defaultArtists;
+  }
+  
+  // Get the first artist term for simple use cases
+  const musicsearchArtistTerm = musicsearchArtistTerms[0];
+  
   if (process.env.TEST_MUSICSEARCH_SONG) {
     testLog.info(`🔍 Using custom song search term: "${musicsearchSongTerm}"`);
   }
   if (process.env.TEST_MUSICSEARCH_ALBUM) {
     testLog.info(`🔍 Using custom album search term: "${musicsearchAlbumTerm}"`);
+  }
+  if (process.env.TEST_MUSICSEARCH_ARTIST) {
+    testLog.info(`🔍 Using custom artist search terms: ${musicsearchArtistTerms.join(', ')}`);
   }
   
   // Determine test room and device ID
@@ -173,8 +202,7 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
   testLog.info('✅ GLOBAL SETUP COMPLETE - STARTING TESTS');
   testLog.info('═'.repeat(80) + '\n');
   
-  // Get the default volume that was set (or use a sensible default)
-  const defaultVolume = process.env.TEST_VOLUME_DEFAULT ? parseInt(process.env.TEST_VOLUME_DEFAULT) : 50;
+  // defaultVolume was already calculated above
   
   return {
     eventManager,
@@ -182,6 +210,8 @@ export async function globalTestSetup(testSuiteName: string, options?: TestSetup
     deviceIdMapping,
     musicsearchSongTerm,
     musicsearchAlbumTerm,
+    musicsearchArtistTerm,
+    musicsearchArtistTerms,
     testRoom,
     testDeviceId,
     defaultVolume

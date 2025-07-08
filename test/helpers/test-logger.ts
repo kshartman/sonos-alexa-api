@@ -139,19 +139,26 @@ export const testLog = {
 
 /**
  * Wait for user input in interactive mode
- * @param message - Message to display
+ * @param pauseFor - How long to pause in non-interactive mode (seconds). Default 5. If 0, skip pause.
  */
-export async function waitForContinueFlag(message: string = '\n⏸️  Press Enter to continue...'): Promise<void> {
+export async function waitForContinueFlag(pauseFor: number = 5): Promise<void> {
+  // Validate pauseFor parameter
+  if (pauseFor < 0) {
+    throw new Error('pauseFor must be a non-negative integer');
+  }
+  
   // Check if interactive mode is enabled via environment variable as fallback
   const interactiveEnabled = isInteractive || process.env.TEST_INTERACTIVE === 'true';
   
-  // Skip silently if not in interactive mode
+  // In non-interactive mode, pause for specified seconds
   if (!interactiveEnabled) {
+    if (pauseFor > 0) {
+      testLog.info(`⏸️  Pausing ${pauseFor} seconds for listener to hear the audio...`);
+      await new Promise(resolve => setTimeout(resolve, pauseFor * 1000));
+    }
     return;
   }
   
-  // Only show message if we're actually going to wait
-  testLog.info(message);
   
   // Use file-based trigger for TTY-independent waiting
   const triggerFile = path.join(process.cwd(), 'tmp', 'test-continue.flag');
@@ -168,10 +175,8 @@ export async function waitForContinueFlag(message: string = '\n⏸️  Press Ent
   }
   
   testLog.info(`[WAITING_FOR_EXTERNAL_TRIGGER]`);
-  testLog.info(`⏸️  To continue, run: touch ${triggerFile}`);
+  testLog.info(`⏸️  To continue, run: ./test/continue.sh`);
   testLog.info(`   Or press Ctrl+C to abort`);
-  testLog.info(`   Working directory: ${process.cwd()}`);
-  testLog.info(`   Trigger file path: ${triggerFile}`);
   
   // Wait for file to exist
   const checkInterval = 500; // Check every 500ms

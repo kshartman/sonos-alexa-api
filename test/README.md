@@ -74,12 +74,12 @@ The integration tests:
 ### What Gets Tested
 
 **Unit Tests (CI/CD Safe):**
+- Event manager and state tracking
+- Group management operations
+- Line-in playback routing
 - Playback controls (play, pause, stop, next, previous, clearqueue)
 - Volume controls (set, adjust, mute, group volume)
-- Playback modes (repeat, shuffle, crossfade)
-- Default room management
-- Debug endpoints and logging
-- Request validation and error handling
+- SOAP request/response handling
 
 **Integration Tests (Adaptive):**
 - System discovery and health checks
@@ -96,19 +96,23 @@ The integration tests:
 ```
 test/
 ├── unit/                    # Unit tests (no Sonos required)
-│   ├── soap-tests.ts        # SOAP utilities
+│   ├── event-manager-tests.ts  # Event manager logic
+│   ├── group-tests.ts       # Group management logic
+│   ├── linein-tests.ts      # Line-in playback
 │   ├── playback-tests.ts    # Playback controls
-│   ├── volume-tests.ts      # Volume controls
-│   ├── default-room-tests.ts # Default room logic
-│   ├── debug-tests.ts       # Debug endpoints
-│   └── validation-tests.ts  # Request validation
+│   ├── soap-tests.ts        # SOAP utilities
+│   └── volume-tests.ts      # Volume controls
 ├── integration/             # Integration tests (requires Sonos)
-│   ├── adaptive-tests.ts    # Basic adaptive tests
-│   ├── playback-tests.ts    # Advanced playback
-│   ├── group-tests.ts       # Group management
-│   ├── library-tests.ts     # Favorites/playlists
-│   ├── preset-tests.ts      # Preset playback
-│   └── global-tests.ts      # Global commands
+│   ├── 01-infrastructure-tests.ts  # Device discovery & infrastructure
+│   ├── 02-playback-tests.ts        # Basic playback control
+│   ├── 03-volume-tests.ts          # Volume control
+│   ├── 04-content-*.ts             # Content services (Apple, Spotify, etc.)
+│   ├── 05-group-tests-quick.ts     # Quick group tests
+│   ├── 06-playback-modes-tests.ts  # Playback modes (shuffle, repeat, etc.)
+│   ├── 07-advanced-tests.ts        # Advanced features
+│   ├── 08-tts-tests.ts             # Text-to-speech tests
+│   ├── 09-group-tests.ts           # Comprehensive group tests
+│   └── 10-discovery-tests.ts       # System discovery endpoint tests
 ├── helpers/                 # Test utilities
 │   ├── discovery.ts         # System discovery
 │   ├── state-manager.ts     # State save/restore

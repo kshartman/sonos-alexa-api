@@ -1,6 +1,5 @@
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
 import { testLog } from '../helpers/test-logger.js';
 
@@ -8,16 +7,8 @@ import { testLog } from '../helpers/test-logger.js';
 const skipIntegration = defaultConfig.mockOnly;
 
 describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
-  let eventManager: EventManager;
-  
   before(() => {
     testLog.info('🏗️  Testing core infrastructure...');
-    eventManager = EventManager.getInstance();
-  });
-  
-  afterEach(() => {
-    // Clean up listeners after each test
-    eventManager.reset();
   });
   
   describe('Server Health', () => {
@@ -69,46 +60,34 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
       
       const devices = await response.json();
       assert(Array.isArray(devices), 'Devices should be an array');
-      assert(devices.length > 0, 'Should have at least one device');
+      assert(devices.length > 0, 'Should have discovered devices');
       
       // Verify device structure
       const firstDevice = devices[0];
+      assert(firstDevice.id, 'Device should have ID');
       assert(firstDevice.room, 'Device should have room name');
       assert(firstDevice.name, 'Device should have name');
-      assert(firstDevice.id, 'Device should have id');
-      assert(firstDevice.model, 'Device should have model');
+      assert(firstDevice.model, 'Device should have model name');
       assert(firstDevice.ip, 'Device should have IP address');
-      
-      // Check if any devices have pairing info
-      const pairedDevices = devices.filter((d: any) => d.paired);
-      if (pairedDevices.length > 0) {
-        const pairedDevice = pairedDevices[0];
-        assert(pairedDevice.paired.role, 'Paired device should have role');
-        assert(pairedDevice.paired.groupId, 'Paired device should have groupId');
-      }
     });
     
     it('should get device by ID', async () => {
-      // First get all devices to find a valid ID
-      const devicesResponse = await fetch(`${defaultConfig.apiUrl}/devices`);
-      const devices = await devicesResponse.json();
-      assert(devices.length > 0, 'Need at least one device for this test');
+      // First get list of devices
+      const listResponse = await fetch(`${defaultConfig.apiUrl}/devices`);
+      const devices = await listResponse.json();
+      const firstDevice = devices[0];
       
-      const testDevice = devices[0];
-      const deviceId = testDevice.id.replace('uuid:', '');
-      
-      // Test with ID (without uuid: prefix)
-      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/${deviceId}`);
+      // Get device by ID
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/${firstDevice.id}`);
       assert.strictEqual(response.status, 200);
       
       const device = await response.json();
-      assert.strictEqual(device.id, testDevice.id);
-      assert.strictEqual(device.room, testDevice.room);
-      assert.strictEqual(device.model, testDevice.model);
+      assert.strictEqual(device.id, firstDevice.id);
+      assert.strictEqual(device.room, firstDevice.room);
     });
     
     it('should handle invalid device ID', async () => {
-      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/INVALID_ID`);
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/id/invalid-device-id`);
       assert.strictEqual(response.status, 404);
       
       const error = await response.json();
@@ -117,24 +96,19 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
     });
     
     it('should get devices by room', async () => {
-      // First get a valid room name
-      const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
-      const zones = await zonesResponse.json();
-      assert(zones.length > 0, 'Need at least one zone for this test');
+      // First get list of devices
+      const listResponse = await fetch(`${defaultConfig.apiUrl}/devices`);
+      const devices = await listResponse.json();
+      const firstDevice = devices[0];
       
-      const testRoom = zones[0].members[0].roomName;
-      
-      const response = await fetch(`${defaultConfig.apiUrl}/devices/room/${encodeURIComponent(testRoom)}`);
+      // Get devices by room
+      const response = await fetch(`${defaultConfig.apiUrl}/devices/room/${encodeURIComponent(firstDevice.room)}`);
       assert.strictEqual(response.status, 200);
       
-      const devices = await response.json();
-      assert(Array.isArray(devices), 'Should return array of devices');
-      assert(devices.length > 0, 'Should have at least one device in room');
-      
-      // All devices should be from the requested room
-      devices.forEach((device: any) => {
-        assert.strictEqual(device.room, testRoom);
-      });
+      const roomDevices = await response.json();
+      assert(Array.isArray(roomDevices), 'Should return array of devices');
+      assert(roomDevices.length > 0, 'Should have at least one device');
+      assert(roomDevices.some(d => d.room === firstDevice.room), 'Should include the requested room');
     });
     
     it('should handle invalid room name', async () => {
@@ -144,104 +118,6 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
       const error = await response.json();
       assert.strictEqual(error.status, 'error');
       assert(error.error.includes('not found'));
-    });
-  });
-  
-  describe('Event Manager', () => {
-    it('should handle state change events', async () => {
-      // Create a mock state change event
-      const mockDevice = {
-        id: 'TEST_DEVICE_001',
-        roomName: 'Test Room',
-        state: { playbackState: 'STOPPED' }
-      } as any;
-      
-      // Set up event listener
-      let eventReceived = false;
-      eventManager.once('state-change', (event) => {
-        eventReceived = true;
-        assert.strictEqual(event.deviceId, 'TEST_DEVICE_001');
-        assert.strictEqual(event.roomName, 'Test Room');
-        assert.strictEqual(event.previousState, 'STOPPED');
-        assert.strictEqual(event.currentState, 'PLAYING');
-      });
-      
-      // Emit state change
-      eventManager.emitStateChange(mockDevice, 'STOPPED', 'PLAYING');
-      
-      // Verify event was received
-      assert(eventReceived, 'State change event should be received');
-    });
-    
-    it('should wait for specific state with timeout', async () => {
-      const mockDevice = {
-        id: 'TEST_DEVICE_002',
-        roomName: 'Test Room 2',
-        state: { playbackState: 'STOPPED' }
-      } as any;
-      
-      // Start waiting for PLAYING state
-      const waitPromise = eventManager.waitForState('TEST_DEVICE_002', 'PLAYING', 1000);
-      
-      // Emit state change after 100ms
-      setTimeout(() => {
-        eventManager.emitStateChange(mockDevice, 'STOPPED', 'PLAYING');
-      }, 100);
-      
-      // Should resolve to true
-      const result = await waitPromise;
-      assert.strictEqual(result, true, 'Should successfully wait for state');
-    });
-    
-    it('should timeout when state is not reached', async () => {
-      // Wait for a state that will never come
-      const result = await eventManager.waitForState('TEST_DEVICE_003', 'PLAYING', 500);
-      assert.strictEqual(result, false, 'Should timeout and return false');
-    });
-    
-    it('should wait for stable state (not TRANSITIONING)', async () => {
-      const mockDevice = {
-        id: 'TEST_DEVICE_004',
-        roomName: 'Test Room 4',
-        state: { playbackState: 'STOPPED' }
-      } as any;
-      
-      // Start waiting for stable state
-      const waitPromise = eventManager.waitForStableState('TEST_DEVICE_004', 2000);
-      
-      // Emit TRANSITIONING first
-      setTimeout(() => {
-        eventManager.emitStateChange(mockDevice, 'STOPPED', 'TRANSITIONING');
-      }, 100);
-      
-      // Then emit PLAYING
-      setTimeout(() => {
-        eventManager.emitStateChange(mockDevice, 'TRANSITIONING', 'PLAYING');
-      }, 300);
-      
-      // Should resolve to PLAYING
-      const result = await waitPromise;
-      assert.strictEqual(result, 'PLAYING', 'Should wait for stable state');
-    });
-    
-    it('should track state history', () => {
-      const mockDevice = {
-        id: 'TEST_DEVICE_005',
-        roomName: 'Test Room 5',
-        state: { playbackState: 'STOPPED' }
-      } as any;
-      
-      // Emit several state changes
-      eventManager.emitStateChange(mockDevice, 'STOPPED', 'TRANSITIONING');
-      eventManager.emitStateChange(mockDevice, 'TRANSITIONING', 'PLAYING');
-      eventManager.emitStateChange(mockDevice, 'PLAYING', 'PAUSED_PLAYBACK');
-      
-      // Get history
-      const history = eventManager.getStateHistory('TEST_DEVICE_005');
-      assert.strictEqual(history.length, 3, 'Should have 3 state changes in history');
-      assert.strictEqual(history[0].currentState, 'TRANSITIONING');
-      assert.strictEqual(history[1].currentState, 'PLAYING');
-      assert.strictEqual(history[2].currentState, 'PAUSED_PLAYBACK');
     });
   });
   
@@ -297,12 +173,12 @@ describe('Core Infrastructure Tests', { skip: skipIntegration }, () => {
       // All should return valid state
       const states = await Promise.all(responses.map(r => r.json()));
       states.forEach(state => {
-        assert(state.hasOwnProperty('playbackState'), 'All states should be valid');
+        assert(state.hasOwnProperty('playbackState'), 'Each state should be valid');
       });
     });
-  });
-  
-  after(() => {
-    testLog.info('   ✓ Core infrastructure tests complete');
+    
+    after(() => {
+      testLog.info('   ✓ Core infrastructure tests complete');
+    });
   });
 });

@@ -1,69 +1,34 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
-import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
-import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
 import { testLog } from '../helpers/test-logger.js';
 
 // Skip if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
 describe('Advanced Features Tests', { skip: skipIntegration }, () => {
-  let eventManager: EventManager;
+  let testContext: TestContext;
   let room: string;
   let deviceId: string;
   
   before(async () => {
     testLog.info('🚀 Testing advanced features...');
-    eventManager = EventManager.getInstance();
+    testContext = await globalTestSetup('Advanced Features Tests');
     
-    // Start event bridge to receive UPnP events via SSE
-    await startEventBridge();
+    room = testContext.testRoom;
+    deviceId = testContext.deviceIdMapping.get(room) || '';
     
-    // Discover system and select test room
-    const topology = await discoverSystem();
-    room = await getSafeTestRoom(topology);
-    
-    if (!room) {
-      throw new Error('No suitable test room found');
+    if (!deviceId) {
+      throw new Error(`Device ID not found for room ${room}`);
     }
     
     testLog.info(`   Test room: ${room}`);
-    
-    // Get device ID for event tracking
-    const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
-    const zones = await zonesResponse.json();
-    const zone = zones.find(z => z.members.some(m => m.roomName === room));
-    
-    if (!zone) {
-      throw new Error(`Zone not found for room ${room}`);
-    }
-    
-    // Use coordinator device ID (important for stereo pairs)
-    const coordinatorMember = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinatorMember.id;
     testLog.info(`   Device ID: ${deviceId}`);
   });
   
   after(async () => {
-    testLog.info('\n🧹 Cleaning up Advanced Features tests...\n');
-    
-    // Stop playback
-    if (room) {
-      await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
-    }
-    
-    // Clear any pending event listeners
-    eventManager.reset();
-    
-    // Stop event bridge
-    stopEventBridge();
-    
-    // Give a moment for cleanup to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    testLog.info('✓ Advanced features tests complete');
+    await globalTestTeardown('Advanced Features Tests', testContext);
   });
   
   describe('Sleep Timer', () => {

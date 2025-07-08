@@ -5,6 +5,7 @@ import os from 'os';
 import { XMLParser } from 'fast-xml-parser';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
+import { scheduler } from './utils/scheduler.js';
 import { SonosDevice } from './sonos-device.js';
 import { UPnPSubscriber } from './upnp/subscriber.js';
 import { TopologyManager } from './topology-manager.js';
@@ -33,7 +34,7 @@ export class SonosDiscovery extends EventEmitter {
   public readonly devices = new Map<string, SonosDevice>();
   private socket?: dgram.Socket | undefined;
   private xmlParser: XMLParser;
-  private searchInterval?: NodeJS.Timeout | undefined;
+  private readonly SEARCH_TASK_ID = 'discovery-search';
   private subscriber?: UPnPSubscriber;
   public topologyManager: TopologyManager;
   private topologyDevices = new Set<string>();  // Track which devices we've subscribed to for topology
@@ -95,7 +96,7 @@ export class SonosDiscovery extends EventEmitter {
     this.search();
     
     // Periodic search every 30 seconds
-    this.searchInterval = setInterval(() => this.search(), 30000);
+    scheduler.scheduleInterval(this.SEARCH_TASK_ID, () => this.search(), 30000, { unref: true });
     
     // No longer needed - we subscribe to topology on every device
   }
@@ -105,10 +106,7 @@ export class SonosDiscovery extends EventEmitter {
    * Unsubscribes from all devices and closes the UDP socket.
    */
   stop(): void {
-    if (this.searchInterval) {
-      clearInterval(this.searchInterval);
-      this.searchInterval = undefined;
-    }
+    scheduler.clearTask(this.SEARCH_TASK_ID);
     
     if (this.socket) {
       this.socket.close();

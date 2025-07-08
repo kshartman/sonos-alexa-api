@@ -1,9 +1,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EventManager } from '../../src/utils/event-manager.js';
 import { defaultConfig, getTestTimeout } from '../helpers/test-config.js';
-import { discoverSystem, getSafeTestRoom } from '../helpers/discovery.js';
-import { startEventBridge, stopEventBridge } from '../helpers/event-bridge.js';
+import { globalTestSetup, globalTestTeardown, TestContext } from '../helpers/global-test-setup.js';
 import { loadTestAlbum, loadTestPlaylist } from '../helpers/content-loader.js';
 import { testLog } from '../helpers/test-logger.js';
 
@@ -11,39 +9,22 @@ import { testLog } from '../helpers/test-logger.js';
 const skipIntegration = defaultConfig.mockOnly;
 
 describe('Playback Modes Tests', { skip: skipIntegration }, () => {
-  let eventManager: EventManager;
+  let testContext: TestContext;
   let room: string;
   let deviceId: string;
   
   before(async () => {
     testLog.info('🎛️  Testing playback modes...');
-    eventManager = EventManager.getInstance();
+    testContext = await globalTestSetup('Playback Modes Tests');
     
-    // Start event bridge to receive UPnP events via SSE
-    await startEventBridge();
+    room = testContext.testRoom;
+    deviceId = testContext.deviceIdMapping.get(room) || '';
     
-    // Discover system and select test room
-    const topology = await discoverSystem();
-    room = await getSafeTestRoom(topology);
-    
-    if (!room) {
-      throw new Error('No suitable test room found');
+    if (!deviceId) {
+      throw new Error(`Device ID not found for room ${room}`);
     }
     
     testLog.info(`   Test room: ${room}`);
-    
-    // Get device ID for event tracking
-    const zonesResponse = await fetch(`${defaultConfig.apiUrl}/zones`);
-    const zones = await zonesResponse.json();
-    const zone = zones.find(z => z.members.some(m => m.roomName === room));
-    
-    if (!zone) {
-      throw new Error(`Zone not found for room ${room}`);
-    }
-    
-    // Use coordinator device ID (important for stereo pairs)
-    const coordinatorMember = zone.members.find(m => m.isCoordinator);
-    deviceId = coordinatorMember.id;
     testLog.info(`   Device ID: ${deviceId}`);
     
     // Load content to enable playback mode changes
@@ -72,28 +53,12 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
       throw new Error('Failed to start playback');
     }
     
-    await eventManager.waitForState(deviceId, 'PLAYING', 10000);
+    await testContext.eventManager.waitForState(deviceId, 'PLAYING', 10000);
     testLog.info('   ✅ Playback started successfully');
   });
   
   after(async () => {
-    testLog.info('\n🧹 Cleaning up Playback Modes tests...\n');
-    
-    // Stop playback
-    if (room) {
-      await fetch(`${defaultConfig.apiUrl}/${room}/stop`);
-    }
-    
-    // Clear any pending event listeners
-    eventManager.reset();
-    
-    // Stop event bridge
-    stopEventBridge();
-    
-    // Give a moment for cleanup to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    testLog.info('✓ Playback modes tests complete');
+    await globalTestTeardown('Playback Modes Tests', testContext);
   });
   
   describe('Repeat Modes', () => {
@@ -301,7 +266,7 @@ describe('Playback Modes Tests', { skip: skipIntegration }, () => {
         const query = encodeURIComponent('track:Yesterday artist:The Beatles');
         const searchResponse = await fetch(`${defaultConfig.apiUrl}/${room}/musicsearch/apple/song/${query}`);
         assert.strictEqual(searchResponse.status, 200);
-        await eventManager.waitForState(deviceId, 'PLAYING', 5000);
+        await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5000);
       }
       
       // Clear the queue

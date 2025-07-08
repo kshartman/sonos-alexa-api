@@ -20,13 +20,14 @@ The integration tests use real UPnP events from Sonos devices rather than pollin
 **Scope**: Core logic, utilities, and API validation
 
 Unit tests mock Sonos device interactions and focus on:
-- API endpoint routing and parameter validation
+- Event management and state tracking
+- Group management operations
+- Line-in playback routing
+- Playback control logic
+- Volume control operations
+- SOAP request/response handling
 - Business logic and data transformation
 - Error handling and edge cases
-- Configuration parsing and validation
-- Utility functions and helpers
-- SOAP request/response handling
-- Event management and SSE
 
 **Perfect for**:
 - ✅ Continuous Integration (CI/CD)
@@ -54,40 +55,45 @@ Integration tests dynamically adapt to your Sonos system:
 
 ## Test Suite Structure
 
-### Unit Tests (5 test files, 64 test cases)
+### Unit Tests (6 test files, 69 test cases)
 
-1. **Group Management** (`unit/group-tests.ts`) - 18 tests
+1. **Event Manager** (`unit/event-manager-tests.ts`) - 5 tests
+   - State change event handling
+   - Wait for state with timeout
+   - Stable state detection
+   - State history tracking
+
+2. **Group Management** (`unit/group-tests.ts`) - 18 tests
    - Join/leave group operations
    - Group volume and playback control
    - Error handling and edge cases
 
-2. **Line-In** (`unit/linein-tests.ts`) - 5 tests
+3. **Line-In** (`unit/linein-tests.ts`) - 5 tests
    - Line-in playback from same/different rooms
    - Coordinator routing for grouped devices
 
-3. **Playback Control** (`unit/playback-tests.ts`) - 18 tests
+4. **Playback Control** (`unit/playback-tests.ts`) - 18 tests
    - Play/pause/stop commands
    - Track navigation
    - Playback modes (repeat, shuffle, crossfade)
    - Global commands (pauseall, resumeall)
 
-4. **SOAP Utilities** (`unit/soap-tests.ts`) - 7 tests
+5. **SOAP Utilities** (`unit/soap-tests.ts`) - 7 tests
    - SOAP envelope creation
    - Response parsing
    - XML character escaping
 
-5. **Volume Control** (`unit/volume-tests.ts`) - 16 tests
+6. **Volume Control** (`unit/volume-tests.ts`) - 16 tests
    - Absolute and relative volume
    - Group volume control
    - Mute/unmute operations
 
-### Integration Tests (8 test files, 87 test cases)
+### Integration Tests (16 test files, 142 test cases)
 
-1. **Core Infrastructure** (`01-infrastructure-tests.ts`) - 15 tests
+1. **Core Infrastructure** (`01-infrastructure-tests.ts`) - 10 tests
    - Health check and device discovery
    - Device information endpoints (/devices, /devices/id, /devices/room)
-   - Event manager and SSE connections
-   - State tracking and history
+   - Device state tracking
    - Concurrent request handling
 
 2. **Basic Playback** (`02-playback-tests.ts`) - 10 tests
@@ -102,14 +108,27 @@ Integration tests dynamically adapt to your Sonos system:
    - Mute/unmute/togglemute operations
    - Group volume control
 
-4. **Playback Modes** (`06-playback-modes-tests.ts`) - 14 tests
+4. **Content Services** - 47 tests total
+   - **Apple Music** (`04-content-apple-tests.ts`) - 8 tests
+   - **Default Service** (`04-content-defaults-tests.ts`) - 8 tests
+   - **Generic Content** (`04-content-generic-tests.ts`) - 8 tests
+   - **TTS Content** (`04-content-generic-tts-tests.ts`) - 5 tests
+   - **Music Library** (`04-content-library-tests.ts`) - 8 tests
+   - **Pandora** (`04-content-pandora-tests.ts`) - 6 tests
+   - **Spotify** (`04-content-spotify-tests.ts`) - 4 tests
+
+5. **Quick Group Tests** (`05-group-tests-quick.ts`) - 6 tests
+   - Basic group join/leave operations
+   - Quick group verification
+
+6. **Playback Modes** (`06-playback-modes-tests.ts`) - 14 tests
    - Repeat mode control
    - Shuffle mode with repeat preservation
    - Crossfade toggle
    - Combined mode testing
    - Queue operations
 
-5. **Advanced Features** (`07-advanced-tests.ts`) - 16 tests
+7. **Advanced Features** (`07-advanced-tests.ts`) - 16 tests
    - Sleep timer functionality
    - Line-in playback
    - Settings management
@@ -117,22 +136,22 @@ Integration tests dynamically adapt to your Sonos system:
    - Preset management
    - Error recovery
 
-6. **Text-to-Speech** (`08-tts-tests.ts`) - 7 tests
+8. **Text-to-Speech** (`08-tts-tests.ts`) - 10 tests
    - Single room announcements
    - Multi-room and global announcements
    - State restoration after TTS
    - Error handling
 
-7. **Group Management** (`09-group-tests.ts`) - 10 tests
+9. **Group Management** (`09-group-tests.ts`) - 10 tests
    - Group formation and dissolution
    - Group playback control
    - Group volume control
    - Error handling
 
-8. **Adaptive Tests** (`adaptive-tests.ts`) - 6 tests
-   - System discovery
+10. **Discovery Tests** (`10-discovery-tests.ts`) - 3 tests
+   - Zone discovery
+   - System state
    - Health check
-   - TTS functionality
 
 ## Key Features
 
@@ -327,23 +346,26 @@ Current test suite status (v1.2.0):
 
 | Test Type | Files | Test Cases | Status |
 |-----------|-------|------------|--------|
-| **Unit Tests** | 5 | 64 | ✅ All passing |
-| **Integration Tests** | 8 | 87 | ✅ All passing |
-| **Total** | **13** | **151** | ✅ **100% passing** |
+| **Unit Tests** | 6 | 69 | ✅ All passing |
+| **Integration Tests** | 16 | 142 | ✅ All passing |
+| **Total** | **22** | **211** | ✅ **100% passing** |
 
 ### Test Distribution by Category
 
 | Category | Unit Tests | Integration Tests | Total |
 |----------|------------|-------------------|-------|
+| Content Services | - | 47 | 47 |
 | Playback Control | 18 | 10 | 28 |
 | Volume Control | 16 | 9 | 25 |
-| Group Management | 18 | 10 | 28 |
+| Group Management | 18 | 16 | 34 |
 | Advanced Features | - | 16 | 16 |
-| Infrastructure | - | 15 | 15 |
+| Infrastructure | - | 10 | 10 |
 | Playback Modes | - | 14 | 14 |
-| TTS | - | 7 | 7 |
+| TTS | - | 10 | 10 |
 | SOAP/Utilities | 7 | - | 7 |
+| Event Manager | 5 | - | 5 |
 | Line-In | 5 | - | 5 |
+| Discovery | - | 3 | 3 |
 | Adaptive/Discovery | - | 6 | 6 |
 
 **Overall Coverage**: 96% (statements)

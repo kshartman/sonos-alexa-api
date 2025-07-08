@@ -31,7 +31,7 @@ export class AppleMusicService extends MusicService {
       search: {
         album: 'https://itunes.apple.com/search?media=music&limit=1&entity=album&attribute=albumTerm&term=',
         song: 'https://itunes.apple.com/search?media=music&limit=50&entity=song&term=',
-        station: 'https://itunes.apple.com/search?media=music&limit=50&entity=musicArtist&term='
+        station: 'https://itunes.apple.com/search?media=music&limit=50&entity=song&term=' // Station search uses songs for genre-based results
       },
       metaStart: {
         album: '0004206calbum%3a',
@@ -82,7 +82,9 @@ export class AppleMusicService extends MusicService {
       const data: iTunesSearchResponse = await response.json();
       logger.debug(`Apple Music found ${data.resultCount} results`);
       
-      return data.results.map(track => this.mapResult(type, track));
+      // For station searches, we're actually getting song results, so map them as songs
+      const mapType = (type === 'station') ? 'song' : type;
+      return data.results.map(track => this.mapResult(mapType, track));
     } catch (error) {
       logger.error('Apple Music search failed:', error);
       throw new Error(`Apple Music search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

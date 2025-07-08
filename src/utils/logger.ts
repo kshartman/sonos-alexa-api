@@ -3,7 +3,8 @@ import pino from 'pino';
 
 // Determine environment and logger preference
 const isDevelopment = !process.env['NODE_ENV'] || process.env['NODE_ENV'] === '' || process.env['NODE_ENV'] === 'development';
-const loggerType = process.env['LOGGER']?.toLowerCase() || (isDevelopment ? 'winston' : 'pino');
+const isUnitTest = process.env['LOG_LEVEL'] === 'silent';
+const loggerType = isUnitTest ? 'console' : (process.env['LOGGER']?.toLowerCase() || (isDevelopment ? 'winston' : 'pino'));
 const logLevel = process.env['LOG_LEVEL'] || (isDevelopment ? 'debug' : 'info');
 
 // Custom log levels for Winston: error < warn < info < debug < trace
@@ -96,7 +97,7 @@ if (loggerType === 'winston') {
       winstonLogger.level = (level === 'wall') ? 'trace' : level; 
     }
   };
-} else {
+} else if (loggerType === 'pino') {
   // Use Pino (default for production)
   const pinoLogger = pino({
     level: logLevel === 'wall' ? 'trace' : logLevel,  // Map wall to trace
@@ -184,6 +185,32 @@ if (loggerType === 'winston') {
     },
     get level() { return pinoLogger.level; },
     set level(level: string) { pinoLogger.level = level === 'wall' ? 'trace' : level; }
+  };
+} else if (loggerType === 'console') {
+  // Use simple console logger for unit tests - no persistent resources
+  logger = {
+    error: () => {}, // Silent in unit tests
+    warn: () => {},  // Silent in unit tests
+    info: () => {},  // Silent in unit tests
+    debug: () => {}, // Silent in unit tests
+    trace: () => {}, // Silent in unit tests
+    always: (message: string, ...args: unknown[]) => {
+      console.log(`[TEST] ${message}`, ...args);
+    },
+    level: 'silent'
+  };
+} else {
+  // Fallback to console logger
+  logger = {
+    error: () => {},
+    warn: () => {},
+    info: () => {},
+    debug: () => {},
+    trace: () => {},
+    always: (message: string, ...args: unknown[]) => {
+      console.log(message, ...args);
+    },
+    level: 'info'
   };
 }
 

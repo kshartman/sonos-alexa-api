@@ -107,11 +107,26 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - **Environment Variable Consistency**: Process environment updated when log level changes dynamically
 
 ### Infrastructure Improvements
+- **Centralized Scheduler System**:
+  - New scheduler abstraction for all timer-based operations
+  - Automatic detection and disabling in test environments
+  - Prevents test runners from hanging after completion
+  - Unified management of intervals and timeouts with unref support
+  - Migrated 8 services to use centralized scheduler:
+    - MusicLibraryCache (library reindexing)
+    - ServicesCache (24-hour refresh)
+    - EventManager (health checks)
+    - TTSService (cache cleanup)
+    - Discovery (SSDP search)
+    - UPnP Subscriber (subscription renewals)
+    - PresetLoader (file watching)
+    - DefaultRoomManager (debounced saves)
 - **EventManager Enhancements**:
   - Group-aware event handling for stereo pairs and grouped speakers
   - Device health monitoring with configurable timeouts
   - Improved memory management and listener cleanup
   - Fixed max listeners warnings
+  - Fixed dependency on global discovery object
 - **Discovery Improvements**:
   - Better handling of stereo pairs and grouped speakers
   - Dynamic EventManager cache updates on topology changes
@@ -130,6 +145,10 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
   - Added test settling time between TTS tests (2s normally, 5s after multi-room tests)
   - Enhanced test setup/teardown with clear visual separators
   - Fixed TTS test reliability with proper playback state management
+  - **Test Organization**: Moved EventManager unit tests to proper location
+    - Mock device tests now in unit test suite where they belong
+    - Integration tests focus exclusively on real device interactions
+    - Maintained 96% overall test coverage
 
 ### Documentation
 - **New SPOTIFY.md**: Comprehensive guide to Spotify integration
@@ -149,6 +168,9 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed FV:2 browse parsing to correctly extract Pandora favorites
 - Fixed double-encoding of Pandora station URIs
 - Fixed Pandora API singleton pattern to maintain cache between requests
+- **Fixed unit test hanging issue** - Tests now complete immediately instead of hanging for 30+ seconds due to persistent timers
+- **Fixed SpotifyService multiple initialization** - Service no longer calls loadConfiguration() multiple times, preventing duplicate startup banners
+- **Fixed integration test failures** - Updated device API tests to match current response structure (`room`/`model` fields)
 - **Fixed TTS stereo pair volume restoration** - TTS announcements now correctly capture and restore volume for stereo pairs by always using the coordinator device
 - **Fixed TTS empty queue restoration** - TTS announcements now properly clear the transport URI when restoring an empty queue state, preventing TTS files from remaining as the current track
 - **Fixed TTS playback restoration** - TTS now correctly restores direct URI playback (e.g., from music search) even when the queue is empty, ensuring music continues after announcements

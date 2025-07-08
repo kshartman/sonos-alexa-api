@@ -186,20 +186,43 @@ async function runTests() {
     }
     
     // Run tests with proper stdio configuration
+    const shouldCaptureOutput = enableLogging || enableInteractive;
     const testProcess = spawn('npx', testArgs, {
-      stdio: enableInteractive ? ['inherit', 'pipe', 'inherit'] : 'inherit',
+      stdio: shouldCaptureOutput ? ['inherit', 'pipe', 'pipe'] : 'inherit',
       cwd: join(__dirname, '..'),
       env: testEnv
     });
     
-    // Monitor stdout for interactive wait markers if in interactive mode
-    if (enableInteractive && testProcess.stdout) {
+    // Set up output capturing and logging if needed
+    let logStream: import('fs').WriteStream | undefined;
+    if (enableLogging && testEnv.TEST_LOG_PATH) {
+      const fs = await import('fs');
+      const path = await import('path');
+      
+      // Ensure logs directory exists
+      const logsDir = path.dirname(testEnv.TEST_LOG_PATH);
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      
+      // Create log stream (append mode in case test logger already created it)
+      logStream = fs.createWriteStream(testEnv.TEST_LOG_PATH, { flags: 'a' });
+      logStream.write('\n=== TEST RUNNER OUTPUT ===\n');
+    }
+    
+    // Monitor stdout for output capture and interactive markers
+    if (shouldCaptureOutput && testProcess.stdout) {
       testProcess.stdout.on('data', (data) => {
         const output = data.toString();
         process.stdout.write(output);
         
-        // Check for wait marker
-        if (output.includes('[WAITING_FOR_EXTERNAL_TRIGGER]')) {
+        // Write to log file if logging enabled
+        if (logStream) {
+          logStream.write(output);
+        }
+        
+        // Check for wait marker in interactive mode
+        if (enableInteractive && output.includes('[WAITING_FOR_EXTERNAL_TRIGGER]')) {
           const triggerFile = join(__dirname, '..', 'tmp', 'test-continue.flag');
           console.log('\n🔔 Test is waiting for user action!');
           console.log(`📝 To continue: touch ${triggerFile}`);
@@ -208,7 +231,26 @@ async function runTests() {
       });
     }
     
+    // Monitor stderr for error capture
+    if (shouldCaptureOutput && testProcess.stderr) {
+      testProcess.stderr.on('data', (data) => {
+        const output = data.toString();
+        process.stderr.write(output);
+        
+        // Write to log file if logging enabled
+        if (logStream) {
+          logStream.write('[STDERR] ' + output);
+        }
+      });
+    }
+    
     testProcess.on('close', async (code) => {
+      // Close log stream if we opened it
+      if (logStream) {
+        logStream.write('\n=== TEST RUNNER OUTPUT END ===\n');
+        logStream.end();
+      }
+      
       await handleTestExit(code || 0, shouldStopServer, enableLogging, testEnv.TEST_LOG_PATH);
     });
 

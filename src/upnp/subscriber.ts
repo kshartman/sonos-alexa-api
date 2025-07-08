@@ -1,6 +1,7 @@
 import http from 'http';
 import { networkInterfaces } from 'os';
 import { debugManager } from '../utils/debug-manager.js';
+import { scheduler } from '../utils/scheduler.js';
 import { EventManager } from '../utils/event-manager.js';
 
 interface UPnPError extends Error {
@@ -15,7 +16,6 @@ export interface Subscription {
   url: string;
   callback: string;
   timeout: number;
-  renewalTimer?: NodeJS.Timeout;
   deviceId?: string;
   service?: string;
 }
@@ -118,9 +118,7 @@ export class UPnPSubscriber {
     try {
       await this.performUnsubscribe(subscription);
       
-      if (subscription.renewalTimer) {
-        clearTimeout(subscription.renewalTimer);
-      }
+      scheduler.clearTask(`renewal-${subscriptionId}`);
       
       this.subscriptions.delete(subscriptionId);
       debugManager.debug('upnp', `Unsubscribed from ${subscriptionId}`);
@@ -228,59 +226,64 @@ export class UPnPSubscriber {
   private scheduleRenewal(subscription: Subscription): void {
     const renewalTime = (subscription.timeout - 30) * 1000; // Renew 30 seconds before expiry
     
-    subscription.renewalTimer = setTimeout(async () => {
-      try {
-        await this.performSubscribe(subscription, true); // Pass true for renewal
-        this.scheduleRenewal(subscription); // Schedule next renewal
-        debugManager.info('upnp', `Renewed subscription to ${subscription.id} (SID: ${subscription.sid})`);
-        
-        // Notify EventManager of successful renewal
-        if (subscription.deviceId) {
-          const eventManager = EventManager.getInstance();
-          eventManager.handleSubscriptionRenewal(subscription.deviceId);
-        }
-      } catch (error) {
-        debugManager.error('upnp', `Failed to renew subscription to ${subscription.id}:`, error);
-        
-        // Handle specific error cases
-        const err = error as UPnPError;
-        if (err.code === 'DEVICE_OFFLINE' || err.code === 'ECONNREFUSED' || err.code === 'TIMEOUT') {
-          // Device is offline - no point trying to resubscribe
-          debugManager.warn('upnp', `Device appears offline for ${subscription.id}`);
-          this.subscriptions.delete(subscription.id);
-          
-          // Notify EventManager that device is offline
-          if (subscription.deviceId) {
-            const eventManager = EventManager.getInstance();
-            eventManager.handleSubscriptionFailure(subscription.deviceId);
-          }
-          return;
-        }
-        
-        // For 412 or other errors, try to resubscribe from scratch
+    scheduler.scheduleTimeout(
+      `renewal-${subscription.id}`,
+      async () => {
         try {
-          subscription.sid = undefined; // Clear SID to force new subscription
-          await this.performSubscribe(subscription, false);
-          this.scheduleRenewal(subscription);
-          debugManager.info('upnp', `Resubscribed to ${subscription.id} after renewal failure`);
+          await this.performSubscribe(subscription, true); // Pass true for renewal
+          this.scheduleRenewal(subscription); // Schedule next renewal
+          debugManager.info('upnp', `Renewed subscription to ${subscription.id} (SID: ${subscription.sid})`);
           
-          // Successful resubscribe - update EventManager
+          // Notify EventManager of successful renewal
           if (subscription.deviceId) {
             const eventManager = EventManager.getInstance();
             eventManager.handleSubscriptionRenewal(subscription.deviceId);
           }
-        } catch (resubError) {
-          debugManager.error('upnp', `Failed to resubscribe to ${subscription.id}:`, resubError);
-          this.subscriptions.delete(subscription.id);
+        } catch (error) {
+          debugManager.error('upnp', `Failed to renew subscription to ${subscription.id}:`, error);
           
-          // Notify EventManager that device is likely offline
-          if (subscription.deviceId) {
-            const eventManager = EventManager.getInstance();
-            eventManager.handleSubscriptionFailure(subscription.deviceId);
+          // Handle specific error cases
+          const err = error as UPnPError;
+          if (err.code === 'DEVICE_OFFLINE' || err.code === 'ECONNREFUSED' || err.code === 'TIMEOUT') {
+            // Device is offline - no point trying to resubscribe
+            debugManager.warn('upnp', `Device appears offline for ${subscription.id}`);
+            this.subscriptions.delete(subscription.id);
+            
+            // Notify EventManager that device is offline
+            if (subscription.deviceId) {
+              const eventManager = EventManager.getInstance();
+              eventManager.handleSubscriptionFailure(subscription.deviceId);
+            }
+            return;
+          }
+          
+          // For 412 or other errors, try to resubscribe from scratch
+          try {
+            subscription.sid = undefined; // Clear SID to force new subscription
+            await this.performSubscribe(subscription, false);
+            this.scheduleRenewal(subscription);
+            debugManager.info('upnp', `Resubscribed to ${subscription.id} after renewal failure`);
+            
+            // Successful resubscribe - update EventManager
+            if (subscription.deviceId) {
+              const eventManager = EventManager.getInstance();
+              eventManager.handleSubscriptionRenewal(subscription.deviceId);
+            }
+          } catch (resubError) {
+            debugManager.error('upnp', `Failed to resubscribe to ${subscription.id}:`, resubError);
+            this.subscriptions.delete(subscription.id);
+            
+            // Notify EventManager that device is likely offline
+            if (subscription.deviceId) {
+              const eventManager = EventManager.getInstance();
+              eventManager.handleSubscriptionFailure(subscription.deviceId);
+            }
           }
         }
-      }
-    }, renewalTime);
+      },
+      renewalTime,
+      { unref: true }
+    );
   }
 
   private handleNotification(req: http.IncomingMessage, res: http.ServerResponse): void {

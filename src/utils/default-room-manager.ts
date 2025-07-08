@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import logger from './logger.js';
+import { scheduler } from './scheduler.js';
 
 export interface DefaultSettings {
   room?: string;
@@ -13,7 +14,7 @@ export class DefaultRoomManager {
   private configPath: string;
   private defaultRoom: string;
   private defaultMusicService: string;
-  private saveTimeout?: NodeJS.Timeout;
+  private readonly SAVE_TASK_ID = 'default-room-manager-save';
 
   constructor(configDir: string, defaultRoom: string = '', defaultMusicService: string = 'library') {
     this.configPath = path.join(configDir, 'default-settings.json');
@@ -39,21 +40,24 @@ export class DefaultRoomManager {
 
   async save(): Promise<void> {
     // Cancel any pending save
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-    }
+    scheduler.clearTask(this.SAVE_TASK_ID);
 
     // Debounce saves to avoid excessive writes
-    this.saveTimeout = setTimeout(async () => {
-      try {
-        this.settings.lastUpdated = new Date();
-        await fs.mkdir(path.dirname(this.configPath), { recursive: true });
-        await fs.writeFile(this.configPath, JSON.stringify(this.settings, null, 2));
-        logger.debug('Saved default settings:', this.settings);
-      } catch (error) {
-        logger.error('Error saving default settings:', error);
-      }
-    }, 500);
+    scheduler.scheduleTimeout(
+      this.SAVE_TASK_ID,
+      async () => {
+        try {
+          this.settings.lastUpdated = new Date();
+          await fs.mkdir(path.dirname(this.configPath), { recursive: true });
+          await fs.writeFile(this.configPath, JSON.stringify(this.settings, null, 2));
+          logger.debug('Saved default settings:', this.settings);
+        } catch (error) {
+          logger.error('Error saving default settings:', error);
+        }
+      },
+      500,
+      { unref: true }
+    );
   }
 
   getRoom(requestedRoom?: string): string {

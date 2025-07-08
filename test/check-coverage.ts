@@ -337,8 +337,8 @@ if (showDetailed) {
       'integration/01-infrastructure-tests.ts',
       'integration/02-playback-tests.ts',
       'integration/03-volume-tests.ts',
-      'integration/04-content-apple.ts',
-      'integration/04-content-defaults.ts',
+      'integration/04-content-apple-tests.ts',
+      'integration/04-content-defaults-tests.ts',
       'integration/04-content-generic-tests.ts',
       'integration/04-content-generic-tts-tests.ts',
       'integration/04-content-library-tests.ts',
@@ -349,7 +349,7 @@ if (showDetailed) {
       'integration/07-advanced-tests.ts',
       'integration/08-tts-tests.ts',
       'integration/09-group-tests.ts',
-      'integration/adaptive-tests.ts'
+      'integration/10-discovery-tests.ts'
     ]}
   ];
   

@@ -291,8 +291,11 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       
       // If we got the same station twice, try to find different ones from the available list
       if (firstStation === secondStation && availableStations.length >= 2) {
+        // Prefer stations that are in Sonos favorites
+        const favoriteStations = availableStations.filter(s => s.isInSonosFavorites);
+        
         // Filter out stations with problematic characters for testing
-        const safeStations = availableStations.filter(s => 
+        const safeStations = (favoriteStations.length >= 2 ? favoriteStations : availableStations).filter(s => 
           !s.stationName.includes('&') && 
           !s.stationName.includes('/') &&
           !s.stationName.includes('\\')
@@ -301,10 +304,17 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
         if (safeStations.length >= 2) {
           firstStation = safeStations[0].stationName;
           secondStation = safeStations[1].stationName;
+          testLog.info(`   Using favorite stations: "${firstStation}" and "${secondStation}"`);
+        } else if (favoriteStations.length >= 2) {
+          // Use favorites even if they have special characters
+          firstStation = favoriteStations[0].stationName;
+          secondStation = favoriteStations[1].stationName;
+          testLog.info(`   Using favorite stations (with special chars): "${firstStation}" and "${secondStation}"`);
         } else {
           // Use any two different stations
           firstStation = stationNames[0];
           secondStation = stationNames[1];
+          testLog.warn(`   Using non-favorite stations: "${firstStation}" and "${secondStation}"`);
         }
       }
       
@@ -333,7 +343,6 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5000);
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForState took: ${waitTime}ms`);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Let it play for 1 second
       
       // Get current track info
       let stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
@@ -341,7 +350,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
       const firstTrack = state.currentTrack?.title;
       testLog.info(`   First station playing: ${firstTrack || 'Unknown'}`);
       
-      // Wait for user to press Enter
+      // Wait for user to press Enter (or 5 seconds in non-interactive mode)
       await waitForContinueFlag();
       
       // No need to clear session - pandora/play endpoint does it automatically

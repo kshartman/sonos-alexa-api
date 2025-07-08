@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import logger from './logger.js';
+import { scheduler } from './scheduler.js';
 import type { SonosDevice } from '../sonos-device.js';
 import type { ZoneGroup } from '../topology-manager.js';
 import type { SonosTrack, SonosState } from '../types/sonos.js';
@@ -69,7 +70,7 @@ export class EventManager extends EventEmitter {
   private lastEventTime: Map<string, number> = new Map(); // Track last event per device
   private deviceHealthTimeout = 3600000; // 1 hour - if no events, consider unhealthy
   private staleNotifyTimeout = 90000; // 90 seconds - if no NOTIFY events, subscription may be stale
-  private healthCheckInterval?: NodeJS.Timeout;
+  private readonly HEALTH_CHECK_TASK_ID = 'event-manager-health-check';
   private healthCheckIntervalMs = 60000; // Check every minute
   
   // Group/stereo pair tracking for event handling
@@ -175,30 +176,41 @@ export class EventManager extends EventEmitter {
   
   // Wait for device to exit TRANSITIONING state
   async waitForStableState(deviceId: string, timeout = 10000): Promise<string | null> {
-    // Get all group members for this device
-    const groupMembers = this.getGroupMembers(deviceId);
+    logger.trace(`EventManager: waitForStableState called for device ${deviceId}, timeout: ${timeout}ms`);
     
-    // First check if we're already in a stable state (check all group members)
-    for (const memberId of groupMembers) {
-      const currentState = this.getCurrentState(memberId);
-      if (currentState && currentState !== 'TRANSITIONING') {
-        logger.trace(`EventManager: waitForStableState - device ${memberId} (group member of ${deviceId}) already in stable state: ${currentState}`);
-        return currentState; // Already in stable state
-      }
+    // Get the coordinator for this device/group
+    // Try both with and without uuid: prefix
+    let coordinator = this.discovery?.getCoordinator(deviceId);
+    if (!coordinator && deviceId.startsWith('uuid:')) {
+      coordinator = this.discovery?.getCoordinator(deviceId.substring(5));
+    }
+    if (!coordinator) {
+      logger.warn(`EventManager: waitForStableState - no coordinator found for ${deviceId}`);
+      return null;
+    }
+    
+    const coordinatorId = coordinator.id;
+    logger.trace(`EventManager: waitForStableState - using coordinator ${coordinatorId} for device ${deviceId}`);
+    
+    // Check if coordinator is already in a stable state
+    const currentState = this.getCurrentState(coordinatorId);
+    if (currentState && currentState !== 'TRANSITIONING') {
+      logger.trace(`EventManager: waitForStableState - coordinator ${coordinatorId} already in stable state: ${currentState}`);
+      return currentState;
     }
     
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.off('state-change', stateHandler);
-        resolve(null);
+        const finalState = this.getCurrentState(coordinatorId);
+        logger.trace(`EventManager: waitForStableState - timeout reached, coordinator state: ${finalState}`);
+        resolve(finalState || null);
       }, timeout);
       
       const stateHandler = (event: StateChangeEvent) => {
-        // Check if the event is from any device in the group
-        const isGroupMember = groupMembers.some(memberId => compareDeviceIds(event.deviceId, memberId));
-        
-        if (isGroupMember && event.currentState !== 'TRANSITIONING') {
-          logger.trace(`EventManager: waitForStableState - received stable state from ${event.deviceId} (group member of ${deviceId})`);
+        // Only care about state changes from the coordinator
+        if (compareDeviceIds(event.deviceId, coordinatorId) && event.currentState !== 'TRANSITIONING') {
+          logger.trace(`EventManager: waitForStableState - coordinator ${coordinatorId} reached stable state: ${event.currentState}`);
           clearTimeout(timeoutId);
           this.off('state-change', stateHandler);
           resolve(event.currentState);
@@ -483,7 +495,7 @@ export class EventManager extends EventEmitter {
     this.muteHistory.clear();
     // Remove all device listeners
     for (const [deviceId, listener] of this.deviceListeners) {
-      const device = global.discovery?.getDeviceById(deviceId);
+      const device = this.discovery?.getDeviceById(deviceId);
       if (device) {
         device.off('state-change', listener);
       }
@@ -581,7 +593,7 @@ export class EventManager extends EventEmitter {
     
     const listener = this.deviceListeners.get(deviceId);
     if (listener) {
-      const device = global.discovery?.getDeviceById(deviceId);
+      const device = this.discovery?.getDeviceById(deviceId);
       if (device) {
         device.off('state-change', listener);
         logger.debug(`EventManager: Unregistered device ${device.roomName} (${deviceId})`);
@@ -681,22 +693,24 @@ export class EventManager extends EventEmitter {
   
   // Start periodic health checks
   private startHealthCheck(): void {
-    this.healthCheckInterval = setInterval(() => {
-      const staleDevices = this.getStaleNotifyDevices();
-      if (staleDevices.length > 0) {
-        logger.debug(`EventManager: Found ${staleDevices.length} devices with stale NOTIFY subscriptions`);
-        // Emit event so discovery can attempt to resubscribe
-        this.emit('devices-need-resubscribe', staleDevices);
-      }
-    }, this.healthCheckIntervalMs);
+    scheduler.scheduleInterval(
+      this.HEALTH_CHECK_TASK_ID,
+      () => {
+        const staleDevices = this.getStaleNotifyDevices();
+        if (staleDevices.length > 0) {
+          logger.debug(`EventManager: Found ${staleDevices.length} devices with stale NOTIFY subscriptions`);
+          // Emit event so discovery can attempt to resubscribe
+          this.emit('devices-need-resubscribe', staleDevices);
+        }
+      },
+      this.healthCheckIntervalMs,
+      { unref: true }
+    );
   }
   
   // Stop health checks (for cleanup)
   stopHealthCheck(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = undefined;
-    }
+    scheduler.clearTask(this.HEALTH_CHECK_TASK_ID);
   }
   
   // Set discovery reference for group tracking

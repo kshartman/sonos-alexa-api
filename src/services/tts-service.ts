@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import { scheduler } from '../utils/scheduler.js';
 import type { Config } from '../types/sonos.js';
 
 const execAsync = promisify(exec);
@@ -16,7 +17,7 @@ const execAsync = promisify(exec);
 export class TTSService {
   private config: Config;
   private cacheDir: string;
-  private cleanupInterval?: NodeJS.Timeout;
+  private readonly CLEANUP_TASK_ID = 'tts-cache-cleanup';
   private maxAge: number = 24 * 60 * 60 * 1000; // 24 hours default
 
   /**
@@ -40,11 +41,18 @@ export class TTSService {
     await fs.mkdir(this.cacheDir, { recursive: true });
     
     // Start cleanup interval - run every hour
-    this.cleanupInterval = setInterval(() => {
-      this.cleanCache(1).catch(err => 
-        logger.error('TTS cache cleanup error:', err)
-      );
-    }, 60 * 60 * 1000); // 1 hour
+    scheduler.scheduleInterval(
+      this.CLEANUP_TASK_ID,
+      async () => {
+        try {
+          await this.cleanCache(1);
+        } catch (err) {
+          logger.error('TTS cache cleanup error:', err);
+        }
+      },
+      60 * 60 * 1000, // 1 hour
+      { unref: true }
+    );
     
     // Run initial cleanup - remove files older than 1 day
     await this.cleanCache(1);
@@ -285,9 +293,6 @@ export class TTSService {
    * Shuts down the TTS service and cleans up resources.
    */
   destroy(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = undefined;
-    }
+    scheduler.clearTask(this.CLEANUP_TASK_ID);
   }
 }

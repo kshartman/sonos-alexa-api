@@ -1,4 +1,5 @@
 import logger from './logger.js';
+import { scheduler } from './scheduler.js';
 import { XMLParser } from 'fast-xml-parser';
 import type { SonosDiscovery } from '../discovery.js';
 import { promises as fs } from 'fs';
@@ -27,7 +28,7 @@ export class ServicesCache {
   private lastRefresh: Date | null = null;
   private refreshInterval: number = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   private discovery: SonosDiscovery;
-  private refreshTimer?: NodeJS.Timeout;
+  private readonly REFRESH_TASK_ID = 'services-cache-refresh';
 
   constructor(discovery: SonosDiscovery) {
     this.discovery = discovery;
@@ -46,22 +47,26 @@ export class ServicesCache {
 
   private scheduleNextRefresh(): void {
     // Clear any existing timer
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-    }
+    scheduler.clearTask(this.REFRESH_TASK_ID);
 
     // Schedule next refresh
-    this.refreshTimer = setTimeout(() => {
-      logger.info('Performing scheduled services cache refresh');
-      this.refresh().then(async () => {
-        await this.writeCacheToFile();
-        this.scheduleNextRefresh();
-      }).catch(error => {
-        logger.error('Failed to refresh services cache:', error);
-        // Retry in 1 hour if refresh fails
-        this.refreshTimer = setTimeout(() => this.scheduleNextRefresh(), 60 * 60 * 1000);
-      });
-    }, this.refreshInterval);
+    scheduler.scheduleTimeout(
+      this.REFRESH_TASK_ID,
+      async () => {
+        logger.info('Performing scheduled services cache refresh');
+        try {
+          await this.refresh();
+          await this.writeCacheToFile();
+          this.scheduleNextRefresh();
+        } catch (error) {
+          logger.error('Failed to refresh services cache:', error);
+          // Retry in 1 hour if refresh fails
+          scheduler.scheduleTimeout(`${this.REFRESH_TASK_ID}-retry`, () => this.scheduleNextRefresh(), 60 * 60 * 1000, { unref: true });
+        }
+      },
+      this.refreshInterval,
+      { unref: true }
+    );
   }
 
   async getServices(): Promise<Record<string, ServiceInfo>> {
@@ -381,8 +386,7 @@ export class ServicesCache {
   }
 
   destroy(): void {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-    }
+    scheduler.clearTask(this.REFRESH_TASK_ID);
+    scheduler.clearTask(`${this.REFRESH_TASK_ID}-retry`);
   }
 }

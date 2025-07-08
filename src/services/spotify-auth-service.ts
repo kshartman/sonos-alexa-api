@@ -1,18 +1,23 @@
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
 import { loadConfiguration } from '../utils/config-loader.js';
+import { scheduler } from '../utils/scheduler.js';
 import { SpotifyTokenManager, SpotifyTokens } from './spotify-token-manager.js';
 import { httpRequest } from '../utils/http.js';
+import type { Config } from '../types/sonos.js';
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
 export class SpotifyAuthService {
-  private config = loadConfiguration();
+  private config: Config;
   private tokenManager: SpotifyTokenManager;
   private pendingStates = new Map<string, { instanceId: string; expiresAt: number }>();
+  private readonly CLEANUP_TASK_ID = 'spotify-auth-cleanup';
 
-  constructor() {
+  constructor(config?: Config) {
+    // Accept optional config to avoid multiple loadConfiguration() calls during testing
+    this.config = config || loadConfiguration();
     this.tokenManager = new SpotifyTokenManager(
       this.config.dataDir || './data',
       process.env.INSTANCE_ID
@@ -25,7 +30,7 @@ export class SpotifyAuthService {
     }
     
     // Clean up expired states every minute
-    setInterval(() => this.cleanupExpiredStates(), 60000);
+    scheduler.scheduleInterval(this.CLEANUP_TASK_ID, () => this.cleanupExpiredStates(), 60000, { unref: true });
   }
 
   /**
@@ -235,4 +240,10 @@ export class SpotifyAuthService {
 }
 
 // Export singleton instance
+// Create singleton instance with default config
 export const spotifyAuthService = new SpotifyAuthService();
+
+// Factory function for creating instances with custom config
+export function createSpotifyAuthService(config: Config): SpotifyAuthService {
+  return new SpotifyAuthService(config);
+}

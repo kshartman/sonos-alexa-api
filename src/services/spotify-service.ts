@@ -1,8 +1,9 @@
 import { MusicService, MusicSearchResult, MusicServiceConfig, ServiceAccount } from './music-service.js';
 import logger from '../utils/logger.js';
 import type { SonosDevice } from '../sonos-device.js';
-import { spotifyAuthService } from './spotify-auth-service.js';
+import { spotifyAuthService, createSpotifyAuthService, SpotifyAuthService } from './spotify-auth-service.js';
 import { loadConfiguration } from '../utils/config-loader.js';
+import type { Config } from '../types/sonos.js';
 
 interface SpotifySearchResponse {
   tracks?: {
@@ -56,7 +57,8 @@ export class SpotifyService extends MusicService {
   private readonly DEFAULT_SPOTIFY_SN = '1';
   private readonly DEFAULT_ALBUM_PREFIX = '1004006c';
   private readonly DEFAULT_PLAYLIST_PREFIX = '1006286c';
-  private readonly appConfig = loadConfiguration();
+  private readonly appConfig: Config;
+  private readonly authService: SpotifyAuthService;
   
   /*
    * SMAPI Flags Reference Table (undocumented Sonos behavior)
@@ -102,8 +104,8 @@ export class SpotifyService extends MusicService {
   private device?: SonosDevice;
   private missingPrefixCache = new Map<string, string>();
   
-  constructor() {
-    const config: MusicServiceConfig = {
+  constructor(appConfig?: Config) {
+    const musicServiceConfig: MusicServiceConfig = {
       country: 'US',
       search: {
         album: '/search?type=album&limit=50',
@@ -127,7 +129,12 @@ export class SpotifyService extends MusicService {
       }
     };
     
-    super(config);
+    super(musicServiceConfig);
+    
+    // Accept optional config to avoid multiple loadConfiguration() calls during testing
+    this.appConfig = appConfig || loadConfiguration();
+    // Create auth service with same config to avoid multiple loadConfiguration() calls
+    this.authService = appConfig ? createSpotifyAuthService(appConfig) : spotifyAuthService;
     
     // Initialize OAuth if refresh token is in config
     this.initializeAuth();
@@ -145,7 +152,7 @@ export class SpotifyService extends MusicService {
       }
       
       // Check authentication status
-      if (spotifyAuthService.isAuthenticated()) {
+      if (this.authService.isAuthenticated()) {
         logger.info('Spotify authentication is ready');
       } else {
         logger.warn('Spotify not authenticated. Visit /spotify/auth to connect.');
@@ -168,7 +175,7 @@ export class SpotifyService extends MusicService {
       // Get access token
       let accessToken: string;
       try {
-        accessToken = await spotifyAuthService.getAccessToken();
+        accessToken = await this.authService.getAccessToken();
       } catch (_error) {
         logger.warn('Spotify not authenticated. Search requires OAuth authentication.');
         return [];
@@ -196,7 +203,7 @@ export class SpotifyService extends MusicService {
         // If token expired, try to refresh and retry once
         if (response.status === 401) {
           logger.info('Access token expired, refreshing...');
-          accessToken = await spotifyAuthService.refreshAccessToken();
+          accessToken = await this.authService.refreshAccessToken();
           
           // Retry the request
           const retryResponse = await fetch(url, {
@@ -237,7 +244,7 @@ export class SpotifyService extends MusicService {
     try {
       let accessToken: string;
       try {
-        accessToken = await spotifyAuthService.getAccessToken();
+        accessToken = await this.authService.getAccessToken();
       } catch (_error) {
         logger.warn('Spotify not authenticated for top tracks request');
         return [];

@@ -3,6 +3,7 @@ import { watch as watchFs } from 'fs';
 import { join } from 'path';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
+import { scheduler } from './utils/scheduler.js';
 import { tryConvertPreset, type PresetWithLegacy } from './utils/preset-converter.js';
 import type { PresetCollection, Preset, Config } from './types/sonos.js';
 import type { SonosDiscovery } from './discovery.js';
@@ -31,7 +32,7 @@ interface PresetLoadResult {
 export class PresetLoader {
   private presetDir: string;
   private presets: PresetCollection = {};
-  private watchTimeout?: NodeJS.Timeout | undefined;
+  private readonly WATCH_TASK_ID = 'preset-loader-watch';
   private watcher?: ReturnType<typeof watchFs> | undefined;
   private discovery?: SonosDiscovery | undefined;
   private onStatsUpdate?: ((stats: PresetLoadResult) => void) | undefined;
@@ -238,10 +239,8 @@ export class PresetLoader {
       }
 
       this.watcher = watchFs(this.presetDir, { persistent: false }, () => {
-        if (this.watchTimeout) {
-          clearTimeout(this.watchTimeout);
-        }
-        this.watchTimeout = setTimeout(() => this.loadPresets(), 200);
+        scheduler.clearTask(this.WATCH_TASK_ID);
+        scheduler.scheduleTimeout(this.WATCH_TASK_ID, () => this.loadPresets(), 200, { unref: true });
       });
       
       logger.info(`Watching preset directory for changes: ${this.presetDir}`);
@@ -256,10 +255,7 @@ export class PresetLoader {
       this.watcher = undefined;
     }
     
-    if (this.watchTimeout) {
-      clearTimeout(this.watchTimeout);
-      this.watchTimeout = undefined;
-    }
+    scheduler.clearTask(this.WATCH_TASK_ID);
   }
 
   getPreset(name: string): Preset | undefined {

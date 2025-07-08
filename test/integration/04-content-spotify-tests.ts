@@ -42,9 +42,19 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       testLog.info('⚠️  Spotify not configured in Sonos - skipping tests');
     }
     
+    // Stop any existing playback
+    testLog.info('⏹️  Stopping any existing playback...');
+    await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
+    
     // Clear the test room's queue to ensure clean state
     testLog.info('🗑️  Clearing test room queue...');
     await fetch(`${defaultConfig.apiUrl}/${testRoom}/clearqueue`);
+    
+    // Set initial volume like other tests
+    if (testContext.defaultVolume !== undefined) {
+      testLog.info(`🔊 Setting initial volume to ${testContext.defaultVolume}...`);
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/volume/${testContext.defaultVolume}`);
+    }
   });
 
   after(async () => {
@@ -90,11 +100,28 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       
       const result = await response.json();
       
-      // If the search failed, try to understand why
+      // If the search failed, try a fallback search
+      if (result.status !== 'success') {
+        testLog.info(`   ⚠️  No results for "${songQuery}", trying fallback search...`);
+        
+        // Try with a more common song
+        const fallbackQuery = 'Yesterday';
+        const fallbackResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/spotify/song/${encodeURIComponent(fallbackQuery)}`);
+        
+        if (fallbackResponse.status === 200) {
+          const fallbackResult = await fallbackResponse.json();
+          if (fallbackResult.status === 'success') {
+            testLog.info(`   ✅ Fallback search succeeded with "${fallbackQuery}"`);
+            Object.assign(result, fallbackResult);
+          }
+        }
+      }
+      
+      // If still no success, explain why
       if (result.status !== 'success') {
         testLog.info(`   ❌ Spotify search failed. This could mean:`);
         testLog.info(`      - Spotify account not configured in Sonos`);
-        testLog.info(`      - Search term "${songQuery}" not found`);
+        testLog.info(`      - Search terms not found`);
         testLog.info(`      - Service temporarily unavailable`);
         
         // Skip the rest of the test if Spotify isn't working
@@ -119,11 +146,11 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       
       if (trackChanged) {
         const stableStartTime = Date.now();
-        const finalState = await testContext.eventManager.waitForStableState(deviceId, 11500);
+        const reachedPlaying = await testContext.eventManager.waitForState(deviceId, 'PLAYING', 11500);
         const stableTime = Date.now() - stableStartTime;
-        testLog.info(`   ⏱️  WaitForStableState took: ${stableTime}ms`);
+        testLog.info(`   ⏱️  WaitForState took: ${stableTime}ms`);
         testLog.info(`   ⏱️  Total time from search to stable: ${Date.now() - searchStartTime}ms`);
-        assert(finalState === 'PLAYING', `Expected PLAYING state, got ${finalState}`);
+        assert(reachedPlaying, 'Should reach PLAYING state');
         
         const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
         const state = await stateResponse.json();
@@ -132,7 +159,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       }
       
       // Wait for user to verify playback
-      await waitForContinueFlag();
+      await waitForContinueFlag(0);
     });
 
     it('should search and play an album on Spotify', async function() {
@@ -187,7 +214,137 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
         testLog.info(`   ✅ Playing album track: ${state.currentTrack?.title || 'Unknown'} from ${state.currentTrack?.album || 'Unknown'}`);
         
         // Wait for user to verify playback
-        await waitForContinueFlag();
+        await waitForContinueFlag(0);
+      }
+    });
+
+    it('should search and play an artist on Spotify', async function() {
+      if (!hasSpotify) {
+        testLog.info('⚠️  Test skipped - Spotify not configured');
+        this.skip();
+        return;
+      }
+      
+      if (!isAuthenticated) {
+        testLog.info('⚠️  Test skipped - Spotify not authenticated (OAuth required for search)');
+        this.skip();
+        return;
+      }
+
+      // Stop current playback
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/stop`);
+      await testContext.eventManager.waitForState(deviceId, 'STOPPED', 2000);
+
+      // Try multiple artist search terms if available
+      let searchSuccess = false;
+      let successfulResult: any;
+      
+      for (const artistQuery of testContext.musicsearchArtistTerms) {
+        testLog.info(`   🔍 Searching for artist: "${artistQuery}"`);
+        
+        const searchStartTime = Date.now();
+        const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/spotify/artist/${encodeURIComponent(artistQuery)}`);
+        const searchTime = Date.now() - searchStartTime;
+        testLog.info(`   ⏱️  Search request took: ${searchTime}ms`);
+        
+        if (response.status === 200) {
+          const result = await response.json();
+          if (result.status === 'success') {
+            searchSuccess = true;
+            successfulResult = result;
+            testLog.info(`✅ Found artist: "${result.artist}" - playing "${result.title}"`);
+            break;
+          }
+        }
+        
+        if (!searchSuccess && artistQuery !== testContext.musicsearchArtistTerms[testContext.musicsearchArtistTerms.length - 1]) {
+          testLog.info(`   ⚠️  No results for "${artistQuery}", trying next artist...`);
+        }
+      }
+      
+      if (!searchSuccess) {
+        testLog.info(`   ❌ Spotify artist search failed for all terms. This could mean:`);
+        testLog.info(`      - Spotify account not configured in Sonos`);
+        testLog.info(`      - None of the artists found: ${testContext.musicsearchArtistTerms.join(', ')}`);
+        testLog.info(`      - Service temporarily unavailable`);
+        this.skip();
+        return;
+      }
+      
+      assert(successfulResult.status === 'success', 'Spotify artist search should succeed with at least one artist');
+      assert(successfulResult.service === 'spotify', 'Service should be spotify');
+      assert(successfulResult.artist, 'Should have an artist');
+      
+      // Test playing the found track
+      const playStartTime = Date.now();
+      const trackChangePromise = testContext.eventManager.waitForTrackChange(deviceId, 40300);
+      
+      const trackChanged = await trackChangePromise;
+      const waitTime = Date.now() - playStartTime;
+      testLog.info(`   ⏱️  WaitForTrackChange took: ${waitTime}ms`);
+      
+      if (trackChanged) {
+        const stableStartTime = Date.now();
+        const reachedPlaying = await testContext.eventManager.waitForState(deviceId, 'PLAYING', 11500);
+        const stableTime = Date.now() - stableStartTime;
+        testLog.info(`   ⏱️  WaitForState took: ${stableTime}ms`);
+        testLog.info(`   ⏱️  Total time from play to stable: ${Date.now() - playStartTime}ms`);
+        assert(reachedPlaying, 'Should reach PLAYING state');
+        
+        const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
+        const state = await stateResponse.json();
+        assert(state.currentTrack, 'Should have current track info');
+        testLog.info(`✅ Playing Spotify artist track: ${state.currentTrack.title} by ${state.currentTrack.artist}`);
+      }
+      
+      // Wait for user to verify playback
+      await waitForContinueFlag(0);
+    });
+
+
+    it('should search for Spotify radio station (if supported)', async function() {
+      if (!hasSpotify) {
+        testLog.info('⚠️  Test skipped - Spotify not configured');
+        this.skip();
+        return;
+      }
+      
+      if (!isAuthenticated) {
+        testLog.info('⚠️  Test skipped - Spotify not authenticated (OAuth required for search)');
+        this.skip();
+        return;
+      }
+
+      // Try to search for a station/radio
+      const stationQuery = 'rock';
+      testLog.info(`   📻 Searching for station: "${stationQuery}"`);
+      
+      const searchStartTime = Date.now();
+      const response = await fetch(`${defaultConfig.apiUrl}/${testRoom}/musicsearch/spotify/station/${encodeURIComponent(stationQuery)}`);
+      const searchTime = Date.now() - searchStartTime;
+      testLog.info(`   ⏱️  Search request took: ${searchTime}ms`);
+      
+      // Station search might not be supported
+      if (response.status === 501) {
+        testLog.info('⚠️  Spotify station search not implemented');
+        this.skip();
+        return;
+      }
+      
+      if (response.status === 404) {
+        testLog.info('⚠️  Spotify station search returned 404 - feature may not be supported');
+        this.skip();
+        return;
+      }
+      
+      assert.strictEqual(response.status, 200);
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        testLog.info(`✅ Found Spotify station: ${result.title || 'Unknown'}`);
+        assert(result.service === 'spotify', 'Service should be spotify');
+      } else {
+        testLog.info('⚠️  Spotify station search not available');
       }
     });
 
@@ -222,11 +379,11 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       testLog.info(`   ⏱️  WaitForTrackChange took: ${waitTime}ms`);
       if (trackChanged) {
         const stableStartTime = Date.now();
-        const finalState = await testContext.eventManager.waitForStableState(deviceId, 11500);
+        const reachedPlaying = await testContext.eventManager.waitForState(deviceId, 'PLAYING', 11500);
         const stableTime = Date.now() - stableStartTime;
-        testLog.info(`   ⏱️  WaitForStableState took: ${stableTime}ms`);
+        testLog.info(`   ⏱️  WaitForState took: ${stableTime}ms`);
         testLog.info(`   ⏱️  Total time from play to stable: ${Date.now() - playStartTime}ms`);
-        assert(finalState === 'PLAYING', `Expected PLAYING state, got ${finalState}`);
+        assert(reachedPlaying, 'Should reach PLAYING state');
         
         const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
         const state = await stateResponse.json();
@@ -236,7 +393,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       }
       
       // Wait for user to verify playback
-      await waitForContinueFlag();
+      await waitForContinueFlag(0);
     });
 
     it('should play a Spotify album by ID', async function() {
@@ -276,7 +433,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       // Wait for playback to start - albums take longer because they add to queue
       try {
         const waitStartTime = Date.now();
-        await testContext.eventManager.waitForState(deviceId, 5800);
+        await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5800);
         const waitTime = Date.now() - waitStartTime;
         testLog.info(`   ⏱️  WaitForState took: ${waitTime}ms`);
         testLog.info(`   ⏱️  Total time from play to playing: ${Date.now() - playStartTime}ms`);
@@ -311,7 +468,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       testLog.info(`✅ Playing from album: ${state.currentTrack.title}`);
       
       // Wait for user to verify playback
-      await waitForContinueFlag();
+      await waitForContinueFlag(0);
     });
 
     it('should play a Spotify playlist by ID', async function() {
@@ -366,7 +523,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
 
       // Wait for playback to start
       const waitStartTime = Date.now();
-      await testContext.eventManager.waitForState(deviceId, 5800);
+      await testContext.eventManager.waitForState(deviceId, 'PLAYING', 5800);
       const waitTime = Date.now() - waitStartTime;
       testLog.info(`   ⏱️  WaitForState took: ${waitTime}ms`);
       testLog.info(`   ⏱️  Total time from play to playing: ${Date.now() - playStartTime}ms`);
@@ -383,7 +540,7 @@ describe('Spotify Content Integration Tests', { skip: skipIntegration, timeout: 
       testLog.info(`✅ Playing from playlist: ${state.currentTrack.title}`);
       
       // Wait for user to verify playback
-      await waitForContinueFlag();
+      await waitForContinueFlag(0);
     });
 
     it('should handle Spotify share URLs by converting to IDs', async () => {

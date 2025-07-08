@@ -1,5 +1,6 @@
 import { MusicLibraryService, MusicSearchResult } from './music-library-service.js';
 import logger from '../utils/logger.js';
+import { scheduler } from '../utils/scheduler.js';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -35,7 +36,7 @@ export class MusicLibraryCache {
   private indexingProgress: number = 0;
   private cacheFile: string;
   private libraryService: MusicLibraryService;
-  private reindexTimer?: NodeJS.Timeout | undefined;
+  private readonly REINDEX_TASK_ID = 'music-library-reindex';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private onStatsUpdate?: ((stats: any) => void) | undefined; // ANY IS CORRECT: stats object contains dynamic properties
 
@@ -775,10 +776,7 @@ export class MusicLibraryCache {
    */
   setReindexInterval(intervalString?: string): void {
     // Clear existing timer
-    if (this.reindexTimer) {
-      clearInterval(this.reindexTimer);
-      this.reindexTimer = undefined;
-    }
+    scheduler.clearTask(this.REINDEX_TASK_ID);
 
     if (!intervalString) {
       logger.info('No reindex interval configured');
@@ -788,29 +786,26 @@ export class MusicLibraryCache {
     const intervalMs = this.parseInterval(intervalString);
     logger.info(`Setting music library reindex interval to ${intervalString} (${intervalMs}ms)`);
 
-    // Set up the timer
-    this.reindexTimer = setInterval(async () => {
-      logger.info('Starting scheduled music library reindex');
-      try {
-        await this.startBackgroundIndex();
-      } catch (error) {
-        logger.error('Failed to perform scheduled reindex:', error);
-      }
-    }, intervalMs);
-
-    // Don't block on process exit
-    if (this.reindexTimer.unref) {
-      this.reindexTimer.unref();
-    }
+    // Set up the timer using scheduler
+    scheduler.scheduleInterval(
+      this.REINDEX_TASK_ID,
+      async () => {
+        logger.info('Starting scheduled music library reindex');
+        try {
+          await this.startBackgroundIndex();
+        } catch (error) {
+          logger.error('Failed to perform scheduled reindex:', error);
+        }
+      },
+      intervalMs,
+      { unref: true }
+    );
   }
 
   /**
    * Clean up resources
    */
   destroy(): void {
-    if (this.reindexTimer) {
-      clearInterval(this.reindexTimer);
-      this.reindexTimer = undefined;
-    }
+    scheduler.clearTask(this.REINDEX_TASK_ID);
   }
 }

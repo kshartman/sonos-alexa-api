@@ -80,7 +80,7 @@ export class ApiRouter {
     this.defaultRoomManager = defaultRoomManager!;
     this.ttsService = ttsService!;
     this.appleMusicService = new AppleMusicService();
-    this.spotifyService = new SpotifyService();
+    this.spotifyService = new SpotifyService(config);
     this.servicesCache = new ServicesCache(discovery);
     this.accountService = new AccountService(this.servicesCache);
     
@@ -117,6 +117,11 @@ export class ApiRouter {
    * Sets up periodic reindexing based on configuration.
    */
   async initializeMusicLibrary(): Promise<void> {
+    // Skip music library initialization in unit test mode to prevent persistent timers
+    if (process.env.LOG_LEVEL === 'silent') {
+      logger.always('Skipping music library initialization in unit test mode');
+      return;
+    }
     try {
       // Get any device IP to access the music library
       const zones = await this.getZones();
@@ -259,6 +264,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/thumbsup', this.pandoraThumbsUp.bind(this));
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
     this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
+    this.routes.set('GET /{room}/pandora/stations/{detailed}', this.pandoraGetStations.bind(this));
     this.routes.set('GET /{room}/pandora/clear', this.pandoraClear.bind(this));
     this.routes.set('GET /{room}/spotify/play/{id}', this.spotifyPlay.bind(this));
     
@@ -1403,7 +1409,7 @@ export class ApiRouter {
   }
 
   // Favorites endpoints
-  private async getFavorites(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
+  private async getFavorites(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
@@ -1413,8 +1419,8 @@ export class ApiRouter {
     
     const favorites = await favoritesManager.getFavorites(device);
     
-    // Check if this is a detailed request (path contains 'detailed')
-    const isDetailed = detailed === 'detailed';
+    // Support both /detailed path parameter and ?detailed=true query parameter
+    const isDetailed = detailed === 'detailed' || queryParams?.get('detailed') === 'true';
     
     if (isDetailed) {
       return { status: 200, body: favorites };
@@ -1449,7 +1455,7 @@ export class ApiRouter {
   }
 
   // Playlists endpoints
-  private async getPlaylists(params: RouteParams, _queryParams?: URLSearchParams): Promise<ApiResponse> {
+  private async getPlaylists(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
@@ -1458,8 +1464,8 @@ export class ApiRouter {
     // Browse for playlists using ContentDirectory
     const playlists = await device.browse('SQ:', 0, 100);
     
-    // Check if this is a detailed request (path contains 'detailed')
-    const isDetailed = detailed === 'detailed';
+    // Support both /detailed path parameter and ?detailed=true query parameter
+    const isDetailed = detailed === 'detailed' || queryParams?.get('detailed') === 'true';
     
     if (isDetailed) {
       return { status: 200, body: playlists.items };
@@ -2351,7 +2357,17 @@ export class ApiRouter {
       
       // Build the URI with the correct session number and flags
       const encodedStationId = encodeURIComponent(rawStationId);
-      const updatedUri = `x-sonosapi-radio:ST%3a${encodedStationId}?sid=236&flags=8224&sn=${sessionNumber}`;
+      // Pandora SMAPI Flags (based on analysis):
+      // flags=0 (0x0000): No special handling
+      // flags=8224 (0x2020): Bits 5 & 13 set - Used by API (non-favorites)
+      // flags=8296 (0x2068): Bits 3, 6 & 13 set - Used by Sonos favorites
+      // Bit meanings (suspected):
+      // - Bit 3 (8): Radio/continuous play mode
+      // - Bit 5 (32): Allows grouped playback
+      // - Bit 6 (64): Favorite/personalized metadata
+      // - Bit 13 (8192): Common to both (unknown purpose)
+      // Use 8232 (0x2028) to add radio mode bit to API stations
+      const updatedUri = `x-sonosapi-radio:ST%3a${encodedStationId}?sid=236&flags=8232&sn=${sessionNumber}`;
       
       // Generate metadata to match Sonos app format
       const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
@@ -2479,13 +2495,24 @@ export class ApiRouter {
   }
   
   private async pandoraGetStations(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
-    const { room } = params;
+    const { room, detailed: detailedParam } = params;
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
-    const detailed = queryParams?.get('detailed') === 'true';
+    // Support both /detailed path parameter and ?detailed=true query parameter
+    const detailed = detailedParam === 'detailed' || queryParams?.get('detailed') === 'true';
     
     try {
-      // Check if Pandora API is available
+      // First, get favorites from FV:2
+      const device = this.getDevice(room);
+      const coordinator = this.discovery.getCoordinator(device.id) || device;
+      
+      const { PandoraFavoritesBrowser } = await import('./services/pandora-favorites.js');
+      const favoriteStations = await PandoraFavoritesBrowser.getUniqueStations(coordinator);
+      const favoriteStationNames = new Set(favoriteStations.map(s => s.title));
+      
+      logger.info(`Found ${favoriteStations.length} Pandora stations in Sonos favorites`);
+      
+      // Check if Pandora API is available to get additional stations
       const pandoraService = PandoraAPIService.getInstance(this.config);
       const api = pandoraService.getAPI();
       
@@ -2498,48 +2525,74 @@ export class ApiRouter {
           const stationData = await api.getStationList();
           
           if (detailed) {
-            // Return full station data with metadata
-            return { status: 200, body: stationData };
+            // Merge API stations with favorites, marking which are favorites
+            const mergedStations = stationData.stations.map(s => ({
+              ...s,
+              isInSonosFavorites: favoriteStationNames.has(s.stationName)
+            }));
+            
+            // Add any favorites not returned by API
+            for (const fav of favoriteStations) {
+              if (!mergedStations.some(s => s.stationName === fav.title)) {
+                mergedStations.push({
+                  stationName: fav.title,
+                  stationId: fav.stationId || '',
+                  isInSonosFavorites: true,
+                  isQuickMix: fav.title === 'QuickMix',
+                  isThumbprint: fav.title.includes('Thumbprint'),
+                  isUserCreated: true
+                });
+              }
+            }
+            
+            return { 
+              status: 200, 
+              body: {
+                ...stationData,
+                stations: mergedStations
+              }
+            };
           } else {
-            // Return just the station names for backwards compatibility
-            return { status: 200, body: stationData.stations.map(s => s.stationName) };
+            // Return just the station names with favorites first
+            const favoriteNames = Array.from(favoriteStationNames);
+            const apiStationNames = stationData.stations
+              .map(s => s.stationName)
+              .filter(name => !favoriteStationNames.has(name));
+            
+            return { status: 200, body: [...favoriteNames, ...apiStationNames] };
           }
         } catch (apiError) {
-          logger.warn('Pandora API failed, falling back to FV:2 browse:', apiError);
+          logger.warn('Pandora API failed, using only FV:2 browse:', apiError);
         }
       }
       
-      // Fall back to browsing FV:2 for Pandora favorites
-      logger.info('Using FV:2 browse to discover Pandora stations');
-      const device = this.getDevice(room);
-      const coordinator = this.discovery.getCoordinator(device.id) || device;
-      
-      const { PandoraFavoritesBrowser } = await import('./services/pandora-favorites.js');
-      const uniqueStations = await PandoraFavoritesBrowser.getUniqueStations(coordinator);
-      
-      if (uniqueStations.length === 0) {
+      // Fall back to only favorites from FV:2
+      if (favoriteStations.length === 0) {
         throw { status: 404, message: 'No Pandora stations found in favorites' };
       }
       
-      logger.info(`Found ${uniqueStations.length} unique Pandora stations from FV:2`);
+      logger.info(`Using ${favoriteStations.length} Pandora stations from FV:2 only`);
       
       if (detailed) {
-        // Return detailed format similar to API response
+        // Return detailed format for favorites only
         return { 
           status: 200, 
           body: {
-            stations: uniqueStations.map(s => ({
+            stations: favoriteStations.map(s => ({
               stationId: s.stationId,
               stationName: s.title,
               sessionNumber: s.sessionNumber,
               uri: s.uri,
-              isFromFavorites: true
+              isInSonosFavorites: true,
+              isQuickMix: s.title === 'QuickMix',
+              isThumbprint: s.title.includes('Thumbprint'),
+              isUserCreated: true
             }))
           }
         };
       } else {
         // Return just station names
-        return { status: 200, body: uniqueStations.map(s => s.title) };
+        return { status: 200, body: favoriteStations.map(s => s.title) };
       }
     } catch (error) {
       logger.error('Failed to get Pandora stations:', error);
@@ -2549,15 +2602,15 @@ export class ApiRouter {
   }
   
   // Queue management endpoints
-  private async getQueue({ room, limit, offset, detailed }: RouteParams): Promise<ApiResponse> {
+  private async getQueue({ room, limit, offset, detailed }: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     if (!room) throw { status: 400, message: 'Room parameter is required' };
     
     const device = this.getDevice(room);
     // Use coordinator for queue operations
     const coordinator = this.discovery.getCoordinator(device.id) || device;
     
-    // Check if this is a detailed request (last path segment is 'detailed')
-    const isDetailed = detailed === 'detailed' || limit === 'detailed' || offset === 'detailed';
+    // Support both /detailed path parameter and ?detailed=true query parameter
+    const isDetailed = detailed === 'detailed' || limit === 'detailed' || offset === 'detailed' || queryParams?.get('detailed') === 'true';
     
     // Parse numeric parameters
     let limitNum = 100;
@@ -3260,12 +3313,19 @@ export class ApiRouter {
         musicService = this.appleMusicService;
       }
 
-      // For artist search, convert to station (artist radio) for Spotify/Apple
-      const searchType = type === 'artist' ? 'station' : type;
+      // For artist search, convert to appropriate type for each service
+      // Apple Music: artist -> song (artist radio doesn't work)
+      // Spotify: artist -> station (uses artist search)
+      let searchType = type;
+      if (type === 'artist') {
+        searchType = serviceLower === 'apple' ? 'song' : 'station';
+      }
       
       // Perform search
-      logger.info(`Searching ${service} for ${type}: ${term}`);
-      const results = await musicService.search(searchType as 'album' | 'song' | 'station', term);
+      // For Apple Music artist searches, prepend "artist:" to the search term
+      const searchTerm = (type === 'artist' && serviceLower === 'apple') ? `artist:${term}` : term;
+      logger.info(`Searching ${service} for ${type}: ${searchTerm}`);
+      const results = await musicService.search(searchType as 'album' | 'song' | 'station', searchTerm);
       
       if (results.length === 0) {
         throw { status: 404, message: `No ${type}s found for: ${term}` };
@@ -3319,6 +3379,45 @@ export class ApiRouter {
             service: service,
             message: result.message
           } 
+        };
+      }
+      
+      // Special handling for Apple Music station search - create genre radio
+      if (serviceLower === 'apple' && type === 'station' && results.length > 1) {
+        logger.info(`Creating Apple Music genre radio for: ${term}`);
+        
+        // Clear queue and prepare for multiple tracks
+        await coordinator.clearQueue();
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.setAVTransportURI(queueURI, '');
+        
+        // Limit to 25 diverse tracks for radio experience
+        const radioTracks = results.slice(0, 25);
+        
+        // Add all tracks to queue
+        for (let i = 0; i < radioTracks.length; i++) {
+          const track = radioTracks[i]!;
+          const trackUri = musicService.generateURI('song', track);
+          const trackMetadata = musicService.generateMetadata('song', track);
+          await coordinator.addURIToQueue(trackUri, trackMetadata, true, i + 1);
+        }
+        
+        // Start playing
+        await coordinator.play();
+        
+        // Update default room
+        this.defaultRoomManager.setDefaults(roomName);
+        
+        return {
+          status: 200,
+          body: {
+            status: 'success',
+            title: `${term} Radio`,
+            artist: 'Various Artists',
+            album: `(${radioTracks.length} tracks)`,
+            service: 'apple',
+            message: `Playing ${radioTracks.length} ${term} tracks`
+          }
         };
       }
       

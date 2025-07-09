@@ -443,14 +443,14 @@ describe('Basic Playback Control Tests', { skip: skipIntegration, timeout: testT
       // This test verifies that even if something goes wrong,
       // the device doesn't get stuck in TRANSITIONING state
       
-      // Trigger a potentially problematic sequence
-      const promises = [
-        fetch(`${defaultConfig.apiUrl}/${testRoom}/play`),
-        fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`),
-        fetch(`${defaultConfig.apiUrl}/${testRoom}/play`)
-      ];
+      // Trigger a potentially problematic sequence with pauses between commands
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      await Promise.all(promises);
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/pause`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      await fetch(`${defaultConfig.apiUrl}/${testRoom}/play`);
       
       // Give time for all commands to process
       // Use longer timeout for remote testing

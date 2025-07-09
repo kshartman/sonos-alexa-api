@@ -453,7 +453,9 @@ describe('Basic Playback Control Tests', { skip: skipIntegration, timeout: testT
       await Promise.all(promises);
       
       // Give time for all commands to process
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Use longer timeout for remote testing
+      const settleTimeout = defaultConfig.remoteApi ? 5000 : 1000;
+      await new Promise(resolve => setTimeout(resolve, settleTimeout));
       
       // Check the actual state via API (not relying on events)
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);

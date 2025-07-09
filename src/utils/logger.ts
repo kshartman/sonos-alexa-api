@@ -62,13 +62,14 @@ if (loggerType === 'winston') {
       new winston.transports.Console({
         format: isDevelopment 
           ? winston.format.combine(
+            winston.format.timestamp(),
             winston.format.colorize(),
             winston.format.simple()
           )
           : winston.format.combine(
             winston.format.timestamp(),
             winston.format.errors({ stack: true }),
-            winston.format.json()
+            winston.format.simple()
           )
       })
     ]

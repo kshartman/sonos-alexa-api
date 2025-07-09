@@ -109,11 +109,32 @@ CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
 - **sse**: Server-Sent Events for webhooks
 - **all**: Enable all categories
 
-### Log Format
-- **Development**: Winston with colorized output (default when NODE_ENV=development)
-- **Production**: Pino with JSON format for better parsing/aggregation (default when NODE_ENV=production)
-- **Logger Selection**: Set LOGGER=winston or LOGGER=pino to override defaults
-- **Legacy**: LOG_FORMAT=json is deprecated, use LOGGER=pino instead
+### Logger System
+The application supports two logger implementations, automatically selected based on environment:
+
+#### Logger Selection
+- **Default Behavior**:
+  - Development (`NODE_ENV=development`): Winston with colorized output
+  - Production (`NODE_ENV=production`): Pino with JSON format
+- **Manual Override**: Set `LOGGER=winston` or `LOGGER=pino` to override defaults
+- **Source of Truth**: The actual logger in use is exposed at `/debug/startup` as `actualLoggerType`
+
+#### Winston Logger
+- **Development**: Colorized traditional format with timestamps
+- **Production**: Traditional format with timestamps (no colors)
+- **Use Case**: Human-readable logs, debugging, local development
+- **Format**: `2025-07-09T21:26:25.302Z info: Server ready at http://0.0.0.0:5005`
+
+#### Pino Logger
+- **Always JSON**: Structured JSON output in all environments
+- **Use Case**: Log aggregation, parsing, production monitoring
+- **Format**: `{"level":"info","timestamp":"2025-07-09T21:26:25.302Z","service":"sonos-alexa-api","message":"Server ready"}`
+- **Performance**: Faster than Winston, recommended for production
+
+#### Key Differences
+- **Timestamp Position**: Pino puts timestamp second, Winston puts it last in JSON
+- **Output Format**: Winston uses traditional format unless in dev mode, Pino always uses JSON
+- **Purpose**: Choose Winston for readability, Pino for parsing/performance
 
 ## Configuration Features
 

@@ -65,24 +65,25 @@ PORT=$2
 
 echo -e "${BLUE}=== Analyzing build on ${HOST}:${PORT} ===${NC}\n"
 
-# Fetch startup config
-STARTUP_DATA=$(curl -s http://${HOST}:${PORT}/debug/startup/config 2>/dev/null)
+# Fetch full startup data
+STARTUP_DATA=$(curl -s http://${HOST}:${PORT}/debug/startup 2>/dev/null)
 
 if [ -z "$STARTUP_DATA" ]; then
     echo -e "${RED}Error: Unable to connect to ${HOST}:${PORT}${NC}"
     exit 1
 fi
 
-# Extract interesting fields
-BUILD_DATE=$(echo "$STARTUP_DATA" | jq -r '.buildDate // "unknown"')
-VERSION=$(echo "$STARTUP_DATA" | jq -r '.version // "unknown"')
-NODE_ENV=$(echo "$STARTUP_DATA" | jq -r '.nodeEnv // "unknown"')
-IS_PRODUCTION=$(echo "$STARTUP_DATA" | jq -r '.isProduction // false')
-LOGGER=$(echo "$STARTUP_DATA" | jq -r '.loggerType // .logger // "unknown"')
-AUTH_ENABLED=$(echo "$STARTUP_DATA" | jq -r '.auth.username // empty' | grep -q . && echo "Yes" || echo "No")
+# Extract config and runtime data
+CONFIG_DATA=$(echo "$STARTUP_DATA" | jq -r '.config // {}')
+RUNTIME_DATA="$STARTUP_DATA"
 
-# Get runtime info from /debug/startup
-RUNTIME_DATA=$(curl -s http://${HOST}:${PORT}/debug/startup 2>/dev/null)
+# Extract interesting fields
+BUILD_DATE=$(echo "$CONFIG_DATA" | jq -r '.buildDate // "unknown"')
+VERSION=$(echo "$STARTUP_DATA" | jq -r '.version // "unknown"')
+NODE_ENV=$(echo "$CONFIG_DATA" | jq -r '.nodeEnv // "unknown"')
+IS_PRODUCTION=$(echo "$CONFIG_DATA" | jq -r '.isProduction // false')
+LOGGER=$(echo "$STARTUP_DATA" | jq -r '.actualLoggerType // .config.loggerType // .config.logger // "unknown"')
+AUTH_ENABLED=$(echo "$CONFIG_DATA" | jq -r '.auth.username // empty' | grep -q . && echo "Yes" || echo "No")
 UPTIME=$(echo "$RUNTIME_DATA" | jq -r '.system.uptime // 0' 2>/dev/null)
 DEVICE_COUNT=$(echo "$RUNTIME_DATA" | jq -r '.discovery.deviceCount // 0' 2>/dev/null)
 

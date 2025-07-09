@@ -1,5 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http';
-import logger from './utils/logger.js';
+import logger, { loggerType } from './utils/logger.js';
 import { getClientIp, isIpTrusted } from './utils/network-utils.js';
 import { getErrorMessage, getErrorStatus, errorMessageIncludes } from './utils/error-helper.js';
 import type { SonosDiscovery } from './discovery.js';
@@ -92,6 +92,7 @@ export class ApiRouter {
     // Add version and config to startup info
     this.startupInfo.version = config.version;
     this.startupInfo.config = config;
+    this.startupInfo.actualLoggerType = loggerType;
     
     this.registerRoutes();
   }

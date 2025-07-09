@@ -1,12 +1,12 @@
 # Sonos API Test Suite
 
-This test suite provides comprehensive unit and integration tests for the Sonos Alexa API. The test coverage has been significantly expanded to cover ~85% of all API endpoints.
+This test suite provides comprehensive unit and integration tests for the Sonos Alexa API. The test coverage has been significantly expanded to cover 94% of all API endpoints.
 
 ## Test Coverage
 
 - **Unit Tests**: Cover all core functionality with mocks (CI/CD safe)
-- **Integration Tests**: Adaptive tests that discover your Sonos system
-- **Coverage**: ~85% of all API endpoints tested
+- **Integration Tests**: Event-driven tests with real Sonos devices
+- **Coverage**: 94% of all API endpoints tested (exceeds 90% threshold)
 
 ## Running Tests
 
@@ -28,8 +28,8 @@ npm run test:coverage
 # Check test coverage with all test cases listed
 npm run test:coverage -- --detailed
 
-# Run tests with debug logging enabled (slower, verbose output)
-npm test -- --debug
+# Run tests with debug logging enabled (use LOG_LEVEL env var)
+LOG_LEVEL=debug npm test
 
 # List available test files
 npm run test:list
@@ -56,9 +56,9 @@ npm run test:groups      # Group management tests
 ### Command Line Options
 
 - `--mock-only`: Run only unit tests (no Sonos required)
-- `--debug`: Enable debug logging (all categories, debug level) - slower but verbose
-- `--grep <pattern>`: Filter tests by name/suite pattern
+- `--grep <pattern>` or `--match <pattern>`: Filter tests by name/suite pattern
 - `--no-server`: Don't auto-start the API server
+- `--detailed`: Show all test case names in coverage report
 
 ## How It Works
 
@@ -81,15 +81,25 @@ The integration tests:
 - Volume controls (set, adjust, mute, group volume)
 - SOAP request/response handling
 
-**Integration Tests (Adaptive):**
+**Integration Tests (Event-Driven):**
 - System discovery and health checks
-- Advanced playback features with state verification
-- Group management (join, leave, add, isolate)
-- Music library (favorites, playlists) - if available
-- Preset playback - if presets exist
-- Music services (Apple Music, Pandora) - if configured
-- Global commands (pauseall, resumeAll, sayall)
-- Text-to-Speech functionality
+- Advanced playback features with UPnP event verification
+- Group management (join, leave, add, isolate) 
+- Music library search and indexing
+- Preset loading and execution
+- Music services:
+  - Apple Music: Full search (song, album, artist, station)
+  - Pandora: Comprehensive testing with 4 suites:
+    - Suite 1: Favorite station play and thumbs down
+    - Suite 2: API station sequence (3 API + 1 favorite)
+    - Suite 3: Music search with fuzzy matching
+    - Suite 4: Error handling and stop command
+  - Spotify: Direct playback and OAuth
+  - Library: Local content search
+- Global commands (pauseall, resumeall)
+- Text-to-Speech with state restoration
+- Playback modes (repeat, shuffle, crossfade)
+- Sleep timer and line-in playback
 
 ### Test Structure
 
@@ -106,7 +116,14 @@ test/
 │   ├── 01-infrastructure-tests.ts  # Device discovery & infrastructure
 │   ├── 02-playback-tests.ts        # Basic playback control
 │   ├── 03-volume-tests.ts          # Volume control
-│   ├── 04-content-*.ts             # Content services (Apple, Spotify, etc.)
+│   ├── 04-content-*.ts             # Content services:
+│   │   ├── apple-tests.ts          # Apple Music search
+│   │   ├── defaults-tests.ts       # Default room/service
+│   │   ├── generic-tests.ts        # Generic music search
+│   │   ├── generic-tts-tests.ts    # Additional TTS scenarios
+│   │   ├── library-tests.ts        # Music library search
+│   │   ├── pandora-tests.ts        # Pandora (5 tests in 4 suites)
+│   │   └── spotify-tests.ts        # Spotify direct play
 │   ├── 05-group-tests-quick.ts     # Quick group tests
 │   ├── 06-playback-modes-tests.ts  # Playback modes (shuffle, repeat, etc.)
 │   ├── 07-advanced-tests.ts        # Advanced features
@@ -116,9 +133,11 @@ test/
 ├── helpers/                 # Test utilities
 │   ├── discovery.ts         # System discovery
 │   ├── state-manager.ts     # State save/restore
-│   ├── test-config.ts       # Configuration
+│   ├── test-config.ts       # Configuration and timeouts
 │   ├── mock-factory.ts      # Mock object creation
-│   ├── service-detector.ts  # Extended feature detection
+│   ├── content-loader.ts    # Dynamic content discovery
+│   ├── global-test-setup.ts # Event-driven test infrastructure
+│   ├── pandora-test-helpers.ts # Pandora availability checks
 │   └── server-manager.ts    # Test server lifecycle
 ├── run-tests.ts            # Test runner
 └── check-coverage.ts       # Coverage analyzer
@@ -126,10 +145,44 @@ test/
 
 ## Environment Variables
 
-- `TEST_MODE`: `non-destructive` or `full`
-- `MOCK_ONLY`: `true` to skip integration tests
+### Test Configuration
 - `TEST_API_URL`: API endpoint (default: `http://localhost:5005`)
-- `TEST_TIMEOUT`: Test timeout in ms (default: 10000)
+- `TEST_TIMEOUT`: Test timeout in ms (default: 60000)
+- `TEST_NO_TIMEOUT`: Set to disable timeouts completely
+- `TEST_INTERACTIVE`: Enable interactive mode with pauses
+- `LOG_LEVEL`: Set log verbosity (error, warn, info, debug, trace)
+- `MOCK_ONLY`: `true` to skip integration tests
+
+### Content Selection
+- `TEST_ROOM`: Specific room to use for tests
+- `TEST_SERVICE`: Default music service (apple, spotify, pandora, library)
+- `TEST_FAVORITE`: Specific favorite to use
+- `TEST_PLAYLIST`: Specific playlist to use
+- `TEST_PANDORA_STATIONS`: Semicolon-separated list of Pandora stations
+- `TEST_MUSICSEARCH_STATION`: Station name for music search test
+- `TEST_VOLUME_DEFAULT`: Initial volume level (0-100)
+
+### Test Data
+- `TEST_SONG_QUERIES`: JSON array of song search queries
+- `TEST_ALBUM_QUERIES`: JSON array of album search queries
+
+All environment variables can be set in `test/.env` file.
+
+## Key Test Features
+
+### Pandora Test Improvements
+- **Retry Mechanism**: Waits for PandoraStationManager initialization on server startup
+- **Dynamic Station Selection**: Uses TEST_PANDORA_STATIONS from environment
+- **Flexible Fallbacks**: Prefers favorites but uses API stations when needed
+- **Music Search Testing**: Configurable search term via TEST_MUSICSEARCH_STATION
+- **Source Tracking**: Verifies stations are categorized as 'api', 'favorite', or 'both'
+- **No API Calls**: Validates that playback uses pre-loaded cache only
+
+### Event-Driven Architecture
+- Tests wait for actual UPnP events instead of using fixed timeouts
+- Proper handling of TRANSITIONING states
+- Group-aware event handling for stereo pairs
+- Real-time state verification
 
 ## Writing New Tests
 
@@ -172,14 +225,21 @@ it('should test with state preservation', async () => {
 
 ## Coverage Report
 
-After running integration tests, you'll see a coverage summary:
+Generate and view detailed coverage reports:
 
+```bash
+# Run coverage analysis
+npm run test:coverage
+
+# View detailed coverage with all test names
+npm run test:coverage -- --detailed
 ```
-📈 Test Coverage Summary:
-   - Tested 5 rooms
-   - Group tests: Yes
-   - Service tests: apple, pandora
-```
+
+Current coverage: **94%** (210 total tests)
+- Unit tests: 69 tests across 6 files
+- Integration tests: 141 tests across 16 files
+
+See `test/COVERAGE_REPORT.md` for detailed breakdown.
 
 ## Continuous Integration
 

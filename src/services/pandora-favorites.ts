@@ -35,14 +35,17 @@ interface DIDLLite {
 
 // Cache for discovered stations
 interface StationCache {
-  stations: Map<string, PandoraFavorite>;
-  lastRefresh: number;
+  favorites: Map<string, PandoraFavorite>;  // Stations from FV:2
+  apiStations: Map<string, PandoraFavorite>; // Stations discovered via API play
+  favoritesLastRefresh: number;  // Separate refresh time for favorites
+  apiLastRefresh: number;        // Separate refresh time for API stations
   sessionNumber: string;
 }
 
 export class PandoraFavoritesBrowser {
   private static cache: StationCache | null = null;
-  private static readonly CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  private static readonly FAVORITES_TTL = 60 * 60 * 1000;     // 1 hour for favorites
+  private static readonly API_STATIONS_TTL = 24 * 60 * 60 * 1000; // 24 hours for API stations
   
   /**
    * Add a discovered station to the cache
@@ -51,8 +54,10 @@ export class PandoraFavoritesBrowser {
     if (!this.cache) {
       // Initialize cache if not exists
       this.cache = {
-        stations: new Map(),
-        lastRefresh: Date.now(),
+        favorites: new Map(),
+        apiStations: new Map(),
+        favoritesLastRefresh: 0,  // Force initial load
+        apiLastRefresh: Date.now(),
         sessionNumber: '1'
       };
     }
@@ -70,21 +75,58 @@ export class PandoraFavoritesBrowser {
       sessionNumber: sessionNumber || '1'
     };
     
-    // Only add if not already in cache or if this has a higher session number
-    const existing = this.cache.stations.get(stationId);
+    // Add to API stations cache (not favorites)
+    const existing = this.cache.apiStations.get(stationId);
     if (!existing || parseInt(sessionNumber || '1') >= parseInt(existing.sessionNumber)) {
-      this.cache.stations.set(stationId, favorite);
-      logger.info(`Added discovered station to cache: ${title} (${stationId}, SN=${sessionNumber})`);
+      this.cache.apiStations.set(stationId, favorite);
+      logger.info(`[CACHE] Added API-discovered station: ${title} (${stationId}, SN=${sessionNumber})`);
     }
   }
+  
+  /**
+   * Clear expired API stations from cache
+   */
+  static clearExpiredApiStations(): void {
+    if (!this.cache) return;
+    
+    const now = Date.now();
+    if (now - this.cache.apiLastRefresh > this.API_STATIONS_TTL) {
+      const oldCount = this.cache.apiStations.size;
+      this.cache.apiStations.clear();
+      this.cache.apiLastRefresh = now;
+      logger.info(`[CACHE] Cleared ${oldCount} expired API stations (TTL: 24 hours)`);
+    }
+  }
+  
+  /**
+   * Get cache statistics for debugging
+   */
+  static getCacheStats(): { favorites: number; apiStations: number; favoritesAge: string; apiAge: string } | null {
+    if (!this.cache) return null;
+    
+    const now = Date.now();
+    const favoritesAge = this.cache.favoritesLastRefresh ? 
+      `${Math.round((now - this.cache.favoritesLastRefresh) / 60000)} minutes` : 'never';
+    const apiAge = this.cache.apiLastRefresh ? 
+      `${Math.round((now - this.cache.apiLastRefresh) / 60000)} minutes` : 'never';
+    
+    return {
+      favorites: this.cache.favorites.size,
+      apiStations: this.cache.apiStations.size,
+      favoritesAge,
+      apiAge
+    };
+  }
+  
   /**
    * Browse Pandora favorites in FV:2 container
    */
   static async browsePandoraFavorites(device: SonosDevice, forceRefresh: boolean = false): Promise<PandoraFavorite[]> {
     // Check cache first
-    if (!forceRefresh && this.cache && (Date.now() - this.cache.lastRefresh) < this.CACHE_TTL) {
-      logger.debug('Using cached Pandora stations');
-      return Array.from(this.cache.stations.values());
+    if (!forceRefresh && this.cache && (Date.now() - this.cache.favoritesLastRefresh) < this.FAVORITES_TTL) {
+      const stats = this.getCacheStats();
+      logger.debug(`[CACHE] Using cached Pandora favorites (${stats?.favorites} items, age: ${stats?.favoritesAge})`);
+      return Array.from(this.cache.favorites.values());
     }
     
     try {
@@ -176,21 +218,27 @@ export class PandoraFavoritesBrowser {
         }
       }
       
+      // Preserve API stations if cache exists
+      const apiStations = this.cache?.apiStations || new Map();
+      const apiLastRefresh = this.cache?.apiLastRefresh || Date.now();
+      
       this.cache = {
-        stations: new Map(pandoraFavorites.map(f => [f.stationId, f])),
-        lastRefresh: Date.now(),
+        favorites: new Map(pandoraFavorites.map(f => [f.stationId, f])),
+        apiStations: apiStations,
+        favoritesLastRefresh: Date.now(),
+        apiLastRefresh: apiLastRefresh,
         sessionNumber: highestSessionNumber
       };
       
-      logger.info(`Found ${pandoraFavorites.length} Pandora favorites, cached with session number ${highestSessionNumber}`);
+      logger.info(`[CACHE] Updated favorites cache: ${pandoraFavorites.length} stations (SN=${highestSessionNumber})`);
       return pandoraFavorites;
       
     } catch (error) {
       logger.error('Error browsing Pandora favorites:', error);
       // Return cached data if available
       if (this.cache) {
-        logger.warn('Returning cached data due to browse error');
-        return Array.from(this.cache.stations.values());
+        logger.warn('Returning cached favorites due to browse error');
+        return Array.from(this.cache.favorites.values());
       }
       return [];
     }
@@ -277,11 +325,16 @@ export class PandoraFavoritesBrowser {
   static async getUniqueStations(device: SonosDevice): Promise<PandoraFavorite[]> {
     const favorites = await this.browsePandoraFavorites(device);
     
-    // Merge with cached stations
+    // Clear expired API stations before merging
+    this.clearExpiredApiStations();
+    
+    // Merge with cached API stations
     const allStations: PandoraFavorite[] = [...favorites];
     if (this.cache) {
-      for (const [stationId, cachedStation] of this.cache.stations) {
-        // Only add cached stations that aren't in favorites
+      const stats = this.getCacheStats();
+      logger.debug(`[CACHE] Merging ${stats?.favorites} favorites with ${stats?.apiStations} API stations`);
+      for (const [stationId, cachedStation] of this.cache.apiStations) {
+        // Only add API stations that aren't in favorites
         if (!favorites.some(f => f.stationId === stationId)) {
           allStations.push(cachedStation);
         }

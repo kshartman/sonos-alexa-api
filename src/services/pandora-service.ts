@@ -45,8 +45,9 @@ export class PandoraService {
    */
   static generateStationURI(stationId: string, sessionNumber: string = '1'): string {
     const encodedId = encodeURIComponent(stationId);
-    // Match Sonos app: use flags=0 instead of flags=8300
-    return `x-sonosapi-radio:ST%3a${encodedId}?sid=${this.PANDORA_SID}&flags=0&sn=${sessionNumber}`;
+    // Use flags=40992 (0xA020) - API flags (8224) + Sonos app bit (32768)
+    // This improves compatibility and metadata resolution
+    return `x-sonosapi-radio:ST%3a${encodedId}?sid=${this.PANDORA_SID}&flags=40992&sn=${sessionNumber}`;
   }
 
   /**
@@ -198,12 +199,23 @@ export class PandoraService {
         metadata = this.generateStationMetadata(newStation.stationId, newStation.stationName);
       } else {
         // Use existing station
-        const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
-        uri = this.generateStationURI(stationId, sessionNumber);
-        metadata = this.generateStationMetadata(stationId, match.item.stationName);
+        // If this station came from favorites, use the original URI which has the correct flags
+        if (match.item.favoriteProperties?.uri) {
+          uri = match.item.favoriteProperties.uri;
+          // Update session number in the URI if needed
+          uri = uri.replace(/sn=\d+/, `sn=${sessionNumber}`);
+          metadata = this.generateStationMetadata(match.item.stationId, match.item.stationName);
+        } else {
+          // Generate URI for API stations
+          const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
+          uri = this.generateStationURI(stationId, sessionNumber);
+          metadata = this.generateStationMetadata(stationId, match.item.stationName);
+        }
       }
       
-      logger.debug(`Playing Pandora station with URI: ${uri}`);
+      logger.info(`Playing Pandora station with URI: ${uri}`);
+      logger.debug(`Station has favoriteProperties: ${!!match.item.favoriteProperties}`);
+      logger.debug(`Station has apiProperties: ${!!match.item.apiProperties}`);
       
       // Set and play the station
       await device.setAVTransportURI(uri, metadata);
@@ -360,8 +372,15 @@ export class PandoraService {
         title = newStation.stationName;
       } else {
         // Use existing station
-        const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
-        uri = this.generateStationURI(stationId);
+        // If this station came from favorites, use the original URI which has the correct flags
+        if (match.item.favoriteProperties?.uri) {
+          uri = match.item.favoriteProperties.uri;
+          // Note: We don't update session number here as it will be handled by the caller
+        } else {
+          // Generate URI for API stations
+          const stationId = match.item.apiProperties?.stationToken || match.item.stationId;
+          uri = this.generateStationURI(stationId);
+        }
         title = match.item.stationName;
       }
       

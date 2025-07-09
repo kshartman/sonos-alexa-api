@@ -14,11 +14,11 @@ import { createSpotifyAuthService, SpotifyAuthService } from './services/spotify
 import { AccountService } from './services/account-service.js';
 import type { ServiceAccount } from './services/music-service.js';
 import { MusicLibraryCache } from './services/music-library-cache.js';
-import { createError, type Config, type ApiResponse, type RouteParams, type ErrorResponse, type SuccessResponse, type MusicSearchSuccessResponse, type LibrarySearchSuccessResponse, type BrowseItem, type QueueItem, type PandoraStation } from './types/sonos.js';
+import { createError, type Config, type ApiResponse, type RouteParams, type ErrorResponse, type SuccessResponse, type MusicSearchSuccessResponse, type LibrarySearchSuccessResponse, type BrowseItem, type QueueItem } from './types/sonos.js';
 import { debugManager, type DebugCategories, type LogLevel } from './utils/debug-manager.js';
 import { ServicesCache } from './utils/services-cache.js';
 import { EventManager } from './utils/event-manager.js';
-import { PandoraAPIService } from './services/pandora-api-service.js';
+import { PandoraStationManager } from './services/pandora-station-manager.js';
 import { scheduler } from './utils/scheduler.js';
 
 type RouteHandler = (params: RouteParams, queryParams?: URLSearchParams, body?: string) => Promise<ApiResponse>;
@@ -39,6 +39,7 @@ export class ApiRouter {
   private accountService: AccountService;
   private musicLibraryCache?: MusicLibraryCache;
   private servicesCache: ServicesCache;
+  private pandoraStationManager: PandoraStationManager;
   private routes = new Map<string, RouteHandler>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private startupInfo: any = { // ANY IS CORRECT: startup info contains dynamic properties added at runtime
@@ -86,6 +87,7 @@ export class ApiRouter {
     this.spotifyAuthService = createSpotifyAuthService(config);
     this.servicesCache = new ServicesCache(discovery);
     this.accountService = new AccountService(this.servicesCache);
+    this.pandoraStationManager = PandoraStationManager.getInstance(config);
     
     // Add version and config to startup info
     this.startupInfo.version = config.version;
@@ -113,6 +115,19 @@ export class ApiRouter {
     
     // Initialize music library
     await this.initializeMusicLibrary();
+    
+    // Initialize Pandora station manager
+    try {
+      await this.pandoraStationManager.initialize(this.discovery);
+      const stats = this.pandoraStationManager.getStats();
+      this.updateStartupInfo('pandoraStations', stats);
+      logger.info(`Pandora station manager initialized with ${stats.total} stations`);
+    } catch (error) {
+      logger.error('Failed to initialize Pandora station manager:', error);
+      this.updateStartupInfo('errors', {
+        pandoraStations: (error as Error).message
+      });
+    }
   }
 
   /**
@@ -268,6 +283,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/thumbsdown', this.pandoraThumbsDown.bind(this));
     this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
     this.routes.set('GET /{room}/pandora/stations/{detailed}', this.pandoraGetStations.bind(this));
+    this.routes.set('GET /pandora/stations', this.pandoraAllStations.bind(this));
     this.routes.set('GET /{room}/pandora/clear', this.pandoraClear.bind(this));
     this.routes.set('GET /{room}/spotify/play/{id}', this.spotifyPlay.bind(this));
     
@@ -476,35 +492,23 @@ export class ApiRouter {
   }
 
   /**
-   * Clear Pandora session by playing a short silence file
+   * Clear Pandora session by stopping and setting transport to queue
+   * This is more reliable than playing silence and properly releases the session
    */
   private async clearPandoraSession(device: SonosDevice): Promise<void> {
-    logger.debug('Clearing Pandora session with silence file');
+    logger.debug('Clearing Pandora session using stop + queue method');
     
     try {
-      // Get the server's URL for the silence file
-      const serverUrl = `http://${this.discovery.getLocalIP() || 'localhost'}:${this.config.port}`;
-      const silenceUri = `${serverUrl}/static/audio/silence.mp3`;
-      const silenceMetadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-        <item id="-1" parentID="-1" restricted="true">
-          <dc:title>Silence</dc:title>
-          <upnp:class>object.item.audioItem.musicTrack</upnp:class>
-          <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">RINCON_AssociatedZPUDN</desc>
-        </item>
-      </DIDL-Lite>`;
-      
-      // Play the silence file
-      await device.setAVTransportURI(silenceUri, silenceMetadata);
-      await device.play();
-      
-      // Wait briefly for it to start playing
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Stop it
+      // Step 1: Stop playback
       await device.stop();
       
-      // Wait for clean state
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Step 2: Clear the transport by setting to queue
+      // This releases the Pandora session more reliably than playing silence
+      // Remove uuid: prefix if present
+      const deviceId = device.id.replace('uuid:', '');
+      const queueUri = `x-rincon-queue:${deviceId}#0`;
+      const queueMetadata = '';
+      await device.setAVTransportURI(queueUri, queueMetadata);
       
       logger.debug('Pandora session cleared successfully');
     } catch (error) {
@@ -2285,140 +2289,66 @@ export class ApiRouter {
     
     try {
       const decodedName = decodeURIComponent(name);
-      let stationUri: string | null = null;
-      let stationTitle: string | null = null;
       
-      // First try to find the station in favorites
-      logger.debug('Searching for Pandora station in favorites');
-      const { PandoraFavoritesBrowser } = await import('./services/pandora-favorites.js');
+      // Look up station from merged cache - NO API CALLS!
+      logger.debug(`Looking up Pandora station '${decodedName}' in merged cache`);
+      const station = this.pandoraStationManager.findStation(decodedName);
       
-      const favorite = await PandoraFavoritesBrowser.findStationInFavorites(coordinator, decodedName);
-      if (favorite) {
-        stationUri = favorite.uri;
-        stationTitle = favorite.title;
-        logger.info(`Found Pandora station in favorites: ${stationTitle}`);
-      } else {
-        // Try using Pandora API if available
-        const pandoraService = PandoraAPIService.getInstance(this.config);
-        const api = pandoraService.getAPI();
-        
-        if (api) {
-          logger.debug('Station not in favorites, trying Pandora API');
-          const { PandoraService } = await import('./services/pandora-service.js');
-          
-          try {
-            // Login to Pandora
-            await api.login();
-            
-            // Search for the station
-            const searchResult = await PandoraService.searchForStation(api, decodedName);
-            
-            if (searchResult) {
-              stationUri = searchResult.uri;
-              stationTitle = searchResult.title;
-              logger.info(`Found Pandora station via API: ${stationTitle}`);
-            }
-          } catch (apiError) {
-            logger.warn('Pandora API failed:', apiError);
-          }
-        }
-        
-        // Fall back to browse method if nothing worked
-        if (!stationUri) {
-          logger.debug('Using browse method to find Pandora station');
-          const { PandoraBrowser } = await import('./services/pandora-browse.js');
-          
-          const station = await PandoraBrowser.findStation(coordinator, decodedName);
-          if (station) {
-            stationUri = station.favoriteProperties?.uri || '';
-            stationTitle = station.stationName;
-          } else {
-            // Station not found anywhere - return proper error
-            logger.warn(`Station '${decodedName}' not found in API, favorites, or cache`);
-            throw createError(404, `Pandora station '${decodedName}' not found. Station must be in your Pandora favorites or have been played previously.`);
-          }
-        }
+      if (!station) {
+        logger.warn(`Station '${decodedName}' not found in merged station cache`);
+        throw createError(404, `Pandora station '${decodedName}' not found`);
       }
       
-      // Ensure we have both URI and title
-      if (!stationUri || !stationTitle) {
-        throw new Error(`Failed to find complete Pandora station information for '${decodedName}'`);
-      }
+      logger.info(`Found station in cache: ${station.stationName} (source: ${station.source})`);
       
-      // Get session number dynamically
+      // Get current session number
       const { PandoraSessionHelper } = await import('./services/pandora-session.js');
       const sessionNumber = await PandoraSessionHelper.getSessionNumber(coordinator);
       logger.debug(`Using Pandora session number: ${sessionNumber}`);
       
-      // Extract raw station ID from URI if it's a full URI
-      let rawStationId: string;
-      if (stationUri.startsWith('x-sonosapi-radio:')) {
-        // Extract station ID from full URI
-        const stationMatch = stationUri.match(/ST%3a([^?]+)/i);
-        if (stationMatch) {
-          rawStationId = decodeURIComponent(stationMatch[1]!);
-        } else {
-          throw new Error(`Could not extract station ID from URI: ${stationUri}`);
-        }
-      } else {
-        // It's already just the station ID
-        rawStationId = stationUri;
-      }
-      
-      // Build the URI with the correct session number and flags
-      const encodedStationId = encodeURIComponent(rawStationId);
-      // Pandora SMAPI Flags (based on analysis):
-      // flags=0 (0x0000): No special handling
-      // flags=8224 (0x2020): Bits 5 & 13 set - Used by API (non-favorites)
-      // flags=8296 (0x2068): Bits 3, 6 & 13 set - Used by Sonos favorites
-      // Bit meanings (suspected):
-      // - Bit 3 (8): Radio/continuous play mode
-      // - Bit 5 (32): Allows grouped playback
-      // - Bit 6 (64): Favorite/personalized metadata
-      // - Bit 13 (8192): Common to both (unknown purpose)
-      // Use 8232 (0x2028) to add radio mode bit to API stations
-      const updatedUri = `x-sonosapi-radio:ST%3a${encodedStationId}?sid=236&flags=8232&sn=${sessionNumber}`;
+      // Build the URI
+      const encodedId = encodeURIComponent(station.stationId);
+      const flags = station.flags || '40992'; // Default API flags + Sonos app bit
+      const stationUri = `x-sonosapi-radio:ST%3a${encodedId}?sid=236&flags=${flags}&sn=${sessionNumber}`;
       
       // Generate metadata to match Sonos app format
       const metadata = `<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/"
         xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"
         xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/"
         xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">
-        <item id="100c206cST%3a${encodedStationId}" parentID="-1" restricted="true">
-          <dc:title>${stationTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
-          <upnp:class>object.item.audioItem.audioBroadcast</upnp:class>
+        <item id="100c206cST%3a${encodedId}" parentID="0" restricted="true">
+          <dc:title>${station.stationName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</dc:title>
+          <upnp:class>object.item.audioItem.audioBroadcast.#station</upnp:class>
           <desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">
-            SA_RINCON60423_X_#Svc60423-b7ca2819-Token
+            SA_RINCON236_X_#Svc236-0-Token
           </desc>
         </item>
       </DIDL-Lite>`;
       
-      // IMPORTANT: Pandora requires proper session management on Sonos
-      // When switching between Pandora stations, we MUST stop playback first
-      // to release the current session. Otherwise, you'll get 701 or ERROR_NOT_AVAILABLE
-      // See: https://github.com/jishi/node-sonos-http-api/issues/119
-      // Always clear Pandora session with silence file before playing any station
-      logger.debug('Clearing Pandora session before playing new station');
-      await this.clearPandoraSession(coordinator);
+      // IMPORTANT: Pandora session management
+      // Check if currently playing to avoid conflicts
+      const currentState = await coordinator.getTransportInfo();
+      if (currentState.CurrentTransportState === 'PLAYING') {
+        logger.debug('Stopping current playback before switching Pandora station');
+        await coordinator.stop();
+        // Small delay to let the stop complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       
       // Set the new Pandora station URI with fresh metadata
-      logger.debug(`Setting Pandora URI: ${updatedUri}`);
-      await coordinator.setAVTransportURI(updatedUri, metadata);
+      logger.debug(`Setting Pandora URI: ${stationUri}`);
+      await coordinator.setAVTransportURI(stationUri, metadata);
       
-      // Wait for transport to be ready
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Longer delay to let the URI setting complete and possibly auto-play
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Start playback
-      logger.debug('Starting Pandora playback');
-      await coordinator.play();
-      
-      // Add discovered station to cache
-      if (stationUri.includes('ST%3a')) {
-        const stationIdMatch = stationUri.match(/ST%3a([^?&]+)/);
-        if (stationIdMatch && stationIdMatch[1]) {
-          const stationId = decodeURIComponent(stationIdMatch[1]);
-          PandoraFavoritesBrowser.addToCache(stationId, stationTitle, updatedUri, metadata);
-        }
+      // Check if already playing (sometimes setAVTransportURI auto-plays)
+      const newState = await coordinator.getTransportInfo();
+      if (newState.CurrentTransportState !== 'PLAYING') {
+        logger.debug('Starting Pandora playback');
+        await coordinator.play();
+      } else {
+        logger.debug('Pandora already playing after setting URI');
       }
       
       // Update default room
@@ -2504,6 +2434,23 @@ export class ApiRouter {
     return { status: 200, body: { status: 'success' } };
   }
   
+  private async pandoraAllStations(): Promise<ApiResponse> {
+    const stations = this.pandoraStationManager.getAllStations();
+    const stats = this.pandoraStationManager.getStats();
+    
+    return {
+      status: 200,
+      body: {
+        stations: stations.map(s => ({
+          id: s.stationId,
+          name: s.stationName,
+          source: s.source
+        })),
+        stats
+      }
+    };
+  }
+  
   private async pandoraGetStations(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed: detailedParam } = params;
     if (!room) throw createError(400, 'Room parameter is required');
@@ -2511,109 +2458,34 @@ export class ApiRouter {
     // Support both /detailed path parameter and ?detailed=true query parameter
     const detailed = detailedParam === 'detailed' || queryParams?.get('detailed') === 'true';
     
-    try {
-      // First, get favorites from FV:2
-      const device = this.getDevice(room);
-      const coordinator = this.discovery.getCoordinator(device.id) || device;
-      
-      const { PandoraFavoritesBrowser } = await import('./services/pandora-favorites.js');
-      const favoriteStations = await PandoraFavoritesBrowser.getUniqueStations(coordinator);
-      const favoriteStationNames = new Set(favoriteStations.map(s => s.title));
-      
-      logger.info(`Found ${favoriteStations.length} Pandora stations in Sonos favorites`);
-      
-      // Check if Pandora API is available to get additional stations
-      const pandoraService = PandoraAPIService.getInstance(this.config);
-      const api = pandoraService.getAPI();
-      
-      if (api) {
-        try {
-          // Login to Pandora
-          await api.login();
-          
-          // Get station list (will use cache if available)
-          const stationData = await api.getStationList();
-          
-          if (detailed) {
-            // Merge API stations with favorites, marking which are favorites
-            const mergedStations: PandoraStation[] = stationData.stations.map(s => ({
-              ...s,
-              isInSonosFavorites: favoriteStationNames.has(s.stationName)
-            }));
-            
-            // Add any favorites not returned by API
-            for (const fav of favoriteStations) {
-              if (!mergedStations.some(s => s.stationName === fav.title)) {
-                mergedStations.push({
-                  stationName: fav.title,
-                  stationId: fav.stationId || '',
-                  isInSonosFavorites: true,
-                  isQuickMix: fav.title === 'QuickMix',
-                  isThumbprint: fav.title.includes('Thumbprint'),
-                  isUserCreated: true,
-                  favoriteProperties: {
-                    uri: fav.uri,
-                    sessionNumber: parseInt(fav.sessionNumber, 10)
-                  }
-                });
-              }
-            }
-            
-            return { 
-              status: 200, 
-              body: {
-                ...stationData,
-                stations: mergedStations
-              }
-            };
-          } else {
-            // Return just the station names with favorites first
-            const favoriteNames = Array.from(favoriteStationNames);
-            const apiStationNames = stationData.stations
-              .map(s => s.stationName)
-              .filter(name => !favoriteStationNames.has(name));
-            
-            return { status: 200, body: [...favoriteNames, ...apiStationNames] };
-          }
-        } catch (apiError) {
-          logger.warn('Pandora API failed, using only FV:2 browse:', apiError);
+    // Just use the merged list from PandoraStationManager
+    const allStations = this.pandoraStationManager.getAllStations();
+    const favoriteStations = allStations.filter(s => s.source === 'favorite' || s.source === 'both');
+    
+    if (detailed) {
+      // Return full station details
+      return {
+        status: 200,
+        body: {
+          stations: allStations.map(s => ({
+            stationName: s.stationName,
+            stationId: s.stationId,
+            isInSonosFavorites: s.source === 'favorite' || s.source === 'both',
+            source: s.source,
+            // Add some reasonable defaults for compatibility
+            isQuickMix: s.stationName === 'QuickMix',
+            isThumbprint: s.stationName.includes('Thumbprint'),
+            isUserCreated: true
+          }))
         }
-      }
-      
-      // Fall back to only favorites from FV:2
-      if (favoriteStations.length === 0) {
-        throw createError(404, 'No Pandora stations found in favorites');
-      }
-      
-      logger.info(`Using ${favoriteStations.length} Pandora stations from FV:2 only`);
-      
-      if (detailed) {
-        // Return detailed format for favorites only
-        return { 
-          status: 200, 
-          body: {
-            stations: favoriteStations.map(s => ({
-              stationId: s.stationId,
-              stationName: s.title,
-              isInSonosFavorites: true,
-              isQuickMix: s.title === 'QuickMix',
-              isThumbprint: s.title.includes('Thumbprint'),
-              isUserCreated: true,
-              favoriteProperties: {
-                uri: s.uri,
-                sessionNumber: parseInt(s.sessionNumber, 10)
-              }
-            } satisfies PandoraStation))
-          }
-        };
-      } else {
-        // Return just station names
-        return { status: 200, body: favoriteStations.map(s => s.title) };
-      }
-    } catch (error) {
-      logger.error('Failed to get Pandora stations:', error);
-      if (getErrorStatus(error)) throw error;
-      throw createError(500, getErrorMessage(error) || 'Failed to get Pandora stations');
+      };
+    } else {
+      // Return just station names (favorites first)
+      const sortedStations = [...favoriteStations, ...allStations.filter(s => s.source === 'api')];
+      return { 
+        status: 200, 
+        body: sortedStations.map(s => s.stationName) 
+      };
     }
   }
   

@@ -1,106 +1,136 @@
-import { SonosDevice } from '../../src/sonos-device.js';
-import { XMLParser } from 'fast-xml-parser';
-import logger from '../../src/utils/logger.js';
+import { defaultConfig } from './test-config.js';
+import { testLog } from './test-logger.js';
 
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  parseAttributeValue: false,
-  parseTagValue: false,
-  trimValues: true
-});
-
-/**
- * Check if Pandora service is available on the Sonos system
- */
-export async function isPandoraAvailable(device: SonosDevice): Promise<boolean> {
-  try {
-    // Make SOAP request to ListAvailableServices
-    const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
-                  s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-        <s:Body>
-          <u:ListAvailableServices xmlns:u="urn:schemas-upnp-org:service:MusicServices:1">
-          </u:ListAvailableServices>
-        </s:Body>
-      </s:Envelope>`;
-    
-    const response = await fetch(`${device.baseUrl}/MusicServices/Control`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/xml; charset="utf-8"',
-        'SOAPACTION': '"urn:schemas-upnp-org:service:MusicServices:1#ListAvailableServices"'
-      },
-      body: soapBody
-    });
-    
-    const text = await response.text();
-    const data = xmlParser.parse(text);
-    
-    // Navigate through the SOAP response
-    const services = data['s:Envelope']?.['s:Body']?.['u:ListAvailableServicesResponse']?.AvailableServiceDescriptorList;
-    if (!services) return false;
-    
-    // Parse the XML list of services - it's HTML-encoded XML within XML
-    const decodedServices = services
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&');
-    
-    const servicesData = xmlParser.parse(decodedServices);
-    const serviceList = servicesData.Services?.Service;
-    if (!serviceList) return false;
-    
-    // Handle both single service and array of services
-    const serviceArray = Array.isArray(serviceList) ? serviceList : [serviceList];
-    
-    // Check if Pandora exists
-    return serviceArray.some(service => service['@_Name'] === 'Pandora');
-  } catch (error) {
-    logger.error('Error checking Pandora availability:', error);
-    return false;
-  }
+export interface PandoraTestStation {
+  name: string;
+  type: 'favorite' | 'api';
+  flags?: string;
 }
 
 /**
- * Find a Pandora station from favorites, or return fallback
+ * Get test stations for Pandora switching tests
+ * Ensures we have at least one favorite and one API station
  */
-export async function getPandoraStationFromFavorites(device: SonosDevice): Promise<string> {
+export async function getPandoraStationsForSwitchingTest(room: string): Promise<{
+  favoriteStations: PandoraTestStation[];
+  apiStations: PandoraTestStation[];
+  allStations: PandoraTestStation[];
+}> {
   try {
-    const favorites = await device.getFavorites();
-    
-    // Look for Pandora stations in favorites
-    // Pandora URIs typically look like: x-sonosapi-radio:ST%3a... or pndrradio:...
-    const pandoraFavorite = favorites.find(fav => 
-      fav.uri?.includes('pandora') || 
-      fav.uri?.includes('pndrradio') ||
-      (fav.uri?.includes('x-sonosapi-radio') && fav.metadata?.includes('Pandora'))
-    );
-    
-    if (pandoraFavorite) {
-      logger.info(`Found Pandora station in favorites: ${pandoraFavorite.title}`);
-      return pandoraFavorite.title;
+    // Get detailed station data to identify favorites vs API stations
+    const response = await fetch(`${defaultConfig.apiUrl}/${room}/pandora/stations/detailed`);
+    if (!response.ok) {
+      throw new Error(`Failed to get Pandora stations: ${response.status}`);
     }
     
-    logger.info('No Pandora station found in favorites, using fallback: Thumbprint Radio');
-    return 'Thumbprint Radio';
+    const data = await response.json();
+    const stations = data.stations || [];
+    
+    // Separate favorites from API-only stations
+    const favoriteStations: PandoraTestStation[] = [];
+    const apiStations: PandoraTestStation[] = [];
+    
+    for (const station of stations) {
+      // Skip special stations
+      if (station.stationName === 'QuickMix' || 
+          station.stationName === 'Thumbprint Radio' ||
+          station.stationName.includes('Thumbprint')) {
+        continue;
+      }
+      
+      const testStation: PandoraTestStation = {
+        name: station.stationName,
+        type: station.isInSonosFavorites ? 'favorite' : 'api'
+      };
+      
+      if (station.isInSonosFavorites) {
+        favoriteStations.push(testStation);
+      } else {
+        apiStations.push(testStation);
+      }
+    }
+    
+    // Log what we found
+    testLog.info(`📊 Pandora stations for testing:`);
+    testLog.info(`   - Favorites: ${favoriteStations.length} stations`);
+    testLog.info(`   - API-only: ${apiStations.length} stations`);
+    
+    // Check if we have enough stations
+    if (favoriteStations.length === 0) {
+      testLog.warn('⚠️  No Pandora favorites found for testing');
+    }
+    if (apiStations.length === 0) {
+      testLog.warn('⚠️  No API-only stations found for testing');
+    }
+    
+    return {
+      favoriteStations,
+      apiStations,
+      allStations: [...favoriteStations, ...apiStations]
+    };
   } catch (error) {
-    logger.error('Error getting Pandora station from favorites:', error);
-    return 'Thumbprint Radio';
+    testLog.error('Failed to get Pandora stations:', error);
+    return {
+      favoriteStations: [],
+      apiStations: [],
+      allStations: []
+    };
   }
 }
 
 /**
- * Helper to skip test if Pandora is not available
+ * Get test station pairs for switching tests
+ * Returns different combinations of favorite and API stations
  */
-export async function skipIfNoPandora(device: SonosDevice, context: Mocha.Context): Promise<boolean> {
-  const pandoraAvailable = await isPandoraAvailable(device);
+export function getStationPairsForTesting(
+  favoriteStations: PandoraTestStation[],
+  apiStations: PandoraTestStation[]
+): {
+  apiToApi?: [PandoraTestStation, PandoraTestStation];
+  apiToFavorite?: [PandoraTestStation, PandoraTestStation];
+  favoriteToApi?: [PandoraTestStation, PandoraTestStation];
+  favoriteToFavorite?: [PandoraTestStation, PandoraTestStation];
+  thirdStation?: PandoraTestStation;
+} {
+  const pairs: any = {};
   
-  if (!pandoraAvailable) {
-    console.log('⚠️  Skipping test - Pandora service not available');
-    context.skip();
-    return true;
+  // API to API
+  if (apiStations.length >= 2) {
+    pairs.apiToApi = [apiStations[0], apiStations[1]];
   }
   
-  return false;
+  // API to Favorite
+  if (apiStations.length >= 1 && favoriteStations.length >= 1) {
+    pairs.apiToFavorite = [apiStations[0], favoriteStations[0]];
+  }
+  
+  // Favorite to API
+  if (favoriteStations.length >= 1 && apiStations.length >= 1) {
+    pairs.favoriteToApi = [favoriteStations[0], apiStations[0]];
+  }
+  
+  // Favorite to Favorite
+  if (favoriteStations.length >= 2) {
+    pairs.favoriteToFavorite = [favoriteStations[0], favoriteStations[1]];
+  }
+  
+  // Third station for additional test
+  const allStations = [...favoriteStations, ...apiStations];
+  if (allStations.length >= 3) {
+    // Try to get a different station than the ones already used
+    const usedStations = new Set<string>();
+    Object.values(pairs).forEach((pair: any) => {
+      if (Array.isArray(pair)) {
+        usedStations.add(pair[0].name);
+        usedStations.add(pair[1].name);
+      }
+    });
+    
+    const thirdStation = allStations.find(s => !usedStations.has(s.name));
+    if (thirdStation) {
+      pairs.thirdStation = thirdStation;
+    }
+  }
+  
+  return pairs;
 }

@@ -196,6 +196,14 @@ CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
 - Stereo pairs and groups need coordinator routing
 - Use discovery.getCoordinator(device.id)
 
+### Pandora Play Algorithm (Final)
+1. **Station Lookup**: Memory-only from PandoraStationManager (NO API calls)
+2. **Conditional Clear**: Only if switching sessions (`if (sessionNumber !== current)`)
+3. **Build URI**: `x-sonos-http:ST%3a{stationId}.mp3?sid=236&flags=32768&sn={sessionNumber}`
+4. **Set Metadata**: Include `.#station` suffix in `<upnp:class>` for streaming
+5. **Critical Delay**: 2-second wait after setAVTransportURI before play()
+6. **Result**: Reliable station switching in ~3.5 seconds with no SOAP errors
+
 ## Common Issues & Solutions
 
 ### "Port already in use"
@@ -339,6 +347,15 @@ test/
   - Proper identification of personalized services (e.g., user-specific TuneIn accounts)
   - Service name resolution from presentation strings
   - Content analysis now uses services API for accurate service identification
+- **Major Pandora Improvements** (July 9, 2025):
+  - Complete architecture overhaul with PandoraStationManager
+  - Pre-loaded memory cache eliminates API calls during playback
+  - Fixed "bad state" where Pandora plays but state shows STOPPED
+  - Fixed station switching SOAP 500 errors with proper delays and metadata
+  - Added music search support with fuzzy matching
+  - Automatic background refresh (favorites: 5min, API: 24hr)
+  - Merged station list tracks source as 'api', 'favorite', or 'both'
+  - Test suite refactored into 4 comprehensive suites with retry mechanism
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
@@ -476,6 +493,8 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - **TEST_FAVORITE**: Specific favorite to use in tests
 - **TEST_PLAYLIST**: Specific playlist to use in tests
 - **TEST_PANDORA_STATION**: Pandora station name for tests (default: quickmix)
+- **TEST_PANDORA_STATIONS**: Semicolon or comma-separated list of stations for testing
+- **TEST_MUSICSEARCH_STATION**: Station name for music search testing (default: rock)
 - **TEST_SONG_QUERIES**: JSON array of song queries for test content discovery
 - **TEST_ALBUM_QUERIES**: JSON array of album queries for test content discovery
 - **TEST_VOLUME_DEFAULT**: Initial volume level (0-100) to set for all rooms during test setup

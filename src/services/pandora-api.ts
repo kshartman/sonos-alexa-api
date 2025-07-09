@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync } from 'fs';
 import path from 'path';
 import logger from '../utils/logger.js';
 import type { PandoraStation } from '../types/sonos.js';
@@ -74,7 +74,9 @@ export class PandoraAPI {
   
   // Cache for station list
   private stationListCache: { stations: PandoraStation[], timestamp: number } | null = null;
-  private static readonly CACHE_TTL = 60 * 60 * 1000; // 1 hour
+  private static readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+  private static readonly STATION_CACHE_FILE = path.join('data', 'pandora-stations-cache.json');
+  private static stationCacheLoaded = false;
   
   // Bot detection backoff
   private static lastLoginFailure: number = 0;
@@ -92,6 +94,14 @@ export class PandoraAPI {
     if (!PandoraAPI.backoffLoaded) {
       PandoraAPI.loadBackoffState().catch(error => {
         logger.debug('Could not load backoff state:', error);
+      });
+    }
+    
+    // Load station cache on first instance creation
+    if (!PandoraAPI.stationCacheLoaded) {
+      PandoraAPI.stationCacheLoaded = true;
+      this.loadStationCache().catch(error => {
+        logger.debug('Could not load station cache:', error);
       });
     }
     
@@ -410,10 +420,16 @@ export class PandoraAPI {
 
   // Convenience methods for common operations
   async getStationList(includeStationArtUrl = true, forceRefresh = false): Promise<{ stations: PandoraStation[] }> {
-    // Check cache first
+    // Load cache from disk if not in memory
+    if (!this.stationListCache) {
+      await this.loadStationCache();
+    }
+    
+    // Check cache validity
     if (!forceRefresh && this.stationListCache && 
         (Date.now() - this.stationListCache.timestamp) < PandoraAPI.CACHE_TTL) {
-      logger.debug('Returning cached Pandora station list');
+      const ageMinutes = Math.round((Date.now() - this.stationListCache.timestamp) / 60000);
+      logger.debug(`Returning cached Pandora station list (${this.stationListCache.stations.length} stations, age: ${ageMinutes} minutes)`);
       return { stations: this.stationListCache.stations };
     }
     
@@ -448,7 +464,10 @@ export class PandoraAPI {
         stations: response.stations,
         timestamp: Date.now()
       };
-      logger.info(`Cached ${response.stations.length} Pandora stations`);
+      logger.info(`Cached ${response.stations.length} Pandora stations (TTL: 24 hours)`);
+      
+      // Save cache to disk
+      await this.saveStationCache();
     }
     
     return response;
@@ -456,6 +475,38 @@ export class PandoraAPI {
 
   async searchMusic(searchText: string): Promise<PandoraSearchResult> {
     return await this.request('music.search', { searchText });
+  }
+  
+  // Cache persistence methods
+  private async loadStationCache(): Promise<void> {
+    try {
+      const cacheData = await fs.readFile(PandoraAPI.STATION_CACHE_FILE, 'utf-8');
+      const cache = JSON.parse(cacheData);
+      
+      // Validate cache structure
+      if (cache.stations && Array.isArray(cache.stations) && cache.timestamp) {
+        this.stationListCache = cache;
+        const ageMinutes = Math.round((Date.now() - cache.timestamp) / 60000);
+        logger.info(`Loaded Pandora station cache: ${cache.stations.length} stations (age: ${ageMinutes} minutes)`);
+      }
+    } catch (_error) {
+      // Cache doesn't exist or is invalid, will fetch fresh
+      logger.debug('No valid Pandora station cache found');
+    }
+  }
+  
+  private async saveStationCache(): Promise<void> {
+    if (!this.stationListCache) return;
+    
+    try {
+      await fs.writeFile(
+        PandoraAPI.STATION_CACHE_FILE,
+        JSON.stringify(this.stationListCache, null, 2)
+      );
+      logger.debug('Saved Pandora station cache to disk');
+    } catch (error) {
+      logger.error('Failed to save Pandora station cache:', error);
+    }
   }
 
   async getGenreStations(): Promise<{ categories: PandoraGenreCategory[] }> {
@@ -483,5 +534,29 @@ export class PandoraAPI {
 
   async addFeedback(stationToken: string, trackToken: string, isPositive: boolean): Promise<void> {
     await this.request('station.addFeedback', { stationToken, trackToken, isPositive });
+  }
+  
+  isInBackoff(): boolean {
+    // Check if backoff file exists and is still valid
+    try {
+      const backoffData = readFileSync(PandoraAPI.BACKOFF_FILE, 'utf-8');
+      const backoff = JSON.parse(backoffData);
+      const backoffEndTime = backoff.lastLoginFailure + (backoff.backoffHours * 60 * 60 * 1000);
+      return backoffEndTime > Date.now();
+    } catch {
+      return false;
+    }
+  }
+  
+  getBackoffRemaining(): number {
+    if (!this.isInBackoff()) return 0;
+    try {
+      const backoffData = readFileSync(PandoraAPI.BACKOFF_FILE, 'utf-8');
+      const backoff = JSON.parse(backoffData);
+      const backoffEndTime = backoff.lastLoginFailure + (backoff.backoffHours * 60 * 60 * 1000);
+      return Math.ceil((backoffEndTime - Date.now()) / (60 * 60 * 1000));
+    } catch {
+      return 0;
+    }
   }
 }

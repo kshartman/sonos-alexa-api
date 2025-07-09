@@ -1,5 +1,7 @@
 #!/bin/bash
 
 #export SONOS_IP=<a coordinatorip> or specifiy on command line
-node ./sonos-dump-all.cjs > ../temp/sonosdump.txt
-echo ../temp/sonosdump.txt
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMP_DIR="$(cd "${SCRIPT_DIR}/../temp" && pwd)"
+node "${SCRIPT_DIR}/sonos-dump-all.cjs" > "${TEMP_DIR}/sonosdump.txt"
+echo ${TEMP_DIR}/sonosdump.txt

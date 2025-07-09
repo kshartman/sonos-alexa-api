@@ -59,18 +59,35 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - **Enhanced Diagnostics**: Better visibility into system operation
 
 ### Pandora Reliability Improvements
-- **Automatic Session Management**: All Pandora play requests now automatically clear the session using a silence file technique
-  - Eliminates SOAP 500/501 errors when switching stations
-  - Station switching now reliable and takes only 3-5 seconds
-  - No manual intervention required
-- **Enhanced Station Discovery**: Falls back to browsing Sonos favorites when API fails
-  - Works even when Pandora credentials are incorrect or blocked
-  - Automatically discovers station IDs from FV:2 container
-  - Caches discovered stations for 1 hour
-- **Session Number Detection**: Automatically uses the highest session number found
-  - Handles multiple Pandora account additions/removals
-  - Identifies ghost favorites from deleted accounts
-- **Improved Error Handling**: Returns proper 404 errors with helpful messages when stations aren't found
+- **Complete Architecture Overhaul**: Pandora station management rebuilt from ground up
+  - New `PandoraStationManager` maintains pre-loaded in-memory cache of all stations
+  - NO API calls during playback - only memory lookups for instant response
+  - Automatic background refresh: favorites every 5 minutes, API cache every 24 hours
+  - Merged station list combines API stations with Sonos favorites, tracking source as 'api', 'favorite', or 'both'
+- **Station Switching Fixed**: Resolved "bad state" where Pandora plays but state shows STOPPED
+  - Added critical 2-second delay after setAVTransportURI for session initialization
+  - Proper `.#station` metadata suffix for streaming broadcast content
+  - Conditional queue clearing only when switching between different sessions
+  - Eliminated SOAP 500/501 errors completely
+- **Music Search Support**: Full Pandora search functionality
+  - `/{room}/musicsearch/pandora/station/{name}` - Search for stations
+  - `/{room}/musicsearch/pandora/artist/{name}` - Search for artist radio
+  - Fuzzy matching algorithm: exact match → starts with → contains → word boundary
+  - Searches work across entire merged station list (API + favorites)
+- **Enhanced Station Discovery**: Robust fallback mechanisms
+  - Primary: Load from API cache file if available
+  - Fallback: Browse Sonos favorites (FV:2 container) when API unavailable
+  - Works even during API backoff or authentication failures
+  - Proper XML parsing for DIDL-Lite favorites with res object handling
+- **Session Management**: Intelligent Pandora session handling
+  - Automatic session number extraction from favorite URIs
+  - Proper flags handling (32768 for station playback)
+  - Clear endpoint (`/{room}/pandora/clear`) for explicit session cleanup
+  - Station switching now takes only 3-5 seconds with ~3.5s typical response time
+- **Improved Error Handling**: 
+  - Returns proper 404 with station name when not found
+  - Graceful handling of API backoff periods
+  - Clear logging of station source for debugging
 
 ### New API Endpoints
 - **Artist Search**: `/{room}/musicsearch/{service}/artist/{name}` - Search for artists by name
@@ -177,6 +194,10 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - Fixed FV:2 browse parsing to correctly extract Pandora favorites
 - Fixed double-encoding of Pandora station URIs
 - Fixed Pandora API singleton pattern to maintain cache between requests
+- Fixed Pandora "bad state" where audio plays but state tracking shows STOPPED
+- Fixed station switching causing SOAP 500 errors by implementing proper delays and metadata
+- Fixed API calls during playback by implementing pre-loaded cache architecture
+- Fixed XML parsing for favorites with res as object instead of string
 - **Fixed unit test hanging issue** - Tests now complete immediately instead of hanging for 30+ seconds due to persistent timers
 - **Fixed SpotifyService multiple initialization** - Service no longer calls loadConfiguration() multiple times, preventing duplicate startup banners
 - **Fixed integration test failures** - Updated device API tests to match current response structure (`room`/`model` fields)
@@ -189,6 +210,11 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 ## Breaking Changes
 - **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies
 - **Spotify Favorites Required**: For Spotify to work, you MUST add at least one track, album, and playlist to Sonos favorites
+- **Pandora Stations API Response Changed**: The detailed Pandora stations endpoint (`GET /{room}/pandora/stations/detailed`) now returns a different structure:
+  - Station objects now include `apiProperties` and/or `favoriteProperties` sub-objects
+  - Properties like `stationToken`, `artUrl`, and `type` are now nested under `apiProperties`
+  - Properties like `uri` and `sessionNumber` are now nested under `favoriteProperties`
+  - This allows distinguishing between stations from the Pandora API vs. Sonos favorites
 
 ## Migration Guide
 

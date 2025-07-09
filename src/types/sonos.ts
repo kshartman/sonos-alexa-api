@@ -232,7 +232,7 @@ export interface PandoraStation {
   apiProperties?: {
     stationToken?: string;
     artUrl?: string;
-    type?: "artist" | "song" | "genre";
+    type?: 'artist' | 'song' | 'genre';
   };
   
   // Properties from Sonos favorites

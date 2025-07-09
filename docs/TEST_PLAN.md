@@ -114,7 +114,7 @@ Integration tests dynamically adapt to your Sonos system:
    - **Generic Content** (`04-content-generic-tests.ts`) - 8 tests
    - **TTS Content** (`04-content-generic-tts-tests.ts`) - 5 tests
    - **Music Library** (`04-content-library-tests.ts`) - 8 tests
-   - **Pandora** (`04-content-pandora-tests.ts`) - 6 tests
+   - **Pandora** (`04-content-pandora-tests.ts`) - 5 tests
    - **Spotify** (`04-content-spotify-tests.ts`) - 4 tests
 
 5. **Quick Group Tests** (`05-group-tests-quick.ts`) - 6 tests
@@ -171,10 +171,14 @@ All coordinator-required operations are automatically routed:
 
 ### Music Service Integration
 - **Apple Music**: Full search and playback support
-- **Pandora**: Authentication-based integration with stations and thumbs
+- **Pandora**: Complete station management with caching, search, and thumbs
+  - Pre-loaded station cache eliminates API calls during playback
+  - Music search with fuzzy matching for stations and artists
+  - Automatic session management prevents SOAP errors
+  - Merged favorites + API stations with source tracking
 - **Music Library**: Local content search and playback
 - **SiriusXM**: Endpoints exist (returns 501 - not implemented)
-- **Spotify**: Not implemented (requires OAuth2)
+- **Spotify**: Full integration with OAuth2 authentication and search
 
 ## Running Tests
 
@@ -238,6 +242,10 @@ TEST_ROOM=Living Room
 # Service credentials (for Pandora tests)
 PANDORA_USERNAME=your-email@example.com
 PANDORA_PASSWORD=your-password
+
+# Content configuration
+TEST_PANDORA_STATIONS=Country Radio;Classic Rock Radio;80s Rock Radio
+TEST_MUSICSEARCH_STATION=Classic Rock
 ```
 
 ## Docker Testing
@@ -347,8 +355,8 @@ Current test suite status (v1.2.0):
 | Test Type | Files | Test Cases | Status |
 |-----------|-------|------------|--------|
 | **Unit Tests** | 6 | 69 | ✅ All passing |
-| **Integration Tests** | 16 | 142 | ✅ All passing |
-| **Total** | **22** | **211** | ✅ **100% passing** |
+| **Integration Tests** | 16 | 141 | ✅ All passing |
+| **Total** | **22** | **210** | ✅ **100% passing** |
 
 ### Test Distribution by Category
 

@@ -109,6 +109,9 @@ fi
 
 echo "Current directory: $(pwd)"
 
+# Get hostname once, early in the script
+HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]')
+
 echo ""
 if [ "$DRY_RUN" = true ]; then
     echo "*** DRY RUN MODE - No changes will be made ***"
@@ -136,10 +139,14 @@ else
     rm -f settings-*.json 2>/dev/null || true
 fi
 
-# Copy environment file based on home
+# Copy environment file based on home and hostname
 if [ "$HOME_NAME" = "mbpro4" ]; then
     ENV_FILE="../private/.env-mbpro4-enhanced"
+elif [ "$HOSTNAME" != "mbpro4" ] && [ "$HOSTNAME" = "$HOME_NAME" ]; then
+    # Running on the actual host (e.g., on worf for home worf)
+    ENV_FILE="../private/.env-${HOME_NAME}-enhanced"
 else
+    # Running on mbpro4 for a different home
     ENV_FILE="../private/.env-mbpro4-enhanced-${HOME_NAME}"
 fi
 
@@ -282,9 +289,6 @@ else
 fi
 
 # Copy test environment file based on hostname and home
-# Get hostname without domain, in lowercase
-HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]')
-
 # For hosts other than mbpro4, when running on the actual host (hostname == home),
 # use just the hostname. Otherwise use hostname-home format.
 if [ "$HOSTNAME" != "mbpro4" ] && [ "$HOSTNAME" = "$HOME_NAME" ]; then
@@ -377,7 +381,7 @@ echo "Setup complete!"
 echo "- Home: ${HOME_NAME}"
 echo "- Hostname: ${HOSTNAME}"
 echo "- Environment: ${ENV_FILE##*/}"
-echo "- Test Environment: .env-test-${HOSTNAME}-${HOME_NAME}"
+echo "- Test Environment: ${TEST_ENV_SOURCE##*/}"
 echo "- Presets: presets-${HOME_NAME}"
 echo "- Data: data-${HOME_NAME}"
 if [ "$HOME_NAME" = "mbpro4" ] && [ -z "$(ls -A ./presets 2>/dev/null)" ]; then

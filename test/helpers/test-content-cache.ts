@@ -54,6 +54,30 @@ export async function discoverTestContent(room: string): Promise<TestContentCach
   const testSongQueries = process.env.TEST_SONG_QUERIES;
   const testAlbumQueries = process.env.TEST_ALBUM_QUERIES;
   
+  // If using library service, check if it's fully indexed
+  if (testService === 'library') {
+    try {
+      const indexResponse = await fetch(`${defaultConfig.apiUrl}/library/index`);
+      if (indexResponse.ok) {
+        const indexStatus = await indexResponse.json();
+        if (indexStatus.isIndexing) {
+          console.error('❌ Music library is still indexing. Please wait for indexing to complete.');
+          console.error(`   Progress: ${indexStatus.progress}%`);
+          console.error('   To use a different service, set TEST_SERVICE=apple or TEST_SERVICE=spotify');
+          process.exit(1);
+        }
+        if (!indexStatus.metadata?.isComplete) {
+          console.error('❌ Music library index is not complete.');
+          console.error('   Run: curl http://localhost:5005/library/refresh to rebuild the index');
+          console.error('   To use a different service, set TEST_SERVICE=apple or TEST_SERVICE=spotify');
+          process.exit(1);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️  Could not check library index status:', error.message);
+    }
+  }
+  
   // Try different services in priority order
   const services = testService ? [testService] : ['library', 'apple', 'spotify'];
   

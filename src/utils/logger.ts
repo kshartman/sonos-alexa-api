@@ -4,7 +4,9 @@ import pino from 'pino';
 // Determine environment and logger preference
 const isDevelopment = !process.env['NODE_ENV'] || process.env['NODE_ENV'] === '' || process.env['NODE_ENV'] === 'development';
 const isUnitTest = process.env['LOG_LEVEL'] === 'silent';
-const loggerType = isUnitTest ? 'console' : (process.env['LOGGER']?.toLowerCase() || (isDevelopment ? 'winston' : 'pino'));
+const allowedLoggerTypes = ['console', 'winston', 'pino'];
+const loggerRequested = process.env['LOGGER']?.toLowerCase();
+const loggerType = isUnitTest ? 'console' : (allowedLoggerTypes.includes(loggerRequested || '') ? loggerRequested : (isDevelopment ? 'winston' : 'pino'));
 const logLevel = process.env['LOG_LEVEL'] || (isDevelopment ? 'debug' : 'info');
 
 // Custom log levels for Winston: error < warn < info < debug < trace
@@ -38,6 +40,7 @@ interface Logger {
   wall?: (message: string, ...args: unknown[]) => void;  // Alias for trace (backward compatibility)
   always: (message: string, ...args: unknown[]) => void;  // Always logs regardless of level
   level?: string;
+  readonly type: string;  // The actual logger type being used (winston, pino, console)
 }
 
 let logger: Logger;
@@ -95,7 +98,8 @@ if (loggerType === 'winston') {
     set level(level: string) { 
       // Map 'trace' to 'trace' and 'wall' to 'trace' for consistency
       winstonLogger.level = (level === 'wall') ? 'trace' : level; 
-    }
+    },
+    type: 'winston'
   };
 } else if (loggerType === 'pino') {
   // Use Pino (default for production)
@@ -184,7 +188,8 @@ if (loggerType === 'winston') {
       }
     },
     get level() { return pinoLogger.level; },
-    set level(level: string) { pinoLogger.level = level === 'wall' ? 'trace' : level; }
+    set level(level: string) { pinoLogger.level = level === 'wall' ? 'trace' : level; },
+    type: 'pino'
   };
 } else if (loggerType === 'console') {
   // Use simple console logger for unit tests - no persistent resources
@@ -197,7 +202,8 @@ if (loggerType === 'winston') {
     always: (message: string, ...args: unknown[]) => {
       console.log(`[TEST] ${message}`, ...args);
     },
-    level: 'silent'
+    level: 'silent',
+    type: 'console'
   };
 } else {
   // Fallback to console logger
@@ -210,8 +216,10 @@ if (loggerType === 'winston') {
     always: (message: string, ...args: unknown[]) => {
       console.log(message, ...args);
     },
-    level: 'info'
+    level: 'info',
+    type: 'console'
   };
 }
 
 export default logger;
+export { loggerType };

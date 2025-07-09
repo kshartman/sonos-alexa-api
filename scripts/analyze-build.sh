@@ -51,7 +51,7 @@ BUILD_DATE=$(echo "$STARTUP_DATA" | jq -r '.buildDate // "unknown"')
 VERSION=$(echo "$STARTUP_DATA" | jq -r '.version // "unknown"')
 NODE_ENV=$(echo "$STARTUP_DATA" | jq -r '.nodeEnv // "unknown"')
 IS_PRODUCTION=$(echo "$STARTUP_DATA" | jq -r '.isProduction // false')
-LOGGER=$(echo "$STARTUP_DATA" | jq -r '.logger // "unknown"')
+LOGGER=$(echo "$STARTUP_DATA" | jq -r '.loggerType // .logger // "unknown"')
 AUTH_ENABLED=$(echo "$STARTUP_DATA" | jq -r '.auth.username // empty' | grep -q . && echo "Yes" || echo "No")
 
 # Get runtime info from /debug/startup

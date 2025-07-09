@@ -96,6 +96,8 @@ export interface Config {
   readonly version: string;
   // Build date
   readonly buildDate: string;
+  // Actual logger type being used (winston, pino, or console)
+  readonly loggerType: string;
   // From settings.json
   host?: string;
   auth?: {

@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import logger from './logger.js';
+import logger, { loggerType } from './logger.js';
 import { applicationVersion } from '../version.js';
 import type { Config, WebhookConfig } from '../types/sonos.js';
 
@@ -259,6 +259,13 @@ export function loadConfiguration(): ConfigLoadResult {
   });
   Object.defineProperty(finalConfig, 'buildDate', {
     value: process.env.BUILD_SOURCE_DATE || new Date().toISOString(),
+    writable: false,
+    enumerable: true
+  });
+  
+  // Set the actual logger type being used (not what was configured)
+  Object.defineProperty(finalConfig, 'loggerType', {
+    value: loggerType,
     writable: false,
     enumerable: true
   });

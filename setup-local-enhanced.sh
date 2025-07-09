@@ -47,12 +47,12 @@ execute_cmd() {
 
 # Function to get current IP address
 get_ip_address() {
-    # Try ifconfig first (macOS, BSD)
-    if command -v ifconfig >/dev/null 2>&1; then
-        ifconfig | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | head -1
-    # Fallback to ip command (modern Linux)
-    elif command -v ip >/dev/null 2>&1; then
+    # Try ip command first (modern Linux) - more reliable on systems with Docker
+    if command -v ip >/dev/null 2>&1; then
         ip route get 1 | awk '/src/ {print $7}'
+    # Fallback to ifconfig (macOS, BSD)
+    elif command -v ifconfig >/dev/null 2>&1; then
+        ifconfig | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | head -1
     else
         # No network commands available
         echo ""

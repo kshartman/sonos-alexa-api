@@ -58,17 +58,17 @@ NC='\033[0m' # No Color
 HOME_NAME=${1:-$(hostname -s 2>/dev/null || hostname | cut -d. -f1)}
 API_URL=${2:-"http://localhost:5005"}
 
-# Ensure we're in the script directory
+# Get the script directory and project root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 echo -e "${GREEN}🏠 Sonos Content Analyzer${NC}"
 echo "═══════════════════════════════════════"
 echo "Home: $HOME_NAME"
 echo "API: $API_URL"
 
-# Create output directory
-OUTPUT_DIR="homes/$HOME_NAME"
+# Create output directory in project root
+OUTPUT_DIR="$PROJECT_ROOT/homes/$HOME_NAME"
 mkdir -p "$OUTPUT_DIR"
 
 # Get room name if not provided
@@ -99,7 +99,7 @@ else
 fi
 
 # Run the TypeScript analyzer
-if $TSX_CMD analyze-home-content.ts "$API_URL" "$ROOM_NAME" "$OUTPUT_DIR"; then
+if $TSX_CMD "$SCRIPT_DIR/analyze-home-content.ts" "$API_URL" "$ROOM_NAME" "$OUTPUT_DIR"; then
     # Extract summary stats for display
     TOTAL_FAVORITES=$(grep -oE "Total favorites.*: [0-9]+" "$OUTPUT_DIR/content-analysis.md" | grep -oE "[0-9]+$" || echo "?")
     TOTAL_PRESETS=$(grep -oE "Total presets.*: [0-9]+" "$OUTPUT_DIR/content-analysis.md" | grep -oE "[0-9]+$" || echo "?")

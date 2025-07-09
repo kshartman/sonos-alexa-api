@@ -11,6 +11,38 @@
 
 set -e
 
+# Check for help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    echo "analyze-infrastructure.sh - Generate Sonos infrastructure analysis reports for a specific home"
+    echo ""
+    echo "Usage: $0 [home-name] [api-url]"
+    echo "       $0 --help"
+    echo ""
+    echo "Arguments:"
+    echo "  home-name   Name of the home/location (default: hostname without domain)"
+    echo "  api-url     Sonos API URL (default: http://localhost:5005)"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help  Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Use defaults (current hostname, localhost:5005)"
+    echo "  $0 office                    # Analyze 'office' home on localhost"
+    echo "  $0 home http://192.168.1.100:5005"
+    echo "  $0 cabin http://cabin.local:5005"
+    echo ""
+    echo "Output:"
+    echo "  Creates analysis reports in homes/<home-name>/ directory:"
+    echo "  - infrastructure-analysis.md  # Device inventory and configuration"
+    echo "  - infrastructure-details.json # Detailed device data in JSON format"
+    echo ""
+    echo "Description:"
+    echo "  This script connects to a Sonos API instance and generates comprehensive"
+    echo "  infrastructure analysis reports including device models, IP addresses,"
+    echo "  stereo pairs, surround configurations, and zone topology."
+    exit 0
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,17 +54,17 @@ NC='\033[0m' # No Color
 HOME_NAME=${1:-$(hostname -s 2>/dev/null || hostname | cut -d. -f1)}
 API_URL=${2:-"http://localhost:5005"}
 
-# Ensure we're in the script directory
+# Get the script directory and project root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 echo -e "${BLUE}🏠 Sonos Infrastructure Analyzer${NC}"
 echo "═══════════════════════════════════════"
 echo "Home: $HOME_NAME"
 echo "API: $API_URL"
 
-# Create output directory
-OUTPUT_DIR="homes/$HOME_NAME"
+# Create output directory in project root
+OUTPUT_DIR="$PROJECT_ROOT/homes/$HOME_NAME"
 mkdir -p "$OUTPUT_DIR"
 
 # Test API connectivity
@@ -57,7 +89,7 @@ else
 fi
 
 # Run the TypeScript analyzer
-if $TSX_CMD analyze-home-infrastructure.ts "$API_URL" "$OUTPUT_DIR"; then
+if $TSX_CMD "$SCRIPT_DIR/analyze-home-infrastructure.ts" "$API_URL" "$OUTPUT_DIR"; then
     # Extract summary stats for display
     TOTAL_DEVICES=$(grep -oE "Total Devices.*: [0-9]+" "$OUTPUT_DIR/infrastructure-analysis.md" | grep -oE "[0-9]+$" || echo "?")
     TOTAL_ZONES=$(grep -oE "Total Zones.*: [0-9]+" "$OUTPUT_DIR/infrastructure-analysis.md" | grep -oE "[0-9]+$" || echo "?")

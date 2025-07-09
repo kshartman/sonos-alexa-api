@@ -121,10 +121,21 @@ else
     echo "   Total files: $(git ls-files | wc -l)"
     echo "   Excluded files verified removed:"
     for pattern in CLAUDE.md .claude/ docker-build.sh docker-run.sh push-to-github.sh docker-compose.yml .github-exclude; do
-        if git ls-files | grep -q "$pattern"; then
-            echo "   ❌ $pattern - STILL IN REPO!"
+        # For files (not directories), check exact path from root
+        if [[ "$pattern" == *"/"* ]] || [[ "$pattern" == *"/" ]]; then
+            # Directory or path with slash - use original check
+            if git ls-files | grep -q "$pattern"; then
+                echo "   ❌ $pattern - STILL IN REPO!"
+            else
+                echo "   ✅ $pattern - successfully excluded"
+            fi
         else
-            echo "   ✅ $pattern - successfully excluded"
+            # File without path - check only in root
+            if git ls-files | grep -q "^${pattern}$"; then
+                echo "   ❌ $pattern - STILL IN REPO!"
+            else
+                echo "   ✅ $pattern - successfully excluded"
+            fi
         fi
     done
     cd - > /dev/null

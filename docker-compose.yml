@@ -15,7 +15,7 @@ services:
       - NODE_ENV=production
       - PORT=${PORT:-5005}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOGGER=${LOGGER:-winston}
+      - LOGGER=${LOGGER:-}
       
       # Debug settings
       - DEBUG_LEVEL=${DEBUG_LEVEL:-info}

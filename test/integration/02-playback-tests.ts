@@ -56,9 +56,11 @@ describe('Basic Playback Control Tests', { skip: skipIntegration, timeout: testT
         testLog.info(`   Initial state: ${state.playbackState}`);
       } else {
         testLog.info('⚠️  Failed to load content, tests may fail');
+        testLog.info('   Try running with --clear-cache to rediscover fresh content');
       }
     } catch (error) {
       testLog.info('⚠️  Failed to load content, playback tests may fail');
+      testLog.info('   Try running with --clear-cache to rediscover fresh content');
     }
   });
   

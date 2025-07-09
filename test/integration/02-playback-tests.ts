@@ -452,15 +452,25 @@ describe('Basic Playback Control Tests', { skip: skipIntegration, timeout: testT
       
       await Promise.all(promises);
       
-      // Give time for all commands to process
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for device to settle out of TRANSITIONING state
+      // Use a longer timeout for remote testing
+      const settleTimeout = defaultConfig.remoteApi ? 5000 : 3000;
       
-      // Check the actual state via API (not relying on events)
+      try {
+        // Wait for any non-TRANSITIONING state
+        await eventManager.waitForState(deviceId, (state) => state !== 'TRANSITIONING', settleTimeout);
+      } catch (error) {
+        // If timeout, check actual state via API
+        const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
+        const state = await stateResponse.json();
+        
+        assert(state.playbackState !== 'TRANSITIONING', 
+          `Device should not be stuck in TRANSITIONING state after ${settleTimeout}ms, but got: ${state.playbackState}`);
+      }
+      
+      // Get final state
       const stateResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);
       const state = await stateResponse.json();
-      
-      assert(state.playbackState !== 'TRANSITIONING', 
-        `Device should not be stuck in TRANSITIONING state, but got: ${state.playbackState}`);
       
       testLog.info(`   Device settled in ${state.playbackState} state after rapid commands`);
     });

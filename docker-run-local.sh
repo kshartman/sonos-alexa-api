@@ -71,7 +71,9 @@ if [ $? -eq 0 ]; then
         docker logs --tail 10 "$CONTAINER_NAME"
         
         echo -e "\n${GREEN}✅ Sonos API is running!${NC}"
-        echo -e "Health check: ${BLUE}curl http://localhost:5005/health${NC}"
+        # Extract PORT from .env file, default to 5005 if not found
+        PORT=$(grep "^PORT=" "$ENV_FILE" | cut -d'=' -f2 || echo "5005")
+        echo -e "Health check: ${BLUE}curl http://localhost:${PORT}/health${NC}"
     else
         echo -e "\n${RED}❌ Container failed to start!${NC}"
         echo -e "${YELLOW}Checking logs:${NC}"

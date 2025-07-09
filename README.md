@@ -4,6 +4,8 @@ A modern, high-performance HTTP API for controlling Sonos speakers, designed for
 
 This is a complete TypeScript rewrite of the original [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api), focused on speed, reliability, and minimal dependencies.
 
+**Version 1.5.0** adds Spotify integration with direct playback support and search capabilities via OAuth2.
+
 ## Key Features
 
 - ⚡ **Lightning fast** - Near-instant response times using native Node.js HTTP
@@ -11,12 +13,13 @@ This is a complete TypeScript rewrite of the original [node-sonos-http-api](http
 - 📦 **Minimal dependencies** - Just 2 runtime dependencies vs 50+ in legacy
 - 🔍 **TypeScript** - Full type safety with comprehensive error handling
 - 🐳 **Docker-first** - Production-ready container with health checks
-- 🎵 **Music services** - Apple Music, Pandora, local library search
+- 🎵 **Music services** - Apple Music, Spotify, Pandora, local library search
 - 🔊 **TTS support** - Multiple text-to-speech providers
 - 🏠 **Group control** - Manage speaker groups and stereo pairs
 - 🛡️ **Robust error handling** - Typed errors with automatic retry logic
 - 📊 **96% test coverage** - Comprehensive test suite
 - 🔐 **Secure** - Optional authentication with trusted network support
+- 🎧 **Spotify Integration** - Play tracks, albums, playlists with OAuth2 search
 
 ## Requirements
 
@@ -49,10 +52,10 @@ Typical response times:
 ```bash
 # Quick start with Docker
 docker run -d \
-  --name sonos-api \
+  --name sonos-alexa-api \
   --network host \
   -e DEFAULT_ROOM="Living Room" \
-  kshartman/sonos-alexa-api:latest
+  kshartman/sonos-alexa-api:v1.5.0
 
 # Or using Docker Compose (recommended)
 curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml
@@ -61,7 +64,7 @@ mv docker-compose.example.yml docker-compose.yml
 docker-compose up -d
 
 # View logs
-docker logs -f sonos-api
+docker logs -f sonos-alexa-api
 ```
 
 **Docker Hub**: [`kshartman/sonos-alexa-api`](https://hub.docker.com/r/kshartman/sonos-alexa-api)
@@ -417,14 +420,14 @@ This rewrite maintains full API compatibility while modernizing the codebase wit
 - ✅ Apple Music (via iTunes Search API)
 - ✅ Pandora (with account)
 - ✅ Line-In playback
-- ✅ Spotify (Direct playback + OAuth2 search)
+- ✅ Spotify (Direct playback + OAuth2 search) - **NEW in v1.5.0**
 - ❌ SiriusXM (no public API)
 - ❌ Amazon Music (no public API)
 - ❌ Deezer (not implemented)
 
 ## Requirements
 
-- Node.js 20+ 
+- Node.js 18+ (uses native Node.js APIs)
 - Sonos S2 system (S1 not supported)
 - Network access to Sonos devices
 

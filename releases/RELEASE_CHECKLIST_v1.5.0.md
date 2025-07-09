@@ -23,10 +23,10 @@
 - [N/A] Update CHANGELOG.md (no CHANGELOG.md exists)
 
 ## 3. Documentation Updates
-- [ ] Update README.md
-  - [ ] Verify feature list is current
-  - [ ] Update version badge if applicable
-  - [ ] Check installation instructions reflect v1.5.0
+- [x] Update README.md
+  - [x] Verify feature list is current
+  - [x] Update version badge if applicable
+  - [x] Check installation instructions reflect v1.5.0
 - [ ] Review and update API.md for new endpoints
 - [ ] Verify SPOTIFY.md is complete and accurate
 - [ ] Verify PRESETS.md is complete with examples
@@ -49,7 +49,7 @@
 - [ ] Test Docker build locally:
   ```bash
   ./docker-build.sh
-  docker run -d --name sonos-test --network host sonos-alexa-api:latest
+  docker run -d --name sonos-test --network host kshartman/sonos-alexa-api:latest
   docker logs -f sonos-test
   # Test API endpoints
   docker stop sonos-test && docker rm sonos-test

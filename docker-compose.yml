@@ -62,8 +62,7 @@ services:
       
       # Persistent data directory (RECOMMENDED for production)
       # Stores: Spotify tokens, default room/service, music library cache
-      # Uncomment the next line to enable data persistence
-      # - ${HOST_DATA_PATH:-./data}:/app/data
+      - ${HOST_DATA_PATH:-./data}:/app/data
       
       # Optional: Mount custom settings.json (env vars take precedence)
       # - ./settings.json:/app/settings.json:ro
@@ -106,5 +105,5 @@ services:
       - DEBUG_CATEGORIES=all
     volumes:
       - ${HOST_PRESET_PATH:-./presets}:/app/presets:ro
-      - ./data:/app/data
+      - ${HOST_DATA_PATH:-./data}:/app/data
       - ./logs:/app/logs

@@ -45,14 +45,35 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo -e "${GREEN}✅ Existing container removed${NC}"
 fi
 
+# Build docker run command
+DOCKER_CMD="docker run -d --name $CONTAINER_NAME --network host --env-file $ENV_FILE --restart unless-stopped"
+
+# Add volume mounts if paths exist (read from env file)
+if [ -f "$ENV_FILE" ]; then
+    # Source env file to get volume paths
+    set -a
+    source "$ENV_FILE"
+    set +a
+    
+    # Add preset volume if path exists
+    if [ -n "${HOST_PRESET_PATH}" ] && [ -d "${HOST_PRESET_PATH}" ]; then
+        DOCKER_CMD="${DOCKER_CMD} -v ${HOST_PRESET_PATH}:/app/presets:ro"
+        echo -e "${YELLOW}Mounting presets from: ${HOST_PRESET_PATH}${NC}"
+    fi
+    
+    # Add data volume if path exists
+    if [ -n "${HOST_DATA_PATH}" ] && [ -d "${HOST_DATA_PATH}" ]; then
+        DOCKER_CMD="${DOCKER_CMD} -v ${HOST_DATA_PATH}:/app/data"
+        echo -e "${YELLOW}Mounting data from: ${HOST_DATA_PATH}${NC}"
+    fi
+fi
+
+# Add image name
+DOCKER_CMD="${DOCKER_CMD} $IMAGE_NAME"
+
 # Run the new container
 echo -e "\n${YELLOW}Starting new container...${NC}"
-CONTAINER_ID=$(docker run -d \
-    --name "$CONTAINER_NAME" \
-    --network host \
-    --env-file "$ENV_FILE" \
-    --restart unless-stopped \
-    "$IMAGE_NAME")
+CONTAINER_ID=$($DOCKER_CMD)
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✅ Container started successfully!${NC}"

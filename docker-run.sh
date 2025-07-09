@@ -134,8 +134,10 @@ else
         DOCKER_CMD="${DOCKER_CMD} -v ${HOST_PRESET_PATH}:/app/presets:ro"
     fi
     
-    # Optional: Add persistent data volume if you want to keep defaults
-    # DOCKER_CMD="${DOCKER_CMD} -v $(pwd)/data:/app/data"
+    # Add data volume mount if path exists
+    if [ -n "${HOST_DATA_PATH}" ] && [ -d "${HOST_DATA_PATH}" ]; then
+        DOCKER_CMD="${DOCKER_CMD} -v ${HOST_DATA_PATH}:/app/data"
+    fi
     
     # Use the image
     DOCKER_CMD="${DOCKER_CMD} kshartman/sonos-alexa-api:${version}"

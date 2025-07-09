@@ -141,7 +141,7 @@ upnpBrowseFV2(xml => {
 
     // Display columns with station type
     const cols = [
-        { k: "title", h: "Station Name", w: 28 },
+        { k: "title", h: "Station Name", w: 36 },
         { k: "sn", h: "SN", w: 4 },
         { k: "sid", h: "SID", w: 5 },
         { k: "flags", h: "Flags", w: 8 },
@@ -172,9 +172,9 @@ upnpBrowseFV2(xml => {
     });
     
     // Add summary by session number
-    console.log("\n" + "=".repeat(120));
+    console.log("\n" + "=".repeat(128));
     console.log("Summary by Session Number:");
-    console.log("=".repeat(120));
+    console.log("=".repeat(128));
     
     const bySn = {};
     pandoraFavorites.forEach(fav => {

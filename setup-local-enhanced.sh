@@ -284,7 +284,14 @@ fi
 # Copy test environment file based on hostname and home
 # Get hostname without domain, in lowercase
 HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]')
-TEST_ENV_SOURCE="../private/test/.env-test-${HOSTNAME}-${HOME_NAME}"
+
+# For hosts other than mbpro4, when running on the actual host (hostname == home),
+# use just the hostname. Otherwise use hostname-home format.
+if [ "$HOSTNAME" != "mbpro4" ] && [ "$HOSTNAME" = "$HOME_NAME" ]; then
+    TEST_ENV_SOURCE="../private/test/.env-test-${HOSTNAME}"
+else
+    TEST_ENV_SOURCE="../private/test/.env-test-${HOSTNAME}-${HOME_NAME}"
+fi
 TEST_ENV_DEST="test/.env"
 
 if [ "$DRY_RUN" = true ]; then

@@ -1,6 +1,6 @@
 {
   "name": "sonos-alexa-api",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Modern, fast HTTP API for Sonos speakers with Alexa skill compatibility",
   "author": "Shane Hartman <shartman@nx.bogometer.com> and Claude (Anthropic)",
   "license": "MIT",
@@ -36,7 +36,7 @@
     "dev": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=debug DEBUG_CATEGORIES=usual dotenv -- tsx watch src/server.ts",
     "dev:tee": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=debug DEBUG_CATEGORIES=usual dotenv -- tsx watch src/server.ts 2>&1 | tee logs/server.log",
     "dev:log": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=debug DEBUG_CATEGORIES=usual dotenv -- tsx watch src/server.ts 2>&1 > logs/server.log",
-    "dev:logall": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=trace DEBUG_CATEGORIES=all dotenv -- tsx watch src/server.ts 2>&1 > logs/server.log",    
+    "dev:logall": "NODE_OPTIONS=\"--openssl-legacy-provider\" LOG_LEVEL=trace DEBUG_CATEGORIES=all dotenv -- tsx watch src/server.ts 2>&1 > logs/server.log",
     "lint": "eslint src/",
     "test": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts",
     "test:log": "npm run build && NODE_OPTIONS=\"--openssl-legacy-provider\" tsx test/run-tests.ts --log --debug",

@@ -359,7 +359,7 @@ curl http://localhost:5005/OfficeSpeakers/pandora/play/Classic%20Rock%20Radio
 - Station switching is reliable and takes about 3-5 seconds
 - Thumbs up/down functionality is supported
 - Station discovery works through both the unofficial API (if credentials are valid) and by browsing your Sonos favorites
-- Cached station information expires after 1 hour
+- Station cache is automatically refreshed: favorites every 5 minutes, API stations every 24 hours
 
 ### Troubleshooting: Ghost Pandora Favorites
 
@@ -381,6 +381,11 @@ cd scripts
 
 In this example, "Chicago Blues" has SN=3 while others have SN=25, indicating it's from an old account.
 
+**Note about Multiple Pandora Accounts**: While the example above assumes a single Pandora account per household, it's technically possible to have multiple valid Pandora accounts with different session numbers. However, this API makes a simplifying assumption:
+- **Favorites playback**: Preserves the original session number from each favorite, so multi-account favorites should work
+- **Direct station play** (`/pandora/play/`): Always uses the highest session number found, which may not work for stations from other accounts
+- This limitation exists because we cannot reliably determine which session numbers are currently valid without attempting to play content
+
 #### Fixing Ghost Favorites
 
 1. **Remove the old favorite** in the Sonos app:
@@ -399,7 +404,7 @@ In this example, "Chicago Blues" has SN=3 while others have SN=25, indicating it
    # All stations should now show the same SN
    ```
 
-The API automatically uses the highest session number found, but ghost favorites will still fail to play. It's best to clean them up for a better experience.
+When playing stations by name, the API automatically uses the highest session number found. Ghost favorites will still fail to play regardless of the method used. It's best to clean them up for a better experience.
 
 ## Credits
 

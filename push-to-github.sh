@@ -3,6 +3,48 @@
 
 set -e
 
+# Function to show usage
+show_usage() {
+    echo "push-to-github.sh - Push to GitHub while filtering out private files"
+    echo ""
+    echo "Usage: $0 [--action:dryrun|--action:execute]"
+    echo "       $0 --help"
+    echo ""
+    echo "Options:"
+    echo "  --action:dryrun    Prepare repository but don't push (default)"
+    echo "  --action:execute   Actually push to GitHub"
+    echo "  -h, --help         Show this help message"
+    echo ""
+    echo "Description:"
+    echo "  This script creates a filtered copy of the repository that excludes"
+    echo "  private files listed in .github-exclude before pushing to GitHub."
+    echo "  The script defaults to dry-run mode for safety."
+    echo ""
+    echo "  Files excluded by .github-exclude:"
+    if [ -f ".github-exclude" ]; then
+        echo "$(cat .github-exclude | grep -v '^#' | grep -v '^$' | sed 's/^/    - /')"
+    else
+        echo "    (no .github-exclude file found)"
+    fi
+    echo ""
+    echo "Examples:"
+    echo "  $0                    # Dry run (default)"
+    echo "  $0 --action:dryrun    # Explicit dry run"
+    echo "  $0 --action:execute   # Actually push to GitHub"
+    echo ""
+    echo "Safety:"
+    echo "  - Defaults to dry-run mode"
+    echo "  - Creates a temporary filtered repository"
+    echo "  - Your local repository remains unchanged"
+    echo "  - Private files are only excluded from the GitHub push"
+}
+
+# Check for help flag or no arguments
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
+    show_usage
+    exit 0
+fi
+
 # Parse command line arguments
 ACTION="dryrun"
 for arg in "$@"; do
@@ -17,7 +59,8 @@ for arg in "$@"; do
             ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: $0 [--action:dryrun|--action:execute]"
+            echo ""
+            show_usage
             exit 1
             ;;
     esac

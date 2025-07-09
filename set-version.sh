@@ -1,7 +1,34 @@
 #!/bin/bash
 
 # Script to update version in package.json
-# Usage: ./set-version.sh [--major VERSION|+N] [--minor VERSION|+N] [--patch VERSION|+N]
+
+# Check for help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
+    echo "set-version.sh - Update version in package.json and src/version.ts"
+    echo ""
+    echo "Usage: $0 [--major VERSION|+N] [--minor VERSION|+N] [--patch VERSION|+N]"
+    echo "       $0 --help"
+    echo ""
+    echo "Options:"
+    echo "  --major VERSION|+N   Set major version to VERSION or increment by N"
+    echo "  --minor VERSION|+N   Set minor version to VERSION or increment by N"
+    echo "  --patch VERSION|+N   Set patch version to VERSION or increment by N"
+    echo "  -h, --help           Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 --minor +1                  # Increment minor version (e.g., 1.5.0 → 1.6.0)"
+    echo "  $0 --major 2                   # Set major version to 2 (e.g., 1.5.0 → 2.5.0)"
+    echo "  $0 --patch +1                  # Increment patch version (e.g., 1.5.0 → 1.5.1)"
+    echo "  $0 --major +1 --minor 0 --patch 0  # Major version bump (e.g., 1.5.3 → 2.0.0)"
+    echo ""
+    echo "Current version: $(node -p "require('./package.json').version")"
+    echo ""
+    echo "Description:"
+    echo "  Updates the version number in package.json and automatically runs"
+    echo "  'npm run version:save' to update src/version.ts. Version components"
+    echo "  can be set to specific values or incremented by a given amount."
+    exit 0
+fi
 
 # Read current version from package.json
 current_version=$(node -p "require('./package.json').version")

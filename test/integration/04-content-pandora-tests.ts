@@ -258,7 +258,7 @@ describe('Pandora Content Integration Tests', { skip: skipIntegration, timeout: 
         testLog.warn('   Attempting to play again...');
         
         // Try playing again
-        const retryResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/pandora/play/${encodeURIComponent(pandoraStation)}`);
+        const retryResponse = await fetch(`${defaultConfig.apiUrl}/${testRoom}/pandora/play/${encodeURIComponent(currentStation)}`);
         if (retryResponse.status === 200) {
           await new Promise(resolve => setTimeout(resolve, 3000));
           const retryState = await fetch(`${defaultConfig.apiUrl}/${testRoom}/state`);

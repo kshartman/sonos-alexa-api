@@ -26,6 +26,7 @@ const ROOM_NAME = process.argv[3] || 'ShanesOfficeSpeakers';
 
 // Cache for services lookup
 let servicesCache: Record<string, any> | null = null;
+let pandoraStationsCache: any[] | null = null;
 
 async function getServices(): Promise<Record<string, any>> {
   if (!servicesCache) {
@@ -43,6 +44,25 @@ async function getServices(): Promise<Record<string, any>> {
     }
   }
   return servicesCache;
+}
+
+async function getPandoraStations(): Promise<any[]> {
+  if (!pandoraStationsCache) {
+    try {
+      const res = await fetch(`${API_URL}/${ROOM_NAME}/pandora/stations/detailed`);
+      if (res.ok) {
+        const data = await res.json();
+        pandoraStationsCache = data.stations || [];
+      } else {
+        console.warn('Could not fetch Pandora stations from API');
+        pandoraStationsCache = [];
+      }
+    } catch (error) {
+      console.warn('Error fetching Pandora stations:', error);
+      pandoraStationsCache = [];
+    }
+  }
+  return pandoraStationsCache;
 }
 
 async function generateContentAnalysis(): Promise<string> {
@@ -321,6 +341,67 @@ async function generateContentAnalysis(): Promise<string> {
       output += '\n';
     }
     output += '\n';
+  }
+  
+  // Add Pandora stations section
+  const pandoraStations = await getPandoraStations();
+  if (pandoraStations.length > 0) {
+    output += '\n## Available Pandora Stations\n\n';
+    output += `Total stations: ${pandoraStations.length}\n\n`;
+    
+    // Group by source
+    const bySource = {
+      api: pandoraStations.filter(s => s.source === 'api'),
+      favorite: pandoraStations.filter(s => s.source === 'favorite'),
+      both: pandoraStations.filter(s => s.source === 'both')
+    };
+    
+    output += `- **API only**: ${bySource.api.length} stations\n`;
+    output += `- **Favorites only**: ${bySource.favorite.length} stations\n`;
+    output += `- **Both API & Favorites**: ${bySource.both.length} stations\n\n`;
+    
+    output += '### All Stations\n\n';
+    output += '| Station Name | Source | Session # | Type |\n';
+    output += '|--------------|--------|-----------|------|\n';
+    
+    // Sort stations by name
+    const sortedStations = [...pandoraStations].sort((a, b) => 
+      a.stationName.localeCompare(b.stationName)
+    );
+    
+    // Fetch favorites once for session number lookup
+    let favoritesData: any[] = [];
+    try {
+      const favoriteRes = await fetch(`${API_URL}/${ROOM_NAME}/favorites/detailed`);
+      if (favoriteRes.ok) {
+        favoritesData = await favoriteRes.json();
+      }
+    } catch (error) {
+      console.warn('Could not fetch favorites for session number lookup');
+    }
+    
+    for (const station of sortedStations) {
+      let sessionNumber = 'N/A';
+      
+      // If it's in favorites, try to find the session number from the favorite URI
+      if (station.source === 'both' || station.source === 'favorite') {
+        const favorite = favoritesData.find((f: any) => 
+          f.title === station.stationName && f.uri.includes('x-sonosapi-radio')
+        );
+        if (favorite && favorite.uri.includes('sn=')) {
+          const snMatch = favorite.uri.match(/sn=(\d+)/);
+          if (snMatch) {
+            sessionNumber = snMatch[1];
+          }
+        }
+      }
+      
+      const type = station.isQuickMix ? 'QuickMix' : 
+                   station.isThumbprint ? 'Thumbprint' : 
+                   station.isUserCreated ? 'User' : 'Curated';
+      
+      output += `| ${station.stationName} | ${station.source} | ${sessionNumber} | ${type} |\n`;
+    }
   }
   
   return output;

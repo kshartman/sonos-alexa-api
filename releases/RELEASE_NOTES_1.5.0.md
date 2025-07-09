@@ -1,6 +1,6 @@
-# Sonos Alexa API v1.5.0 Release Notes (DRAFT)
+# Sonos Alexa API v1.5.0 Release Notes
 
-## Release Date: TBD
+## Release Date: July 9, 2025
 
 ## Overview
 Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentication, enabling full search functionality alongside the existing URL-based preset support and direct playback capabilities. This release also includes major improvements to Pandora reliability with automatic session management.
@@ -206,6 +206,8 @@ Version 1.5.0 introduces comprehensive Spotify integration with OAuth2 authentic
 - **Fixed TTS playback restoration** - TTS now correctly restores direct URI playback (e.g., from music search) even when the queue is empty, ensuring music continues after announcements
 - **Fixed TTS special character handling** - URLs with special characters no longer cause 500 errors
 - **Fixed TTS input validation** - Empty or whitespace-only text now returns 400 Bad Request
+- **Added help documentation** - Scripts `analyze-build.sh` and `analyze-content.sh` now support `--help` flag
+- **Enhanced content analysis** - `analyze-content.sh` now shows Pandora station source (api/favorite/both) and session number
 
 ## Breaking Changes
 - **S2 Systems Only**: S1 systems are no longer supported due to removal of `/status/accounts` and `Status:ListAccounts` dependencies

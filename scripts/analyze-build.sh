@@ -26,10 +26,37 @@ else
     GIT_COLOR_FLAG="-c color.ui=never"
 fi
 
+# Check for help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    echo "analyze-build.sh - Analyze build information from a running Sonos API instance"
+    echo ""
+    echo "Usage: $0 <host> <port>"
+    echo "       $0 --help"
+    echo ""
+    echo "Arguments:"
+    echo "  host    The hostname or IP address of the Sonos API server"
+    echo "  port    The port number of the Sonos API server"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help    Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0 localhost 5005"
+    echo "  $0 192.168.1.100 5005"
+    echo "  $0 talon 35005"
+    echo ""
+    echo "Description:"
+    echo "  This script queries a running Sonos API instance to retrieve build"
+    echo "  information including version, build date, environment settings,"
+    echo "  and attempts to correlate the build with git commit history."
+    exit 0
+fi
+
 # Check arguments
 if [ $# -ne 2 ]; then
     echo "Usage: $0 <host> <port>"
     echo "Example: $0 localhost 5005"
+    echo "Try '$0 --help' for more information."
     exit 1
 fi
 

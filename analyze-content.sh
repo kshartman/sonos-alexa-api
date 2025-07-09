@@ -12,6 +12,42 @@
 
 set -e
 
+# Check for help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    echo "analyze-content.sh - Generate Sonos content analysis reports for a specific home"
+    echo ""
+    echo "Usage: $0 [home-name] [api-url] [room-name]"
+    echo "       $0 --help"
+    echo ""
+    echo "Arguments:"
+    echo "  home-name   Name of the home/location (default: hostname without domain)"
+    echo "  api-url     Sonos API URL (default: http://localhost:5005)"
+    echo "  room-name   Room to use for queries (default: first room found)"
+    echo ""
+    echo "Options:"
+    echo "  -h, --help  Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                           # Use defaults (current hostname, localhost:5005)"
+    echo "  $0 office                    # Analyze 'office' home on localhost"
+    echo "  $0 home http://192.168.1.100:5005"
+    echo "  $0 cabin http://cabin.local:5005 LivingRoom"
+    echo ""
+    echo "Output:"
+    echo "  Creates analysis reports in homes/<home-name>/ directory:"
+    echo "  - content-analysis.md          # Favorites and presets breakdown"
+    echo "  - preset-validation-results.md # Preset validation status"
+    echo "  - music-library-analysis.md    # Library statistics"
+    echo "  - music-library.json           # Optimized JSON export of tracks"
+    echo ""
+    echo "Description:"
+    echo "  This script connects to a Sonos API instance and generates comprehensive"
+    echo "  content analysis reports including favorites by service, preset validation,"
+    echo "  music library statistics, and track exports. Useful for understanding"
+    echo "  what content is available and how it's organized."
+    exit 0
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

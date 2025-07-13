@@ -36,7 +36,7 @@ show_usage() {
     echo "  $script_name --level debug                             # Set log level to debug"
     echo "  $script_name --categories api,discovery                # Enable specific debug categories"
     echo "  $script_name --level trace --categories all            # Maximum verbosity"
-    echo "  $script_name --url http://192.168.1.100:5005          # Use specific server"
+    echo "  $script_name --url http://192.168.1.100:5005           # Use specific server"
     echo "  $script_name --home worf --level debug                 # Use worf server with debug level"
     echo ""
     echo "Debug Categories:"

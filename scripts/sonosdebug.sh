@@ -45,13 +45,31 @@ if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exit 0
 fi
 
+# Function to get current IP address
+get_ip_address() {
+    # Try ip command first (modern Linux) - more reliable on systems with Docker
+    if command -v ip >/dev/null 2>&1; then
+        ip route get 1 | awk '/src/ {print $7}'
+    # Fallback to ifconfig (macOS, BSD)
+    elif command -v ifconfig >/dev/null 2>&1; then
+        ifconfig | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | head -1
+    else
+        # No network commands available
+        echo ""
+    fi
+}
+
 # Function to detect network and set default URL
 get_default_url() {
-    # Try to detect home network by checking for specific hosts
-    if ping -c 1 -W 1 talon.bogometer.com >/dev/null 2>&1; then
-        echo "http://talon.bogometer.com:35005"
-    elif ping -c 1 -W 1 worf.bogometer.com >/dev/null 2>&1; then
+    # Detect network based on local IP address
+    # 192.168.11.x = worf network
+    # 192.168.4.x = talon network
+    local local_ip=$(get_ip_address)
+    
+    if [[ "$local_ip" =~ ^192\.168\.11\. ]]; then
         echo "http://worf.bogometer.com:35005"
+    elif [[ "$local_ip" =~ ^192\.168\.4\. ]]; then
+        echo "http://talon.bogometer.com:35005"
     else
         echo "http://localhost:5005"
     fi
@@ -132,7 +150,7 @@ if [ -z "$LEVEL" ] && [ -z "$CATEGORIES" ]; then
     # Parse JSON response using grep and sed for portability
     current_level=$(echo "$response" | grep -o '"logLevel":"[^"]*"' | sed 's/.*"logLevel":"\([^"]*\)".*/\1/')
     # Extract enabled categories by looking for true values in the categories object
-    enabled_cats=$(echo "$response" | grep -o '"[^"]*":true' | sed 's/"\([^"]*\)":true/\1/g' | tr '\n' ', ' | sed 's/, $//')
+    enabled_cats=$(echo "$response" | grep -o '"[^"]*":true' | sed 's/"\([^"]*\)":true/\1/g' | paste -sd ',' - | sed 's/,$//')
     
     echo "Server URL: $URL"
     echo "Log Level: $current_level"
@@ -177,7 +195,7 @@ echo ""
 response=$(make_request "$URL/debug")
 current_level=$(echo "$response" | grep -o '"logLevel":"[^"]*"' | sed 's/.*"logLevel":"\([^"]*\)".*/\1/')
 # Extract enabled categories by looking for true values in the categories object
-enabled_cats=$(echo "$response" | grep -o '"[^"]*":true' | sed 's/"\([^"]*\)":true/\1/g' | tr '\n' ', ' | sed 's/, $//')
+enabled_cats=$(echo "$response" | grep -o '"[^"]*":true' | sed 's/"\([^"]*\)":true/\1/g' | paste -sd ',' - | sed 's/,$//')
 
 echo "Server URL: $URL"
 echo "Log Level: $current_level"

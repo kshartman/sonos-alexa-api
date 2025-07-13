@@ -34,7 +34,7 @@ show_usage() {
     echo "Examples:"
     echo "  $script_name                                           # Show current debug settings"
     echo "  $script_name --level debug                             # Set log level to debug"
-    echo "  $script_name --categories api,discovery                # Enable specific debug categories"
+    echo "  $script_name --categories usual                        # Enable api,discovery categories"
     echo "  $script_name --level trace --categories all            # Maximum verbosity"
     echo "  $script_name --url http://192.168.1.100:5005           # Use specific server"
     echo "  $script_name --home worf --level debug                 # Use worf server with debug level"
@@ -49,6 +49,7 @@ show_usage() {
     echo "  upnp       - Raw UPnP event details"
     echo "  sse        - Server-Sent Events for webhooks"
     echo "  all        - Enable all categories"
+    echo "  usual      - Enable api,discovery (common debugging)"
 }
 
 # Check for help flag
@@ -248,6 +249,10 @@ if [ -n "$CATEGORIES" ]; then
     if [ "$CATEGORIES" = "all" ]; then
         echo "Enabling all debug categories"
         response=$(make_request "$URL/debug/enable-all")
+    elif [ "$CATEGORIES" = "usual" ]; then
+        echo "Enabling usual debug categories (api,discovery)"
+        response=$(make_request "$URL/debug/category/api/true")
+        response=$(make_request "$URL/debug/category/discovery/true")
     else
         # Split categories by comma and enable each one
         IFS=',' read -ra CATS <<< "$CATEGORIES"

@@ -19,3 +19,4 @@ setup-local-enhanced.sh
 *-draft.md
 test/debug/
 *CHECKLIST*.md
+scripts/sonosdebug.sh

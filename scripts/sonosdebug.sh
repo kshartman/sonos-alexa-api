@@ -4,17 +4,26 @@
 
 # Function to show usage
 show_usage() {
+    # Get the full path of this script
+    local script_path=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+    
+    # Replace home directory with ~ if path starts with it
+    local home_dir=$(echo ~)
+    if [[ "$script_path" == "$home_dir"* ]]; then
+        script_path="~${script_path#$home_dir}"
+    fi
+    
     echo "sonosdebug.sh - Manage debug settings on a Sonos API server"
     echo ""
-    echo "Usage: $0 [options]"
-    echo "       $0 --help"
+    echo "Usage: $script_path [options]"
+    echo "       $script_path --help"
     echo ""
     echo "Options:"
     echo "  -u, --url URL          API server URL (default: auto-detect based on network)"
-    echo "  -H, --home HOME        Specify home network (talon, worf) instead of auto-detect"
+    echo "  -h, --home HOME        Specify home network (talon, worf) instead of auto-detect"
     echo "  -l, --level LEVEL      Set log level (error, warn, info, debug, trace)"
     echo "  -c, --categories CATS  Set debug categories (comma-separated or 'all')"
-    echo "  -h, --help             Show this help message"
+    echo "  -?, --help             Show this help message"
     echo ""
     echo "Default URLs:"
     echo "  - On talon network: http://talon.bogometer.com:35005"
@@ -22,12 +31,12 @@ show_usage() {
     echo "  - Otherwise: http://localhost:5005"
     echo ""
     echo "Examples:"
-    echo "  $0                                    # Show current debug settings"
-    echo "  $0 --level debug                      # Set log level to debug"
-    echo "  $0 --categories api,discovery         # Enable specific debug categories"
-    echo "  $0 --level trace --categories all     # Maximum verbosity"
-    echo "  $0 --url http://192.168.1.100:5005   # Use specific server"
-    echo "  $0 --home worf --level debug          # Use worf server with debug level"
+    echo "  $script_path                                    # Show current debug settings"
+    echo "  $script_path --level debug                      # Set log level to debug"
+    echo "  $script_path --categories api,discovery         # Enable specific debug categories"
+    echo "  $script_path --level trace --categories all     # Maximum verbosity"
+    echo "  $script_path --url http://192.168.1.100:5005   # Use specific server"
+    echo "  $script_path --home worf --level debug          # Use worf server with debug level"
     echo ""
     echo "Debug Categories:"
     echo "  api        - API request/response logging"
@@ -42,7 +51,7 @@ show_usage() {
 }
 
 # Check for help flag
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+if [ "$1" = "--help" ] || [ "$1" = "-?" ]; then
     show_usage
     exit 0
 fi
@@ -83,32 +92,66 @@ HOME=""
 LEVEL=""
 CATEGORIES=""
 
+# Track if we found any unknown options
+UNKNOWN_OPTION=""
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -u|--url)
+            if [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                echo "Error: --url requires an argument"
+                exit 1
+            fi
             URL="$2"
             shift 2
             ;;
-        -H|--home)
+        -h|--home)
+            if [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                echo "Error: --home requires an argument"
+                exit 1
+            fi
             HOME="$2"
             shift 2
             ;;
         -l|--level)
+            if [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                echo "Error: --level requires an argument"
+                exit 1
+            fi
             LEVEL="$2"
             shift 2
             ;;
         -c|--categories)
+            if [ -z "$2" ] || [[ "$2" =~ ^- ]]; then
+                echo "Error: --categories requires an argument"
+                exit 1
+            fi
             CATEGORIES="$2"
             shift 2
             ;;
-        *)
-            echo "Unknown option: $1"
-            echo ""
+        -\?|--help)
             show_usage
-            exit 1
+            exit 0
+            ;;
+        -*)
+            echo "Error: Unknown option: $1"
+            UNKNOWN_OPTION="$1"
+            break
+            ;;
+        *)
+            echo "Error: Unexpected argument: $1"
+            UNKNOWN_OPTION="$1"
+            break
             ;;
     esac
 done
+
+# If we found an unknown option, show usage and exit
+if [ -n "$UNKNOWN_OPTION" ]; then
+    echo ""
+    show_usage
+    exit 1
+fi
 
 # Set URL based on priority: --url, --home, or auto-detect
 if [ -n "$URL" ]; then

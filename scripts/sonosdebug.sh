@@ -6,6 +6,7 @@
 show_usage() {
     # Get the full path of this script
     local script_path=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+    local script_name=$(basename "$0")
     
     # Replace home directory with ~ if path starts with it
     local home_dir=$(echo ~)
@@ -13,10 +14,10 @@ show_usage() {
         script_path="~${script_path#$home_dir}"
     fi
     
-    echo "sonosdebug.sh - Manage debug settings on a Sonos API server"
+    echo "$script_name - Manage debug settings on a Sonos API server"
     echo ""
     echo "Usage: $script_path [options]"
-    echo "       $0 --help"
+    echo "       $script_name --help"
     echo ""
     echo "Options:"
     echo "  -u, --url URL          API server URL (default: auto-detect based on network)"
@@ -31,12 +32,12 @@ show_usage() {
     echo "  - Otherwise: http://localhost:5005"
     echo ""
     echo "Examples:"
-    echo "  $0                                    # Show current debug settings"
-    echo "  $0 --level debug                      # Set log level to debug"
-    echo "  $0 --categories api,discovery         # Enable specific debug categories"
-    echo "  $0 --level trace --categories all     # Maximum verbosity"
-    echo "  $0 --url http://192.168.1.100:5005   # Use specific server"
-    echo "  $0 --home worf --level debug          # Use worf server with debug level"
+    echo "  $script_name                                           # Show current debug settings"
+    echo "  $script_name --level debug                             # Set log level to debug"
+    echo "  $script_name --categories api,discovery                # Enable specific debug categories"
+    echo "  $script_name --level trace --categories all            # Maximum verbosity"
+    echo "  $script_name --url http://192.168.1.100:5005          # Use specific server"
+    echo "  $script_name --home worf --level debug                 # Use worf server with debug level"
     echo ""
     echo "Debug Categories:"
     echo "  api        - API request/response logging"

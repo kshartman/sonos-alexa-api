@@ -10,9 +10,10 @@ show_usage() {
     echo "       $0 --help"
     echo ""
     echo "Options:"
-    echo "  --url URL              API server URL (default: auto-detect based on network)"
-    echo "  --level LEVEL          Set log level (error, warn, info, debug, trace)"
-    echo "  --categories CATS      Set debug categories (comma-separated or 'all')"
+    echo "  -u, --url URL          API server URL (default: auto-detect based on network)"
+    echo "  -H, --home HOME        Specify home network (talon, worf) instead of auto-detect"
+    echo "  -l, --level LEVEL      Set log level (error, warn, info, debug, trace)"
+    echo "  -c, --categories CATS  Set debug categories (comma-separated or 'all')"
     echo "  -h, --help             Show this help message"
     echo ""
     echo "Default URLs:"
@@ -26,6 +27,7 @@ show_usage() {
     echo "  $0 --categories api,discovery         # Enable specific debug categories"
     echo "  $0 --level trace --categories all     # Maximum verbosity"
     echo "  $0 --url http://192.168.1.100:5005   # Use specific server"
+    echo "  $0 --home worf --level debug          # Use worf server with debug level"
     echo ""
     echo "Debug Categories:"
     echo "  api        - API request/response logging"
@@ -77,20 +79,25 @@ get_default_url() {
 
 # Parse arguments
 URL=""
+HOME=""
 LEVEL=""
 CATEGORIES=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --url)
+        -u|--url)
             URL="$2"
             shift 2
             ;;
-        --level)
+        -H|--home)
+            HOME="$2"
+            shift 2
+            ;;
+        -l|--level)
             LEVEL="$2"
             shift 2
             ;;
-        --categories)
+        -c|--categories)
             CATEGORIES="$2"
             shift 2
             ;;
@@ -103,10 +110,30 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Set default URL if not provided
-if [ -z "$URL" ]; then
+# Set URL based on priority: --url, --home, or auto-detect
+if [ -n "$URL" ]; then
+    # URL explicitly provided
+    echo "Using specified URL: $URL"
+elif [ -n "$HOME" ]; then
+    # Home specified, map to URL
+    case "$HOME" in
+        talon)
+            URL="http://talon.bogometer.com:35005"
+            echo "Using home '$HOME': $URL"
+            ;;
+        worf)
+            URL="http://worf.bogometer.com:35005"
+            echo "Using home '$HOME': $URL"
+            ;;
+        *)
+            echo "Error: Unknown home '$HOME'. Valid options: talon, worf"
+            exit 1
+            ;;
+    esac
+else
+    # Auto-detect based on network
     URL=$(get_default_url)
-    echo "Using default URL: $URL"
+    echo "Using auto-detected URL: $URL"
 fi
 
 # Ensure URL has protocol

@@ -172,7 +172,8 @@ export class PandoraStationManager {
         });
       }
     } catch (error) {
-      logger.error('[PandoraStationManager] Failed to load API cache:', error);
+      logger.error('[PandoraStationManager] Failed to load API cache:', error instanceof Error ? error.message : String(error));
+      logger.debug('[PandoraStationManager] Full error:', error);
     }
   }
 

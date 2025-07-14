@@ -433,6 +433,16 @@ export class PandoraAPI {
       return { stations: this.stationListCache.stations };
     }
     
+    // If not authenticated, return cache if available (even if expired)
+    if (!this.authData) {
+      if (this.stationListCache) {
+        const ageMinutes = Math.round((Date.now() - this.stationListCache.timestamp) / 60000);
+        logger.warn(`[PandoraAPI] Not authenticated, returning expired cache (${this.stationListCache.stations.length} stations, age: ${ageMinutes} minutes)`);
+        return { stations: this.stationListCache.stations };
+      }
+      throw new Error('Not authenticated with Pandora and no cache available');
+    }
+    
     logger.debug('Fetching fresh Pandora station list from API');
     const response = await this.request('user.getStationList', { includeStationArtUrl });
     

@@ -1235,7 +1235,7 @@ export class ApiRouter {
     // Look in config presets first, then folder presets
     let presetConfig = this.config.presets[preset];
     if (!presetConfig && this.presetLoader) {
-      presetConfig = this.presetLoader.getPreset(preset);
+      presetConfig = await this.presetLoader.getPreset(preset);
     }
     
     if (!presetConfig) {
@@ -1864,7 +1864,7 @@ export class ApiRouter {
     // Look in config presets first, then folder presets
     let presetConfig = this.config.presets[preset];
     if (!presetConfig && this.presetLoader) {
-      presetConfig = this.presetLoader.getPreset(preset);
+      presetConfig = await this.presetLoader.getPreset(preset);
     }
     
     if (!presetConfig) {

@@ -42,10 +42,15 @@ const ttsService = new TTSService(config);
 // Create a temporary router variable that will be initialized later
 let router: ApiRouter;
 
-// Track discovery readiness
-discovery.on('device-found', () => {
+// Track discovery readiness and check if presets can be validated
+discovery.on('device-found', async () => {
   if (router && discovery.devices.size > 0) {
     router.updateReadiness('discovery', true);
+  }
+  
+  // Check if we can validate presets now that a new device was found
+  if (presetLoader && !presetLoader.isValidated()) {
+    await presetLoader.checkAndValidate();
   }
 });
 
@@ -61,7 +66,7 @@ const presetLoader = new PresetLoader(config.presetDir, discovery, (presetStats)
   if (router) {
     router.updateStartupInfo('presets', presetStats);
   }
-}, config);
+});
 
 // Now create the router with all dependencies
 router = new ApiRouter(discovery, config, presetLoader, defaultRoomManager, ttsService);
@@ -427,8 +432,8 @@ async function start(): Promise<void> {
       logger.info(`Loading presets (${result.deviceCount} devices found, capable device: ${result.hasCapableDevice ? 'yes' : 'no'})`);
       await presetLoader.init();
       
-      // Get all loaded presets for tracking
-      const allLoadedPresets = { ...config.presets, ...presetLoader.getAllPresets() };
+      // Get all loaded presets for tracking (use raw presets to avoid triggering validation)
+      const allLoadedPresets = { ...config.presets, ...presetLoader.getRawPresets() };
       
       // Generate default presets if enabled
       const defaultRoom = defaultRoomManager.getRoom();
@@ -445,7 +450,7 @@ async function start(): Promise<void> {
         }
       }
       
-      const totalPresets = Object.keys(config.presets).length + Object.keys(presetLoader.getAllPresets()).length;
+      const totalPresets = Object.keys(config.presets).length + Object.keys(presetLoader.getRawPresets()).length;
       
       // Startup status summary
       const devices = discovery.getAllDevices();

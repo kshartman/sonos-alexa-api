@@ -5,7 +5,7 @@ import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
 import { scheduler } from './utils/scheduler.js';
 import { tryConvertPreset, type PresetWithLegacy } from './utils/preset-converter.js';
-import type { PresetCollection, Preset, Config } from './types/sonos.js';
+import type { PresetCollection, Preset } from './types/sonos.js';
 import type { SonosDiscovery } from './discovery.js';
 import { SpotifyService } from './services/spotify-service.js';
 
@@ -32,17 +32,20 @@ interface PresetLoadResult {
 export class PresetLoader {
   private presetDir: string;
   private presets: PresetCollection = {};
+  private rawPresets: PresetCollection = {}; // Store unvalidated presets
+  private presetsValidated = false; // Track if validation has been done
+  private requiredRooms = new Set<string>(); // Rooms referenced by presets
+  private validationStats?: PresetLoadResult; // Store stats for later reporting
   private readonly WATCH_TASK_ID = 'preset-loader-watch';
   private watcher?: ReturnType<typeof watchFs> | undefined;
   private discovery?: SonosDiscovery | undefined;
   private onStatsUpdate?: ((stats: PresetLoadResult) => void) | undefined;
-  private config?: Config | undefined;
+  // private config?: Config | undefined;
 
-  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void, config?: Config) {
+  constructor(presetDir = './presets', discovery?: SonosDiscovery, onStatsUpdate?: (stats: PresetLoadResult) => void) {
     this.presetDir = presetDir;
     this.discovery = discovery;
     this.onStatsUpdate = onStatsUpdate;
-    this.config = config;
   }
 
   async init(): Promise<void> {
@@ -51,7 +54,7 @@ export class PresetLoader {
   }
 
   private async loadPresets(): Promise<void> {
-    const newPresets: PresetCollection = {};
+    const newRawPresets: PresetCollection = {};
     const stats = {
       totalFiles: 0,
       validPresets: 0,
@@ -61,11 +64,9 @@ export class PresetLoader {
       legacyConverted: 0,
       invalidRooms: 0
     };
-    const validPresetNames: string[] = [];
-    const failedResolutionNames: string[] = [];
     const invalidFormatNames: string[] = [];
     const parseErrorNames: string[] = [];
-    const invalidRoomNames: string[] = [];
+    this.requiredRooms.clear();
     
     try {
       const files = await readdir(this.presetDir);
@@ -89,6 +90,15 @@ export class PresetLoader {
           // Always use the filename (which could be a symlink name) as the preset name
           const presetName = file.replace(/\.json$/i, '');
           
+          // Collect rooms from raw preset (before conversion)
+          if (rawPreset.players && Array.isArray(rawPreset.players)) {
+            for (const player of rawPreset.players) {
+              if (player.roomName) {
+                this.requiredRooms.add(player.roomName);
+              }
+            }
+          }
+          
           try {
             // Try to convert the preset (handles both new and legacy formats)
             const convertedPreset = tryConvertPreset(rawPreset, presetName);
@@ -97,46 +107,20 @@ export class PresetLoader {
             if ('_legacy' in convertedPreset) {
               stats.legacyConverted++;
               
-              // Validate and filter room names in legacy presets
-              const roomValidation = this.validateAndFilterRooms(convertedPreset, presetName);
-              if (roomValidation.hasInvalidRooms) {
-                stats.invalidRooms++;
-                // Only warn if we haven't already warned about this preset's invalid rooms
-                if (!invalidRoomNames.includes(presetName)) {
-                  invalidRoomNames.push(presetName);
-                  logger.warn(`Preset ${presetName}: Removed invalid rooms - ${roomValidation.invalidRooms?.join(', ')}`);
+              // Collect required rooms from legacy presets
+              if (convertedPreset._legacy && convertedPreset._legacy.players) {
+                for (const player of convertedPreset._legacy.players) {
+                  if (player.roomName) {
+                    this.requiredRooms.add(player.roomName);
+                  }
                 }
-                debugManager.trace('presets', `Preset ${presetName}: Invalid rooms removed - ${roomValidation.message}`);
               }
             }
             
-            // Resolve favorites to actual URIs if discovery is available
-            const resolvedPreset = await this.resolveFavorites(convertedPreset, presetName);
-            
-            // Check if resolution was successful
-            if (resolvedPreset.uri.startsWith('favorite:')) {
-              // Favorite was not resolved
-              stats.failedResolution++;
-              failedResolutionNames.push(presetName);
-              debugManager.warn('presets', `Preset ${presetName}: Failed to resolve favorite ${resolvedPreset.uri}`);
-            } else if (resolvedPreset.uri.startsWith('spotifyUrl:')) {
-              // Spotify URL was not resolved
-              stats.failedResolution++;
-              failedResolutionNames.push(presetName);
-              debugManager.warn('presets', `Preset ${presetName}: Failed to resolve Spotify URL ${resolvedPreset.uri}`);
-            } else if (resolvedPreset.uri.startsWith('placeholder:')) {
-              // Invalid preset (no content)
-              stats.invalidFormat++;
-              invalidFormatNames.push(presetName);
-              debugManager.warn('presets', `Preset ${presetName}: No playable content`);
-            } else {
-              // Valid preset
-              stats.validPresets++;
-              validPresetNames.push(presetName);
-              debugManager.trace('presets', `Loaded preset: ${presetName} -> ${resolvedPreset.uri.substring(0, 50)}...`);
-            }
-            
-            newPresets[presetName] = resolvedPreset;
+            // Store the raw preset without validation
+            newRawPresets[presetName] = convertedPreset;
+            stats.totalFiles++; // Count parsed files
+            debugManager.trace('presets', `Parsed preset: ${presetName}`);
             
           } catch (conversionError) {
             stats.invalidFormat++;
@@ -151,74 +135,39 @@ export class PresetLoader {
         }
       }
       
-      this.presets = newPresets;
+      this.rawPresets = newRawPresets;
+      this.presetsValidated = false; // Mark as not validated
       
-      // Log all loaded presets at trace level
-      if (debugManager.isLevelEnabled('trace')) {
-        const presetDetails = Object.entries(newPresets).map(([name, preset]) => 
-          `${name}: ${preset.uri.substring(0, 50)}...`
-        );
-        debugManager.trace('presets', `All loaded presets:\n${presetDetails.join('\n')}`);
+      // Simple summary - no validation details yet
+      logger.info(`Preset loading: ${Object.keys(newRawPresets).length} presets parsed (validation deferred)`);
+      if (stats.legacyConverted > 0) {
+        logger.info(`  Legacy presets converted: ${stats.legacyConverted}`);
+      }
+      if (this.requiredRooms.size > 0) {
+        logger.info(`  Waiting for rooms: ${Array.from(this.requiredRooms).join(', ')}`);
+        logger.info('  Validation will occur when all rooms are discovered or on first preset use');
+      } else {
+        logger.info('  No room requirements - validation will occur on first preset use');
       }
       
-      // Always log comprehensive summary with colors
-      logger.info('Preset loading summary:');
-      logger.info(`  Total files processed: ${stats.totalFiles}`);
-      logger.info(`  Valid presets: ${stats.validPresets}`);
-      logger.info(`  Legacy presets converted: ${stats.legacyConverted}`);
-      logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
-      logger.info(`  Invalid format: ${stats.invalidFormat}`);
-      logger.info(`  Parse errors: ${stats.parseErrors}`);
-      logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
-      
-      // Only use colors if we're in development and not using Pino
-      const useColors = this.config?.isDevelopment && this.config?.logger !== 'pino';
-      
-      if (validPresetNames.length > 0) {
-        const presets = validPresetNames.sort().map(name => 
-          useColors ? `\x1b[32m${name}\x1b[0m` : name
-        ).join(', ');
-        logger.info(`Working presets: ${presets}`);
-      }
-      
-      if (failedResolutionNames.length > 0) {
-        const presets = failedResolutionNames.sort().map(name => 
-          useColors ? `\x1b[33m${name}\x1b[0m` : name
-        ).join(', ');
-        logger.info(`Failed resolution: ${presets}`);
-      }
-      
-      if (invalidFormatNames.length > 0) {
-        const presets = invalidFormatNames.sort().map(name => 
-          useColors ? `\x1b[31m${name}\x1b[0m` : name
-        ).join(', ');
-        logger.info(`Invalid format: ${presets}`);
-      }
-      
-      if (parseErrorNames.length > 0) {
-        const presets = parseErrorNames.sort().map(name => 
-          useColors ? `\x1b[31m${name}\x1b[0m` : name
-        ).join(', ');
-        logger.info(`Parse errors: ${presets}`);
-      }
-      
-      if (invalidRoomNames.length > 0) {
-        const presets = invalidRoomNames.sort().map(name => 
-          useColors ? `\x1b[33m${name}\x1b[0m` : name
-        ).join(', ');
-        logger.info(`Presets with invalid rooms (loaded with valid rooms only): ${presets}`);
-      }
-      
-      // Report stats to callback if provided
+      // Report initial stats (parsing only)
       if (this.onStatsUpdate) {
         this.onStatsUpdate({
-          stats,
-          validPresets: validPresetNames,
-          failedPresets: failedResolutionNames,
+          stats: {
+            totalFiles: Object.keys(newRawPresets).length,
+            validPresets: 0, // Not validated yet
+            failedResolution: 0,
+            invalidFormat: stats.invalidFormat,
+            parseErrors: stats.parseErrors,
+            legacyConverted: stats.legacyConverted,
+            invalidRooms: 0
+          },
+          validPresets: [],
+          failedPresets: [],
           invalidPresets: invalidFormatNames,
           parseErrors: parseErrorNames,
-          invalidRooms: invalidRoomNames,
-          allPresets: newPresets
+          invalidRooms: [],
+          allPresets: {} // Empty until validated
         });
       }
       
@@ -258,12 +207,129 @@ export class PresetLoader {
     scheduler.clearTask(this.WATCH_TASK_ID);
   }
 
-  getPreset(name: string): Preset | undefined {
+  private async validatePresets(): Promise<void> {
+    if (this.presetsValidated) return; // Already validated
+    
+    logger.info('Validating presets...');
+    const validatedPresets: PresetCollection = {};
+    const stats = {
+      totalFiles: Object.keys(this.rawPresets).length,
+      validPresets: 0,
+      failedResolution: 0,
+      invalidFormat: 0,
+      parseErrors: 0,
+      legacyConverted: 0,
+      invalidRooms: 0
+    };
+    const validPresetNames: string[] = [];
+    const failedResolutionNames: string[] = [];
+    const invalidRoomNames: string[] = [];
+    
+    for (const [presetName, preset] of Object.entries(this.rawPresets)) {
+      let validatedPreset = preset;
+      
+      // Validate and filter rooms for legacy presets
+      if ('_legacy' in preset) {
+        stats.legacyConverted++;
+        const presetWithLegacy = preset as PresetWithLegacy;
+        const roomValidation = this.validateAndFilterRooms(presetWithLegacy, presetName);
+        if (roomValidation.hasInvalidRooms) {
+          stats.invalidRooms++;
+          invalidRoomNames.push(presetName);
+          logger.warn(`Preset ${presetName}: Removed invalid rooms - ${roomValidation.invalidRooms?.join(', ')}`);
+        }
+      }
+      
+      // Resolve favorites to actual URIs
+      validatedPreset = await this.resolveFavorites(validatedPreset, presetName);
+      
+      // Check resolution status
+      if (validatedPreset.uri.startsWith('favorite:') || validatedPreset.uri.startsWith('spotifyUrl:')) {
+        stats.failedResolution++;
+        failedResolutionNames.push(presetName);
+      } else if (!validatedPreset.uri.startsWith('placeholder:')) {
+        stats.validPresets++;
+        validPresetNames.push(presetName);
+      }
+      
+      validatedPresets[presetName] = validatedPreset;
+    }
+    
+    this.presets = validatedPresets;
+    this.presetsValidated = true;
+    this.validationStats = {
+      stats,
+      validPresets: validPresetNames,
+      failedPresets: failedResolutionNames,
+      invalidPresets: [],
+      parseErrors: [],
+      invalidRooms: invalidRoomNames,
+      allPresets: validatedPresets
+    };
+    
+    // Log validation results
+    logger.info('Preset validation complete:');
+    logger.info(`  Valid presets: ${stats.validPresets}`);
+    logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
+    logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
+    
+    // Report updated stats
+    if (this.onStatsUpdate && this.validationStats) {
+      this.onStatsUpdate(this.validationStats);
+    }
+  }
+
+  async getPreset(name: string): Promise<Preset | undefined> {
+    await this.validatePresets();
     return this.presets[name];
   }
 
-  getAllPresets(): PresetCollection {
+  async getAllPresets(): Promise<PresetCollection> {
+    await this.validatePresets();
     return { ...this.presets };
+  }
+
+  // Get raw presets without triggering validation (for stats)
+  getRawPresets(): PresetCollection {
+    return { ...this.rawPresets };
+  }
+
+  // Get validation state
+  isValidated(): boolean {
+    return this.presetsValidated;
+  }
+
+  // Get required rooms for validation check
+  getRequiredRooms(): Set<string> {
+    return new Set(this.requiredRooms);
+  }
+
+  // Trigger validation if all required rooms are discovered
+  async checkAndValidate(): Promise<boolean> {
+    if (this.presetsValidated) return true;
+    
+    if (this.areAllRequiredRoomsDiscovered()) {
+      logger.info('All required rooms discovered, validating presets');
+      await this.validatePresets();
+      return true;
+    }
+    return false;
+  }
+
+  // Check if all required rooms have been discovered
+  areAllRequiredRoomsDiscovered(): boolean {
+    if (!this.discovery || this.requiredRooms.size === 0) return true;
+    
+    const discoveredRooms = new Set(
+      this.discovery.getAllDevices().map(d => d.roomName)
+    );
+    
+    for (const room of this.requiredRooms) {
+      if (!discoveredRooms.has(room)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private validateAndFilterRooms(preset: PresetWithLegacy, presetName: string): { 

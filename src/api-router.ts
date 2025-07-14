@@ -2008,6 +2008,9 @@ export class ApiRouter {
       
       // If play=true (default), start playback
       if (shouldPlay) {
+        // Set transport to queue before playing
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.setAVTransportURI(queueURI, '');
         await coordinator.play();
       }
       
@@ -2084,6 +2087,9 @@ export class ApiRouter {
       
       // If play=true (default), start playback
       if (shouldPlay) {
+        // Set transport to queue before playing
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.setAVTransportURI(queueURI, '');
         await coordinator.play();
       }
       
@@ -2163,6 +2169,9 @@ export class ApiRouter {
       
       // If play=true (default), start playback
       if (shouldPlay) {
+        // Set transport to queue before playing
+        const queueURI = `x-rincon-queue:${coordinator.id.replace('uuid:', '')}#0`;
+        await coordinator.setAVTransportURI(queueURI, '');
         await coordinator.play();
       }
       

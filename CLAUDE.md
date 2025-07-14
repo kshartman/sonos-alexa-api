@@ -392,6 +392,37 @@ test/
 - Priority order: Era 300 > Era 100 > One > Five > Arc > Beam > Play:5/3/1
 - System automatically selects best available device for topology subscription
 
+## Important Planning Documents
+
+The project has several key planning documents in the `docs/` directory:
+
+### Active Plans
+- **`docs/REFACTORING_PLAN.md`** - SOAP architecture refactoring plan
+  - Phase 1 & 2 completed (centralized SOAP operations, error handling, type safety)
+  - Phase 3 & 4 deferred (dependency injection, service refactoring)
+  - Includes Pandora architecture overhaul details
+  - Tracks alignment with type refactoring efforts
+
+- **`docs/TYPE_REFACTORING_PLAN.md`** - Type safety improvement plan
+  - Consolidated document with future work at top, completed work at bottom
+  - Achieved: 0 TypeScript errors/warnings, comprehensive error types, SOAP response types
+  - Remaining: Strict compiler options, runtime validation, consistent type usage
+
+- **`docs/LIBRARY_INDEX_PLAN.md`** - Music library search optimization plan
+  - NEW: Addresses 57-second search times for large libraries (49k+ tracks)
+  - Proposes in-memory indexing to reduce to <100ms
+  - Maintains zero-dependency philosophy
+  - Targeted for v1.7.0
+
+### Test Documentation
+- **`docs/TEST_PLAN.md`** - Comprehensive test strategy
+  - 96% coverage achieved
+  - Details integration test approach
+  - Environment variable configuration
+
+### Historical Context
+When working on architectural changes or type improvements, always check these planning documents first. They contain important context about what's been done, what worked, what didn't, and what's planned for the future.
+
 ## Legacy System Reference
 - The legacy node-sonos-http-api code is located at: ~/projects/sonos-old/node-sonos-http-api
 - The legacy Sonos API layer implementation is at: ~/projects/sonos-old/node-sonos-discovery
@@ -587,6 +618,14 @@ All configuration can now be set via environment variables. `npm start` loads .e
   - JSON mode uses proper ISO 8601 timestamps
   - Shows color-coded authentication states in text mode
   - Comprehensive status including entities, readiness, and auth states
+- **Library Search Fix**:
+  - Fixed issue where library search would resume previous content (e.g., Pandora) instead of playing searched tracks
+  - Library search now properly sets transport URI to queue before playing
+  - Apple and Spotify search were already handling this correctly
+- **Documentation Consolidation**:
+  - Merged TYPE_REFACTOR_PLAN.md into TYPE_REFACTORING_PLAN.md
+  - Created LIBRARY_INDEX_PLAN.md for search optimization
+  - Updated REFACTORING_PLAN.md to align with type refactoring work
 
 ## Previous Updates (June 29-30, 2025)
 - Fixed detailed endpoints regression where they returned arrays instead of objects

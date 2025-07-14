@@ -477,7 +477,7 @@ export class SonosDiscovery extends EventEmitter {
         // Exit conditions
         if (state.hasCapableDevice) {
           resolved = true;
-          logger.info(`Discovery: Found capable device for favorite resolution`);
+          logger.info('Discovery: Found capable device for favorite resolution');
           cleanup();
           resolve({ hasCapableDevice: true, deviceCount: state.deviceCount });
         } else if (state.nonCapableCount >= 3) {

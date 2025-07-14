@@ -178,3 +178,6 @@ config.local.json
 homes/*/
 !homes/README.md# Draft release notes
 releases/draft-*
+
+# Archive directory
+/archive/

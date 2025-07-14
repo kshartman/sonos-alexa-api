@@ -476,6 +476,10 @@ When ready to publish a new Docker image:
    git tag v1.2.0
    git push origin v1.2.0
    ```
+9. **Update Docker Hub Overview**:
+   - Go to https://hub.docker.com/repository/docker/kshartman/sonos-alexa-api/general
+   - Copy contents from `DOCKERHUB_README.md` (NOT the main README.md)
+   - This file is intentionally version-agnostic and doesn't need updating for releases
 
 ## Notes for Next Session
 - Unit tests would be valuable for reliability

@@ -232,7 +232,7 @@ For reference, the settings.json format is:
 
 ## API Documentation
 
-See the [API documentation](./API.md) for a complete list of endpoints.
+See the [Help & Usage Guide](./HELP.md) for common usage patterns and examples, or the [OpenAPI specification](./apidoc/openapi.yaml) for complete endpoint documentation.
 
 ## Spotify Setup
 

@@ -1139,7 +1139,7 @@ paths:
           description: Debug category
           schema:
             type: string
-            enum: [soap, topology, discovery, favorites, presets, upnp, api]
+            enum: [soap, topology, discovery, favorites, presets, upnp, api, sse]
             example: topology
         - name: enabled
           in: path
@@ -1235,34 +1235,94 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: "1.5.0"
+                    example: "1.6.0"
                   timestamp:
                     type: string
                     format: date-time
                     description: When the API was started
+                  actualLoggerType:
+                    type: string
+                    enum: [winston, pino]
+                    description: The actual logger implementation in use
                   devices:
                     type: object
                     description: Discovered Sonos devices
+                    properties:
+                      count:
+                        type: integer
+                        description: Number of discovered devices
                   topology:
                     type: object
                     description: Zone topology information
+                    properties:
+                      zoneCount:
+                        type: integer
+                        description: Number of zones
                   presets:
                     type: object
                     description: Loaded presets
+                    properties:
+                      stats:
+                        type: object
+                        properties:
+                          totalFiles:
+                            type: integer
+                          validPresets:
+                            type: integer
+                      lastUpdated:
+                        type: string
+                        format: date-time
                   config:
                     type: object
                     description: Full configuration object
                   musicLibrary:
                     type: object
                     description: Music library indexing status
+                    properties:
+                      metadata:
+                        type: object
+                        properties:
+                          totalTracks:
+                            type: integer
+                          totalAlbums:
+                            type: integer
+                          totalArtists:
+                            type: integer
+                          lastUpdated:
+                            type: string
+                            format: date-time
                   services:
                     type: object
                     description: Music services cache status
+                    properties:
+                      serviceCount:
+                        type: integer
+                      lastRefresh:
+                        type: string
+                        format: date-time
+                  pandoraStations:
+                    type: object
+                    description: Pandora station information
+                    properties:
+                      total:
+                        type: integer
+                      favorites:
+                        type: integer
+                      apiOnly:
+                        type: integer
+                      both:
+                        type: integer
+                      lastUpdated:
+                        type: string
+                        format: date-time
                   errors:
                     type: array
                     items:
                       type: string
                     description: Any startup errors encountered
+                  config:
+                    type: object
+                    description: Full configuration object including all settings
                   readiness:
                     type: object
                     description: Readiness status of various components
@@ -2380,12 +2440,12 @@ paths:
         '404':
           $ref: '#/components/responses/RoomNotFound'
 
-  /{room}/pandora/stations:
+  /{room}/pandora/stations/detailed:
     get:
       tags:
         - Room
-      summary: Get Pandora stations
-      description: Get list of available Pandora stations
+      summary: Get Pandora stations with details
+      description: Get list of available Pandora stations with full metadata
       parameters:
         - $ref: '#/components/parameters/room'
       responses:
@@ -2650,6 +2710,152 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /pandora/status:
+    get:
+      tags:
+        - System
+      summary: Get Pandora authentication status
+      description: |
+        Returns detailed Pandora authentication and station information.
+        Shows whether credentials are configured, authentication state, station counts,
+        and cache age for API-sourced stations.
+      responses:
+        '200':
+          description: Pandora status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PandoraStatus'
+
+  /pandora/stations:
+    get:
+      tags:
+        - System
+      summary: List all Pandora stations
+      description: Get a list of all available Pandora stations from both API and favorites
+      responses:
+        '200':
+          description: List of Pandora stations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  example: Classic Rock Radio
+
+  /spotify/status:
+    get:
+      tags:
+        - System
+      summary: Get Spotify authentication status
+      description: |
+        Returns detailed Spotify authentication status including token expiry,
+        last authentication time, and whether a refresh token is available.
+      responses:
+        '200':
+          description: Spotify status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpotifyStatus'
+
+  /spotify/auth:
+    get:
+      tags:
+        - System
+      summary: Start Spotify OAuth flow
+      description: |
+        Initiates the Spotify OAuth authorization flow. Returns an authorization URL
+        that the user must visit to grant access to their Spotify account.
+      responses:
+        '200':
+          description: Authorization URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authUrl:
+                    type: string
+                    description: URL to visit for authorization
+                    example: https://accounts.spotify.com/authorize?client_id=...
+                  message:
+                    type: string
+                    example: Visit the URL to authorize Spotify access
+
+  /spotify/callback:
+    get:
+      tags:
+        - System
+      summary: Spotify OAuth callback
+      description: |
+        OAuth callback endpoint that receives the authorization code from Spotify.
+        This endpoint is called automatically by Spotify after user authorization.
+      parameters:
+        - name: code
+          in: query
+          required: false
+          description: Authorization code from Spotify
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: State parameter for CSRF protection
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          description: Error message if authorization failed
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authorization successful
+          content:
+            text/html:
+              schema:
+                type: string
+                description: HTML page with success message
+
+  /spotify/callback-url:
+    post:
+      tags:
+        - System
+      summary: Submit Spotify callback URL
+      description: |
+        Alternative method to complete Spotify OAuth by submitting the full callback URL.
+        Useful when the automatic callback cannot be reached.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - callbackUrl
+              properties:
+                callbackUrl:
+                  type: string
+                  description: Full callback URL from Spotify redirect
+                  example: http://localhost:8888/callback?code=AQD...&state=...
+      responses:
+        '200':
+          description: Authorization successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Spotify authorization successful
+
 components:
   parameters:
     room:
@@ -2693,6 +2899,94 @@ components:
         stack:
           type: string
           description: Stack trace (only in development mode)
+
+    PandoraStatus:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+          description: Whether Pandora is currently authenticated
+        hasCredentials:
+          type: boolean
+          description: Whether Pandora credentials are configured
+        authStatus:
+          type: object
+          nullable: true
+          properties:
+            success:
+              type: boolean
+              description: Whether the last authentication attempt succeeded
+            timestamp:
+              type: string
+              format: date-time
+              description: When the authentication attempt occurred
+            error:
+              type: string
+              description: Error message if authentication failed
+        stationCount:
+          type: integer
+          description: Total number of available stations
+          example: 82
+        apiStations:
+          type: integer
+          description: Number of stations from Pandora API
+          example: 68
+        favoriteStations:
+          type: integer
+          description: Number of stations from Sonos favorites
+          example: 0
+        bothSources:
+          type: integer
+          description: Number of stations found in both API and favorites
+          example: 14
+        lastUpdated:
+          type: string
+          format: date-time
+          description: When the station list was last updated
+        cacheAge:
+          type: string
+          description: Human-readable age of the API cache
+          example: 5m ago
+        message:
+          type: string
+          description: Human-readable status message
+          example: Pandora authenticated - 82 stations (68 from API cached 5m ago, 0 from favorites)
+
+    SpotifyStatus:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+          description: Whether Spotify access token is valid
+        hasTokens:
+          type: boolean
+          description: Whether any tokens are stored
+        tokenExpired:
+          type: boolean
+          description: Whether the access token has expired
+        hasRefreshToken:
+          type: boolean
+          description: Whether a refresh token is available
+        instanceId:
+          type: string
+          description: Instance identifier for token storage
+          example: mbpro4-worf
+        expiresIn:
+          type: string
+          description: Time until token expires (if authenticated)
+          example: 45m
+        lastAuth:
+          type: string
+          format: date-time
+          description: When the token was last obtained
+        authAge:
+          type: string
+          description: Human-readable age of the last authentication
+          example: 2h 30m ago
+        message:
+          type: string
+          description: Human-readable status message
+          example: Spotify authenticated (token expires in 45m)
 
     Zone:
       type: object
@@ -2852,6 +3146,10 @@ components:
           type: boolean
           description: API request logging (always enabled)
           example: true
+        sse:
+          type: boolean
+          description: Server-Sent Events for webhooks
+          example: false
 
   securitySchemes:
     basicAuth:

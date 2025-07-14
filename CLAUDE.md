@@ -566,7 +566,29 @@ All configuration can now be set via environment variables. `npm start` loads .e
 19. **Plugin System** - Custom action plugins, music service plugins, TTS provider plugins
 20. **Home Assistant Integration** - Native integration, auto-discovery, media player entities
 21. **Remove Global Discovery Variable** - Refactor SonosDevice to accept discovery instance via constructor or method parameter instead of using global variable
-## Recent Updates (June 29, 2025)
+## Recent Updates (July 14, 2025)
+- **Enhanced Authentication Status Monitoring**:
+  - Added `/pandora/status` endpoint with detailed auth state, station counts, and cache age
+  - Added `/spotify/status` endpoint with token expiry and authentication tracking
+  - PandoraStationManager now tracks auth attempts with timestamps and error messages
+  - SpotifyAuthService provides detailed token status including expiry calculations
+  - Both services distinguish between having credentials, being authenticated, and auth failures
+- **Deferred Preset Validation**:
+  - Fixed issue where presets removed valid rooms (SpaSpeakers) not yet discovered at startup
+  - Presets now parse immediately but validate only on first use OR when all rooms are discovered
+  - Added async getPreset/getAllPresets methods that trigger validation
+  - Raw presets accessible via getRawPresets() without validation
+- **Spotify Token Management**:
+  - Added proactive token refresh on startup when refresh token is configured
+  - Fixed token showing as expired from 1969 when initialized from refresh token
+  - Token automatically refreshes on-demand when needed (5 minutes before expiry)
+- **Server Summary Enhancements**:
+  - Added `--json` flag to server-summary.sh for structured monitoring output
+  - JSON mode uses proper ISO 8601 timestamps
+  - Shows color-coded authentication states in text mode
+  - Comprehensive status including entities, readiness, and auth states
+
+## Previous Updates (June 29-30, 2025)
 - Fixed detailed endpoints regression where they returned arrays instead of objects
 - Added defensive checks to content analyzer for malformed favorites
 - Infrastructure analyzer now shows stereo/surround role designations (L, R, C, SW, SL, SR, HL, HR)

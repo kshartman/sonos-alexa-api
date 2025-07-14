@@ -24,6 +24,7 @@ export class PandoraStationManager {
   private config: Config;
   private discovery?: SonosDiscovery;
   private isInitialized = false;
+  private lastAuthStatus: { success: boolean; timestamp: string; error?: string } | null = null;
 
   private constructor(config: Config) {
     this.config = config;
@@ -159,8 +160,14 @@ export class PandoraStationManager {
       try {
         await api.login();
         logger.debug('[PandoraStationManager] Pandora API login successful');
+        this.lastAuthStatus = { success: true, timestamp: new Date().toISOString() };
       } catch (error) {
         logger.debug('[PandoraStationManager] Pandora login failed, will try to use cache:', error instanceof Error ? error.message : String(error));
+        this.lastAuthStatus = { 
+          success: false, 
+          timestamp: new Date().toISOString(), 
+          error: error instanceof Error ? error.message : String(error) 
+        };
       }
       
       // Force load from cache file
@@ -330,6 +337,13 @@ export class PandoraStationManager {
     }
   }
 
+  /**
+   * Get authentication status
+   */
+  getAuthStatus(): { success: boolean; timestamp: string; error?: string } | null {
+    return this.lastAuthStatus;
+  }
+  
   /**
    * Get station statistics
    */

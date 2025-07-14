@@ -43,7 +43,7 @@ export class ApiRouter {
   private routes = new Map<string, RouteHandler>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private startupInfo: any = { // ANY IS CORRECT: startup info contains dynamic properties added at runtime
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString(), // Server initialization time
     version: '',
     config: {},
     presets: {},
@@ -285,6 +285,7 @@ export class ApiRouter {
     this.routes.set('GET /{room}/pandora/stations', this.pandoraGetStations.bind(this));
     this.routes.set('GET /{room}/pandora/stations/{detailed}', this.pandoraGetStations.bind(this));
     this.routes.set('GET /pandora/stations', this.pandoraAllStations.bind(this));
+    this.routes.set('GET /pandora/status', this.pandoraStatus.bind(this));
     this.routes.set('GET /{room}/pandora/clear', this.pandoraClear.bind(this));
     this.routes.set('GET /{room}/spotify/play/{id}', this.spotifyPlay.bind(this));
     
@@ -2452,6 +2453,62 @@ export class ApiRouter {
     };
   }
   
+  private async pandoraStatus(): Promise<ApiResponse> {
+    const hasCredentials = !!(this.config.pandora?.username && this.config.pandora?.password);
+    const stats = this.pandoraStationManager.getStats();
+    const authStatus = this.pandoraStationManager.getAuthStatus();
+    const lastUpdated = (this.startupInfo.pandoraStations as { lastUpdated?: string })?.lastUpdated || null;
+    
+    // Calculate cache age
+    let cacheAge = '';
+    if (lastUpdated) {
+      const updatedTime = new Date(lastUpdated).getTime();
+      const now = Date.now();
+      const ageMs = now - updatedTime;
+      const ageMinutes = Math.floor(ageMs / 60000);
+      const ageHours = Math.floor(ageMinutes / 60);
+      const ageDays = Math.floor(ageHours / 24);
+      
+      if (ageDays > 0) {
+        cacheAge = `${ageDays}d ${ageHours % 24}h ago`;
+      } else if (ageHours > 0) {
+        cacheAge = `${ageHours}h ${ageMinutes % 60}m ago`;
+      } else {
+        cacheAge = `${ageMinutes}m ago`;
+      }
+    }
+    
+    // Determine actual auth state
+    const authenticated = authStatus?.success === true;
+    let message = '';
+    
+    if (!hasCredentials) {
+      message = 'Pandora credentials not configured - using favorites only';
+    } else if (authenticated) {
+      message = `Pandora authenticated - ${stats.total} stations (${stats.apiOnly} from API${stats.apiOnly > 0 && cacheAge ? ' cached ' + cacheAge : ''}, ${stats.favorites} from favorites)`;
+    } else if (authStatus?.success === false) {
+      message = `Pandora authentication failed - ${stats.total} stations (${stats.apiOnly} from cache ${cacheAge}, ${stats.favorites} from favorites)`;
+    } else {
+      message = `Pandora not yet authenticated - ${stats.total} stations`;
+    }
+    
+    return {
+      status: 200,
+      body: {
+        authenticated,
+        hasCredentials,
+        authStatus,
+        stationCount: stats.total,
+        apiStations: stats.apiOnly,
+        favoriteStations: stats.favorites,
+        bothSources: stats.both,
+        lastUpdated,
+        cacheAge,
+        message
+      }
+    };
+  }
+  
   private async pandoraGetStations(params: RouteParams, queryParams?: URLSearchParams): Promise<ApiResponse> {
     const { room, detailed: detailedParam } = params;
     if (!room) throw createError(400, 'Room parameter is required');
@@ -3720,18 +3777,52 @@ export class ApiRouter {
   }
 
   private async spotifyAuthStatus(): Promise<ApiResponse> {
-    const isAuthenticated = this.spotifyAuthService.isAuthenticated();
+    const detailedStatus = this.spotifyAuthService.getDetailedStatus();
+    const hasRefreshToken = !!this.config.spotify?.refreshToken;
     const instanceId = process.env.INSTANCE_ID || 'default';
+    
+    // Calculate age of last auth
+    let authAge = '';
+    if (detailedStatus.lastAuth) {
+      const authTime = new Date(detailedStatus.lastAuth).getTime();
+      const now = Date.now();
+      const ageMs = now - authTime;
+      const ageMinutes = Math.floor(ageMs / 60000);
+      const ageHours = Math.floor(ageMinutes / 60);
+      const ageDays = Math.floor(ageHours / 24);
+      
+      if (ageDays > 0) {
+        authAge = `${ageDays}d ${ageHours % 24}h ago`;
+      } else if (ageHours > 0) {
+        authAge = `${ageHours}h ${ageMinutes % 60}m ago`;
+      } else {
+        authAge = `${ageMinutes}m ago`;
+      }
+    }
+    
+    let message = '';
+    if (detailedStatus.authenticated) {
+      message = `Spotify authenticated (token expires in ${detailedStatus.expiresIn})`;
+    } else if (detailedStatus.hasTokens && detailedStatus.tokenExpired) {
+      message = `Spotify token expired (last auth ${authAge})`;
+    } else if (hasRefreshToken && !detailedStatus.hasTokens) {
+      message = 'Spotify has refresh token but needs initialization';
+    } else {
+      message = 'Spotify authentication required - visit /spotify/auth';
+    }
     
     return {
       status: 200,
       body: {
-        authenticated: isAuthenticated,
+        authenticated: detailedStatus.authenticated,
+        hasTokens: detailedStatus.hasTokens,
+        tokenExpired: detailedStatus.tokenExpired,
+        hasRefreshToken,
         instanceId,
-        hasRefreshToken: !!this.config.spotify?.refreshToken,
-        message: isAuthenticated 
-          ? 'Spotify is authenticated and ready' 
-          : 'Spotify authentication required. Visit /spotify/auth to connect.'
+        expiresIn: detailedStatus.expiresIn,
+        lastAuth: detailedStatus.lastAuth,
+        authAge,
+        message
       }
     };
   }

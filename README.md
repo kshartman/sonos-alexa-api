@@ -45,6 +45,13 @@ Typical response times:
 - Music search: <200ms
 - Group operations: <150ms
 
+## What's New in v1.6.0
+
+- **Enhanced Authentication Status** - New `/pandora/status` and `/spotify/status` endpoints show detailed auth state
+- **Proactive Token Refresh** - Spotify tokens now refresh automatically on startup when configured
+- **Server Summary JSON** - The `server-summary.sh` script now supports `--json` flag for structured output
+- **Deferred Preset Validation** - Presets validate only when used, preventing issues with devices discovered later
+
 ## Quick Start
 
 ### Docker (Recommended)
@@ -405,6 +412,112 @@ In this example, "Chicago Blues" has SN=3 while others have SN=25, indicating it
    ```
 
 When playing stations by name, the API automatically uses the highest session number found. Ghost favorites will still fail to play regardless of the method used. It's best to clean them up for a better experience.
+
+## Authentication Status Monitoring
+
+### Music Service Status Endpoints
+
+Monitor the authentication state of music services:
+
+```bash
+# Check Pandora status
+curl http://localhost:5005/pandora/status
+
+# Response shows detailed state:
+{
+  "authenticated": true,
+  "hasCredentials": true,
+  "authStatus": {
+    "success": true,
+    "timestamp": "2025-07-14T18:25:24.428Z"
+  },
+  "stationCount": 82,
+  "apiStations": 68,
+  "favoriteStations": 0,
+  "bothSources": 14,
+  "cacheAge": "5m ago",
+  "message": "Pandora authenticated - 82 stations (68 from API cached 5m ago, 0 from favorites)"
+}
+
+# Check Spotify status
+curl http://localhost:5005/spotify/status
+
+# Response shows token state:
+{
+  "authenticated": true,
+  "hasTokens": true,
+  "tokenExpired": false,
+  "hasRefreshToken": true,
+  "expiresIn": "45m",
+  "lastAuth": "2025-07-14T18:25:22.831Z",
+  "authAge": "5m ago",
+  "message": "Spotify authenticated (token expires in 45m)"
+}
+```
+
+### Server Summary Script
+
+Monitor the overall server status with the included summary script:
+
+```bash
+# Text output (default)
+./scripts/server-summary.sh localhost 5005
+
+# JSON output for monitoring tools
+./scripts/server-summary.sh localhost 5005 --json | jq
+
+# Example JSON output includes:
+{
+  "server": {
+    "host": "localhost",
+    "port": 5005,
+    "version": "1.6.0",
+    "environment": "development",
+    "started": "2025-07-14T18:25:22.630Z",
+    "uptimeSeconds": 3600
+  },
+  "entities": {
+    "devices": 14,
+    "zones": 11,
+    "presets": { "valid": 133, "total": 133, "awaitingValidation": false },
+    "musicServices": 101,
+    "musicLibrary": { "tracks": 49322, "albums": 3819, "artists": 4621 },
+    "pandoraStations": 82
+  },
+  "readiness": {
+    "discovery": true,
+    "servicesCache": true,
+    "musicLibrary": true,
+    "upnpSubscriptions": true,
+    "topology": true,
+    "allReady": true
+  },
+  "authentication": {
+    "pandora": { /* full status object */ },
+    "spotify": { /* full status object */ }
+  }
+}
+```
+
+The summary script provides:
+- Color-coded authentication states (green=authenticated, yellow=partial, red=failed)
+- Human-readable cache ages and token expiry times
+- Entity counts and system readiness status
+- JSON output with proper ISO 8601 timestamps for integration with monitoring tools
+
+## Utility Scripts
+
+The `scripts/` directory contains helpful utilities:
+
+- **`server-summary.sh`** - Compact server status overview with optional JSON output
+- **`sonosdump.sh`** - Raw device state dump for a single Sonos device
+- **`pandoradump.sh`** - Diagnose ghost Pandora favorites
+- **`spotify-auth-setup.sh`** - Manual Spotify OAuth flow for headless systems
+- **`analyze-content.sh`** - Analyze favorites, presets, and music library
+- **`analyze-infrastructure.sh`** - Detailed device and network analysis
+- **`analyze-build.sh`** - Analyze build configuration and startup state
+- **`analyze-auth-failures.sh`** - Diagnose authentication issues with music services
+- **`sonosdebug.sh`** - Interactive debug control for log levels and categories
 
 ## Credits
 

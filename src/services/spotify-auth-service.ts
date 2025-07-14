@@ -26,6 +26,11 @@ export class SpotifyAuthService {
     if (this.config.spotify?.refreshToken) {
       logger.info('Initializing Spotify auth from config refresh token');
       this.tokenManager.initializeFromRefreshToken(this.config.spotify.refreshToken);
+      
+      // Proactively refresh the token on startup
+      this.refreshAccessToken().catch(error => {
+        logger.error('Failed to refresh Spotify token on startup:', error);
+      });
     }
     
     // Clean up expired states every minute
@@ -214,6 +219,58 @@ export class SpotifyAuthService {
    */
   public isAuthenticated(): boolean {
     return this.tokenManager.getTokens() !== null;
+  }
+  
+  /**
+   * Get detailed authentication status
+   */
+  public getDetailedStatus(): {
+    authenticated: boolean;
+    hasTokens: boolean;
+    tokenExpired: boolean;
+    expiresAt?: number;
+    expiresIn?: string;
+    lastAuth?: string;
+    } {
+    const tokens = this.tokenManager.getTokens();
+    if (!tokens) {
+      return {
+        authenticated: false,
+        hasTokens: false,
+        tokenExpired: true
+      };
+    }
+    
+    const now = Date.now();
+    const tokenExpired = this.tokenManager.isTokenExpired();
+    const authenticated = !tokenExpired;
+    
+    // Calculate when token was obtained (token lifetime is 1 hour)
+    const tokenIssuedAt = tokens.expiresAt - (60 * 60 * 1000);
+    const lastAuth = new Date(tokenIssuedAt).toISOString();
+    
+    // Calculate time until expiry
+    let expiresIn = '';
+    if (!tokenExpired) {
+      const msUntilExpiry = tokens.expiresAt - now;
+      const minutesUntilExpiry = Math.floor(msUntilExpiry / 60000);
+      const hoursUntilExpiry = Math.floor(minutesUntilExpiry / 60);
+      
+      if (hoursUntilExpiry > 0) {
+        expiresIn = `${hoursUntilExpiry}h ${minutesUntilExpiry % 60}m`;
+      } else {
+        expiresIn = `${minutesUntilExpiry}m`;
+      }
+    }
+    
+    return {
+      authenticated,
+      hasTokens: true,
+      tokenExpired,
+      expiresAt: tokens.expiresAt,
+      expiresIn,
+      lastAuth
+    };
   }
 
   /**

@@ -84,8 +84,16 @@ NODE_ENV=$(echo "$CONFIG_DATA" | jq -r '.nodeEnv // "unknown"')
 IS_PRODUCTION=$(echo "$CONFIG_DATA" | jq -r '.isProduction // false')
 LOGGER=$(echo "$STARTUP_DATA" | jq -r '.actualLoggerType // .config.loggerType // .config.logger // "unknown"')
 AUTH_ENABLED=$(echo "$CONFIG_DATA" | jq -r '.auth.username // empty' | grep -q . && echo "Yes" || echo "No")
-UPTIME=$(echo "$RUNTIME_DATA" | jq -r '.system.uptime // 0' 2>/dev/null)
-DEVICE_COUNT=$(echo "$RUNTIME_DATA" | jq -r '.discovery.deviceCount // 0' 2>/dev/null)
+# Calculate uptime from timestamp field
+STARTED=$(echo "$RUNTIME_DATA" | jq -r '.timestamp // empty' 2>/dev/null)
+if [ -n "$STARTED" ]; then
+    START_EPOCH=$(date -d "$STARTED" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${STARTED%%.*}" +%s 2>/dev/null || echo 0)
+    CURRENT_EPOCH=$(date +%s)
+    UPTIME=$((CURRENT_EPOCH - START_EPOCH))
+else
+    UPTIME=0
+fi
+DEVICE_COUNT=$(echo "$RUNTIME_DATA" | jq -r '.devices.count // 0' 2>/dev/null)
 
 # Convert uptime to human readable
 if [ "$UPTIME" != "0" ]; then

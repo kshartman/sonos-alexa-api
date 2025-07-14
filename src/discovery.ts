@@ -420,6 +420,100 @@ export class SonosDiscovery extends EventEmitter {
   }
 
   /**
+   * Checks if a device is capable of browsing favorites (has ContentDirectory service).
+   * Portable devices (Roam, Move) and subwoofers typically don't support this.
+   */
+  isCapableDevice(device: SonosDevice): boolean {
+    // Coordinators are always capable
+    if (this.isCoordinator(device.id)) {
+      return true;
+    }
+    
+    // Known capable model numbers (non-portable speakers)
+    const capableModels = ['S1', 'S3', 'S5', 'S9', 'S14', 'S15', 'S22', 'S23', 'S24', 'S27', 'S33', 'S35', 'S36', 'S38'];
+    return capableModels.includes(device.modelNumber);
+  }
+
+  /**
+   * Waits for discovery to have devices suitable for favorite resolution.
+   * Resolves when:
+   * - At least one capable device is found, OR
+   * - 3+ non-capable devices are found (and no capable ones), OR  
+   * - 3 minutes timeout
+   * 
+   * @returns Promise with info about what devices are available
+   */
+  async waitForFavoriteCapableDevice(): Promise<{ hasCapableDevice: boolean; deviceCount: number }> {
+    const timeout = 3 * 60 * 1000; // 3 minutes
+    
+    // Check current state
+    const checkCurrent = () => {
+      const allDevices = Array.from(this.devices.values());
+      const capableDevice = allDevices.find(d => this.isCapableDevice(d));
+      const nonCapableCount = allDevices.filter(d => !this.isCapableDevice(d)).length;
+      
+      return {
+        hasCapableDevice: !!capableDevice,
+        deviceCount: allDevices.length,
+        nonCapableCount
+      };
+    };
+
+    // If we already meet criteria, return immediately
+    const current = checkCurrent();
+    if (current.hasCapableDevice || current.nonCapableCount >= 3) {
+      logger.info(`Discovery ready: ${current.hasCapableDevice ? 'capable device found' : `${current.nonCapableCount} non-capable devices only`}`);
+      return { hasCapableDevice: current.hasCapableDevice, deviceCount: current.deviceCount };
+    }
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      
+      const checkAndResolve = () => {
+        if (resolved) return;
+        
+        const state = checkCurrent();
+        
+        // Exit conditions
+        if (state.hasCapableDevice) {
+          resolved = true;
+          logger.info(`Discovery: Found capable device for favorite resolution`);
+          cleanup();
+          resolve({ hasCapableDevice: true, deviceCount: state.deviceCount });
+        } else if (state.nonCapableCount >= 3) {
+          resolved = true;
+          logger.warn(`Discovery: Found ${state.nonCapableCount} devices but none capable of favorite resolution`);
+          cleanup();
+          resolve({ hasCapableDevice: false, deviceCount: state.deviceCount });
+        }
+      };
+
+      const cleanup = () => {
+        this.off('device-found', deviceHandler);
+        this.off('topology-change', topologyHandler);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+
+      const deviceHandler = () => checkAndResolve();
+      const topologyHandler = () => checkAndResolve();
+
+      this.on('device-found', deviceHandler);
+      this.on('topology-change', topologyHandler);
+
+      // Timeout handler
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          const state = checkCurrent();
+          logger.warn(`Discovery timeout after 3 minutes: ${state.deviceCount} devices found, ${state.hasCapableDevice ? 'has' : 'no'} capable device`);
+          cleanup();
+          resolve({ hasCapableDevice: state.hasCapableDevice, deviceCount: state.deviceCount });
+        }
+      }, timeout);
+    });
+  }
+
+  /**
    * Gets all members of the group that the specified device belongs to.
    * @param deviceId - The device ID
    * @returns Array of devices in the same group

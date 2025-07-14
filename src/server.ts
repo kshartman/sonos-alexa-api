@@ -422,9 +422,9 @@ async function start(): Promise<void> {
       logger.always(`🎤 TTS IP: ${ttsHostIp} (configured)`);
     }
     
-    // Wait a bit for device discovery, then load presets
-    setTimeout(async () => {
-      debugManager.debug('presets', 'Loading presets with favorite resolution...');
+    // Wait for capable device discovery, then load presets
+    discovery.waitForFavoriteCapableDevice().then(async (result) => {
+      logger.info(`Loading presets (${result.deviceCount} devices found, capable device: ${result.hasCapableDevice ? 'yes' : 'no'})`);
       await presetLoader.init();
       
       // Get all loaded presets for tracking
@@ -529,7 +529,13 @@ async function start(): Promise<void> {
       }).catch(error => {
         logger.error('Failed to initialize music library cache:', error);
       });
-    }, 2000); // Wait 2 seconds for initial device discovery
+    }).catch(error => {
+      logger.error('Failed to wait for capable device discovery:', error);
+      // Still try to load presets even if wait failed
+      presetLoader.init().catch(err => {
+        logger.error('Failed to initialize presets:', err);
+      });
+    });
     
     // Start HTTP server - always listen on all interfaces
     server.listen(config.port, '0.0.0.0', () => {

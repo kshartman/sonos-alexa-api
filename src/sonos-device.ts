@@ -636,6 +636,29 @@ export class SonosDevice extends EventEmitter {
    * @param discovery - Optional discovery instance for coordinator lookup
    */
   async playUri(uri: string, metadata = '', discovery?: SonosDiscovery): Promise<void> {
+    // Handle favorite: URIs that weren't resolved at preset load time
+    if (uri.startsWith('favorite:')) {
+      const favoriteName = uri.substring(9);
+      logger.debug(`${this.roomName}: resolving favorite at runtime: ${favoriteName}`);
+      
+      try {
+        const { FavoritesManager } = await import('./actions/favorites.js');
+        const favoritesManager = new FavoritesManager();
+        const favorite = await favoritesManager.findFavoriteByName(this, favoriteName);
+        
+        if (!favorite) {
+          throw new Error(`Favorite not found: ${favoriteName}`);
+        }
+        
+        logger.debug(`${this.roomName}: resolved favorite "${favoriteName}" to URI: ${favorite.uri}`);
+        uri = favorite.uri;
+        metadata = favorite.metadata || metadata || '';
+      } catch (error) {
+        logger.error(`${this.roomName}: Failed to resolve favorite "${favoriteName}":`, error);
+        throw new Error(`Failed to resolve favorite: ${favoriteName}`);
+      }
+    }
+    
     // Handle saved queue URIs (file:///jffs/settings/savedqueues.rsq#ID)
     // These are Sonos playlists that need to be loaded to the queue
     if (uri.startsWith('file:///jffs/settings/savedqueues.rsq#')) {

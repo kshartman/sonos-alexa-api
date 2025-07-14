@@ -326,14 +326,21 @@ export class PresetLoader {
       debugManager.trace('favorites', `Resolving favorite for preset ${presetName}: ${favoriteName}`);
 
       try {
-        // Get any device to query favorites (they should be system-wide)
+        // Get devices and find one capable of browsing favorites
         const devices = this.discovery.getAllDevices();
         if (devices.length === 0) {
           debugManager.debug('favorites', `No devices available to resolve favorite: ${favoriteName}`);
           return preset;
         }
 
-        const device = devices[0]; // Use first available device
+        // Try to find a capable device
+        let device = devices.find(d => this.discovery!.isCapableDevice(d));
+        
+        if (!device) {
+          // No capable device found, keep the favorite: URI for runtime resolution
+          debugManager.debug('favorites', `No capable devices available to resolve favorite: ${favoriteName} - will retry at runtime`);
+          return preset;
+        }
         const { FavoritesManager } = await import('./actions/favorites.js');
         const favoritesManager = new FavoritesManager();
         const favorite = await favoritesManager.findFavoriteByName(device!, favoriteName);

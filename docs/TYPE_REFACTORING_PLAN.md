@@ -1,7 +1,7 @@
 # Type Refactoring Plan
 
 ## Overview
-This document outlines the type refactoring priorities based on analysis of duplicated and shared type patterns in the codebase.
+This document outlines the type refactoring priorities based on analysis of duplicated and shared type patterns in the codebase, and tracks completed type safety improvements for the Sonos Alexa API project.
 
 ## Ranking Criteria
 - **Importance**: Type safety improvement, frequency of use, error prevention potential
@@ -230,3 +230,115 @@ interface ScheduledTask {
 - Most `any` types are documented and legitimate (with "ANY IS CORRECT" comments)
 - Focus should be on consistency rather than creating new types
 - Gradual migration is preferred over big-bang refactoring
+
+## Completed Type Safety Improvements ✅
+
+### Phase 1: SOAP Architecture Refactoring (July 2, 2025)
+- **Centralized SOAP Operations**: All SOAP calls now go through SonosDevice class
+- **New Typed SOAP Methods Added**:
+  - ContentDirectory: `browseRaw()`, `searchContentDirectory()`, `createObject()`, `destroyObject()`
+  - AVTransport: `addMultipleURIsToQueue()`, `removeTrackRangeFromQueue()`, `reorderTracksInQueue()`, `saveQueue()`
+  - RenderingControl: `getBass()`, `setBass()`, `getTreble()`, `setTreble()`, `getLoudness()`, `setLoudness()`
+  - MusicServices: `listAvailableServices()`
+- **Type Safety**: Fixed all TypeScript `any` warnings in refactored code
+- **Maintained Compatibility**: Added `browseRaw()` alongside existing `browse()` to preserve API
+
+### Phase 2: Error Handling & Response Types (July 2, 2025)
+- **Error Handling Architecture**: Created comprehensive error class hierarchy
+  - Base `SonosError` class with specific subtypes:
+    - `SOAPError`, `UPnPError`, `DeviceNotFoundError`
+    - `ValidationError`, `NetworkError`, `ServiceError`
+    - `AuthenticationError`, `NotImplementedError`
+  - Proper HTTP status code mapping for all error types
+  - Better error messages and debugging information
+
+- **SOAP Response Types**: Defined TypeScript interfaces for all SOAP responses
+  - `TransportInfo`, `PositionInfo`, `MediaInfo`, `VolumeResponse`
+  - `BrowseResponse`, `QueueResponse`, `RenderingControlResponse`
+  - `SystemPropertiesResponse`, `DevicePropertiesResponse`
+  - Eliminated most `any` types in favor of proper interfaces
+
+- **Retry Logic**: Implemented configurable retry system
+  - Exponential backoff with jitter
+  - Smart retry decisions based on error types
+  - Configurable retry policies for different operations
+  - UPnP error code handling for retry decisions
+
+### Pandora Type Safety Improvements (July 9, 2025)
+- **PandoraStationManager**: Fully typed station management
+  - `MergedStation` interface with proper types
+  - Source tracking as literal types: `'favorite' | 'api' | 'both'`
+  - Typed configuration and discovery parameters
+- **Station Search**: Type-safe fuzzy search implementation
+- **API Response Types**: Proper interfaces for all Pandora API responses
+- **Error Handling**: Specific error types for Pandora failures
+
+### Other Type Improvements
+- **Config Type**: Comprehensive `Config` interface with all settings
+- **Route Types**: `RouteParams`, `ApiResponse<T>` with generics
+- **Service Types**: Typed music service interfaces
+- **Event Types**: Proper typing for UPnP events and SSE
+
+## Achieved Results ✅
+- **0 TypeScript errors** (down from 87)
+- **0 TypeScript warnings** 
+- **All lint checks passing**
+- **96% test coverage** with fully typed test suites
+- **Strict null checks** enabled in most modules
+- **Proper error boundaries** with typed catch blocks
+
+## Remaining Type Safety Tasks from Original Plan
+
+### High Priority
+1. **Strict TypeScript Compiler Options**
+   ```json
+   {
+     "strict": true,
+     "noImplicitAny": true,
+     "strictNullChecks": true,
+     "strictFunctionTypes": true,
+     "strictBindCallApply": true,
+     "strictPropertyInitialization": true,
+     "noImplicitThis": true,
+     "alwaysStrict": true
+   }
+   ```
+
+2. **SOAP Response Validation**
+   - Add runtime validation for SOAP responses
+   - Use type guards for response validation
+   - Consider using io-ts or zod for runtime type checking
+
+### Medium Priority
+3. **UPnP Event Types**
+   - Define interfaces for all UPnP event types
+   - Type-safe event parsing
+   - Proper event handler signatures
+
+4. **Configuration Validation**
+   - Runtime validation of settings.json
+   - Type guards for configuration loading
+   - Environment variable type coercion
+
+### Low Priority
+5. **XML Type Safety**
+   - Consider using TypeScript XML libraries
+   - Type-safe XML building
+   - Validated XML parsing
+
+## Benefits Achieved
+- **Better IntelliSense**: IDE autocomplete and type checking
+- **Fewer Runtime Errors**: Caught at compile time
+- **Easier Refactoring**: Type system ensures safety
+- **Better Documentation**: Types serve as documentation
+- **Improved Maintainability**: Clear contracts between modules
+
+## Lessons Learned
+1. **Incremental Approach Works**: Fixing types module by module is manageable
+2. **Tests Help**: Good test coverage makes refactoring safer
+3. **Type Everything Early**: Adding types later is harder
+4. **Runtime Validation Matters**: TypeScript only helps at compile time
+5. **Error Types Are Important**: Proper error hierarchy improves debugging
+
+---
+Last Updated: July 14, 2025

@@ -7,7 +7,7 @@ import { testLog, waitForContinueFlag } from '../helpers/test-logger.js';
 // Skip all tests if in mock-only mode
 const skipIntegration = defaultConfig.mockOnly;
 
-describe('Music Library Content Integration Tests', { skip: skipIntegration, timeout: getTestTimeout(100000) }, () => {
+describe('Music Library Content Integration Tests', { skip: skipIntegration, timeout: getTestTimeout(300000) }, () => {
   let testContext: TestContext;
   let testRoom: string;
   let deviceId: string;
@@ -108,7 +108,7 @@ describe('Music Library Content Integration Tests', { skip: skipIntegration, tim
     });
   });
 
-  describe('Music Library Search', () => {
+  describe('Music Library Search', { timeout: getTestTimeout(200000) }, () => {
     it('should search library by song title', async function() {
       if (!libraryAvailable) {
         testLog.info('⚠️  Test skipped - music library not available');

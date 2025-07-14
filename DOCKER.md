@@ -28,7 +28,7 @@ docker run -d \
 ## Available Tags
 
 - `latest` - Latest stable release
-- `v1.5.0` - Specific version releases
+- `v1.6.0`, `v1.5.0`, etc. - Specific version releases
 
 Docker Hub: `kshartman/sonos-alexa-api`
 

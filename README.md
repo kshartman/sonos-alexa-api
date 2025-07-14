@@ -4,7 +4,7 @@ A modern, high-performance HTTP API for controlling Sonos speakers, designed for
 
 This is a complete TypeScript rewrite of the original [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api), focused on speed, reliability, and minimal dependencies.
 
-**Version 1.5.0** adds Spotify integration with direct playback support and search capabilities via OAuth2.
+**Version 1.6.0** adds enhanced authentication monitoring, deferred preset validation, and improved server status reporting.
 
 ## Key Features
 
@@ -51,6 +51,8 @@ Typical response times:
 - **Proactive Token Refresh** - Spotify tokens now refresh automatically on startup when configured
 - **Server Summary JSON** - The `server-summary.sh` script now supports `--json` flag for structured output
 - **Deferred Preset Validation** - Presets validate only when used, preventing issues with devices discovered later
+- **sonosdebug.sh Utility** - New script for managing debug settings remotely with network-aware defaults
+- **Bug Fixes** - Library search playback, Pandora cache loading, preset favorite resolution
 
 ## Quick Start
 
@@ -62,7 +64,7 @@ docker run -d \
   --name sonos-alexa-api \
   --network host \
   -e DEFAULT_ROOM="Living Room" \
-  kshartman/sonos-alexa-api:v1.5.0
+  kshartman/sonos-alexa-api:v1.6.0
 
 # Or using Docker Compose (recommended)
 curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml

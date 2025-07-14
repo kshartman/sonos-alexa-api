@@ -155,6 +155,14 @@ export class PandoraStationManager {
         return;
       }
       
+      // Try to login first (will check backoff state)
+      try {
+        await api.login();
+        logger.debug('[PandoraStationManager] Pandora API login successful');
+      } catch (error) {
+        logger.debug('[PandoraStationManager] Pandora login failed, will try to use cache:', error instanceof Error ? error.message : String(error));
+      }
+      
       // Force load from cache file
       await api.getStationList(true, false); // includeArt=true, forceRefresh=false
       

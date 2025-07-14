@@ -108,7 +108,12 @@ curl http://localhost:5005/spotify/status
 Planning for v1.7.0 includes:
 - Amazon Music integration (pending API availability)
 - Enhanced error recovery mechanisms
-- Performance optimizations for large music libraries
+- **Performance optimizations for large music libraries**
+  - Implement in-memory search indexing to reduce search time from ~60s to <100ms
+  - Add inverted word indexes for title, artist, and album searches
+  - Use Set intersections for efficient multi-word queries
+  - Add trie data structure for prefix matching
+  - Maintain zero-dependency approach with better algorithms
 - WebSocket support for real-time state updates
 - Improved preset management with validation status in UI
 

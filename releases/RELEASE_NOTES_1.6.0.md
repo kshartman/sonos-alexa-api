@@ -1,6 +1,6 @@
-# Release Notes - v1.6.0 (DRAFT)
+# Release Notes - v1.6.0
 
-**Release Date**: TBD
+**Release Date**: July 14, 2025
 
 ## Overview
 
@@ -32,9 +32,11 @@ Version 1.6.0 brings enhanced authentication monitoring, improved preset validat
 - [x] **Detailed Status Messages** - Human-readable authentication states for both services
 
 ### Developer Experience
+- [x] **sonosdebug.sh Utility** - New script for managing debug settings remotely with network-aware defaults
 - [x] Add `--help` support to test-remote.sh, set-version.sh, and push-to-github.sh scripts
 - [x] push-to-github.sh now shows usage by default instead of running dry-run
 - [x] Color-coded authentication states in server-summary.sh (green=authenticated, yellow=partial, red=failed)
+- [x] Added 'usual' debug category to sonosdebug for common debugging scenarios (api,discovery)
 
 ### API Enhancements
 - [x] Pandora status distinguishes between "not configured", "authenticated", "auth failed", and "not authenticated"
@@ -47,6 +49,9 @@ Version 1.6.0 brings enhanced authentication monitoring, improved preset validat
 - [x] Added comprehensive documentation for authentication status monitoring
 - [x] Updated utility scripts section with all available tools
 - [x] Added OpenAPI documentation for new authentication endpoints
+- [x] Consolidated type refactoring plans into single document
+- [x] Added detailed music library search optimization plan for v1.7.0
+- [x] Added planning documents section to CLAUDE.md
 
 ## Bug Fixes
 
@@ -54,6 +59,9 @@ Version 1.6.0 brings enhanced authentication monitoring, improved preset validat
 - [x] Fixed preset validation removing valid rooms that haven't been discovered yet
 - [x] Fixed Spotify token showing as expired from 1969 when using refresh token
 - [x] Fixed library search resuming previous content (e.g., Pandora) instead of playing searched tracks
+- [x] Improved preset favorite resolution with fallback mechanism
+- [x] Fixed Pandora API cache loading when not authenticated
+- [x] Ensured Pandora API attempts login before loading station cache
 
 ## Breaking Changes
 
@@ -119,4 +127,4 @@ Planning for v1.7.0 includes:
 
 ---
 
-**Note**: This is a draft document. Features and changes are subject to modification before the final release.
+**Full Changelog**: [v1.5.0...v1.6.0](https://github.com/kshartman/sonos-alexa-api/compare/v1.5.0...v1.6.0)

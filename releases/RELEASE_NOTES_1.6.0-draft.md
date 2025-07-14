@@ -53,6 +53,7 @@ Version 1.6.0 brings enhanced authentication monitoring, improved preset validat
 - [x] Corrected Pandora station cache refresh documentation
 - [x] Fixed preset validation removing valid rooms that haven't been discovered yet
 - [x] Fixed Spotify token showing as expired from 1969 when using refresh token
+- [x] Fixed library search resuming previous content (e.g., Pandora) instead of playing searched tracks
 
 ## Breaking Changes
 
@@ -91,6 +92,11 @@ curl http://localhost:5005/spotify/status
 - PandoraStationManager tracks authentication attempts with timestamps and error messages
 - SpotifyAuthService provides detailed token status including expiry calculations
 - Both services distinguish between having credentials, being authenticated, and auth failures
+
+### Library Search Fix
+- Library search methods now properly set transport URI to queue before playing
+- Prevents Sonos from resuming previous content when playing library search results
+- Apple and Spotify search were already handling this correctly
 
 ## Known Issues
 

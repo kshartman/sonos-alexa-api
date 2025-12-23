@@ -3337,9 +3337,9 @@ export class ApiRouter {
         };
       }
       
-      // Special handling for Apple Music station search - create genre radio
-      if (serviceLower === 'apple' && type === 'station' && results.length > 1) {
-        logger.info(`Creating Apple Music genre radio for: ${term}`);
+      // Special handling for Apple Music station/artist search - create genre radio
+      if (serviceLower === 'apple' && (type === 'station' || type === 'artist') && results.length > 1) {
+        logger.info(`Creating Apple Music ${type} radio for: ${term}`);
         
         // Clear queue and prepare for multiple tracks
         await coordinator.clearQueue();

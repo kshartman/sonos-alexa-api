@@ -428,6 +428,35 @@ When working on architectural changes or type improvements, always check these p
 - The legacy Sonos API layer implementation is at: ~/projects/sonos-old/node-sonos-discovery
 - Don't search GitHub for legacy code - use the local copy
 
+## Git Remotes & GitHub Workflow
+
+### Remote Configuration
+- **origin**: Private GitLab (git.bogometer.com) - full repo with all files
+- **upstream**: Public GitHub - filtered repo (no private files)
+
+### CRITICAL: Never Pull from GitHub
+**NEVER run `git pull upstream` or `git merge upstream/main`**. The GitHub repo has private files removed. Pulling from it will delete your local private files.
+
+### Pushing to GitHub
+Always use the `push-to-github.sh` script to sync to GitHub:
+```bash
+./push-to-github.sh              # Dry run (default) - see what will happen
+./push-to-github.sh --action:execute  # Actually push to GitHub
+```
+
+This script:
+1. Clones to a temp directory
+2. Removes files listed in `.github-exclude`
+3. Force pushes the filtered version to GitHub
+4. Your local repo remains unchanged
+
+### Files Excluded from GitHub
+See `.github-exclude` for the full list. Includes:
+- `CLAUDE.md`, `.claude/` - Development context
+- `docker-compose.yml`, `docker-*.sh` - Build/deploy scripts
+- `test/debug/` - Debug test scripts
+- `private/` - Environment configs
+
 ## Release Information
 - **v1.0.0**: Initial public release pushed to GitHub
   - Tag: v1.0.0 (commit 79ca690)

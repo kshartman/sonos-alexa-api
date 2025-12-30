@@ -39,8 +39,8 @@ show_usage() {
     echo "  - Private files are only excluded from the GitHub push"
 }
 
-# Check for help flag or no arguments
-if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
+# Check for help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     show_usage
     exit 0
 fi

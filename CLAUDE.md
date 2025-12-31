@@ -177,6 +177,29 @@ The application supports two logger implementations, automatically selected base
 - **pauseOthers**: When true, pauses all rooms not in the preset BEFORE grouping/playing
 - **Order matters**: Players are processed in array order for grouping
 
+## Preset File Locations (Manual Sync Required)
+Presets exist in THREE locations that must be manually synchronized:
+
+1. **Presets repo** (`../presets/presets-{home}/`) - Source of truth, version controlled
+2. **API project** (`./presets/`) - Used for local development (`npm start`)
+3. **Data mount** (`/usr/local/data/sonos/presets/`) - Used by Docker container
+
+### Syncing Presets
+After updating presets in the repo, sync to both locations:
+
+```bash
+# Sync to API project (for local dev)
+rsync -av --delete ../presets/presets-talon/ ./presets/
+
+# Sync to data mount (for Docker)
+rsync -av --delete ../presets/presets-talon/ /usr/local/data/sonos/presets/
+
+# Restart container to pick up changes
+docker compose restart
+```
+
+Replace `presets-talon` with `presets-worf` on the worf instance.
+
 ## API Patterns
 - Room endpoints: `/{room}/command`
 - Default room endpoints: `/command` (uses saved default)

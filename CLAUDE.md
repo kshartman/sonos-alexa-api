@@ -279,57 +279,17 @@ npm run killall && sleep 2 && npm start > logs/server.log 2>&1 &
 - Specific room: `curl "http://localhost:5005/OfficeSpeakers/play"`
 - Grouped speakers: Join first, then test on coordinator
 
-## Todo List Management
-- Use TodoRead/TodoWrite tools frequently
-- Mark items complete immediately after finishing
-- Only one task should be in_progress at a time
-
-## File Structure
-```
-src/
-├── server.ts              - Entry point
-├── api-router.ts          - All HTTP endpoints
-├── discovery.ts           - SSDP device discovery
-├── sonos-device.ts        - Device control (SOAP)
-├── preset-loader.ts       - Preset file loader with room validation
-├── topology-manager.ts    - UPnP topology management
-├── actions/
-│   └── favorites.ts       - Favorites management
-├── services/
-│   ├── tts-service.ts     - Text-to-speech service
-│   ├── music-service.ts   - Base music service class
-│   ├── apple-music-service.ts      - Apple Music search
-│   ├── music-library-service.ts    - Local library browsing
-│   ├── music-library-cache.ts      - Library cache with periodic reindex
-│   ├── pandora-service.ts          - Pandora integration
-│   ├── pandora-api.ts              - Pandora API client
-│   ├── pandora-browse.ts           - Pandora browse fallback
-│   └── account-service.ts          - Account management
-├── types/
-│   └── sonos.ts           - TypeScript type definitions
-├── upnp/
-│   └── subscriber.ts      - UPnP event subscriptions
-└── utils/
-    ├── soap.ts            - SOAP XML generation
-    ├── logger.ts          - Winston logger
-    ├── debug-manager.ts   - Debug category management
-    ├── default-room-manager.ts     - Default room persistence
-    ├── event-manager.ts   - Event emitter for SSE
-    ├── preset-converter.ts         - Legacy preset conversion
-    ├── announcement-helper.ts      - TTS announcement handling
-    └── validation.ts      - Input validation
-
-apidoc/                    - OpenAPI documentation
-├── openapi.yaml          - Main OpenAPI spec
-├── components/           - Reusable components
-└── paths/               - Endpoint definitions
-
-test/
-├── helpers/              - Test utilities
-├── integration/          - Integration tests by feature
-├── unit/                - Unit tests
-└── debug/               - Debug scripts
-```
+## Architecture Overview
+- **Entry point**: `src/server.ts` boots config, discovery, and the API router
+- **API router** (`src/api-router.ts`): All HTTP endpoints in one file, using a `Map<string, RouteHandler>` pattern (no framework)
+- **Device control** (`src/sonos-device.ts`): All SOAP calls to Sonos devices are centralized here
+- **Discovery** (`src/discovery.ts`): SSDP-based device discovery, maintains live device inventory
+- **Topology** (`src/topology-manager.ts`): Parses ZoneGroupTopology UPnP events to track groups, coordinators, stereo pairs
+- **Services** (`src/services/`): Each music service (Apple, Spotify, Pandora, library) has its own module. Pandora has the most complex architecture with separate API client, session manager, station manager, and browse fallback
+- **Config** (`src/utils/config-loader.ts`): Single source of truth for all configuration; all other modules read from the config object, never from `process.env` directly (exception: logger reads its own env vars for early init)
+- **Error handling** (`src/errors/sonos-errors.ts`): Typed error hierarchy with HTTP status code mapping
+- **OpenAPI docs**: `apidoc/` directory with modular spec
+- **Tests**: `test/unit/` and `test/integration/` (numbered for execution order)
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
@@ -345,36 +305,8 @@ test/
 - Priority order: Era 300 > Era 100 > One > Five > Arc > Beam > Play:5/3/1
 - System automatically selects best available device for topology subscription
 
-## Important Planning Documents
-
-The project has several key planning documents in the `docs/` directory:
-
-### Active Plans
-- **`docs/REFACTORING_PLAN.md`** - SOAP architecture refactoring plan
-  - Phase 1 & 2 completed (centralized SOAP operations, error handling, type safety)
-  - Phase 3 & 4 deferred (dependency injection, service refactoring)
-  - Includes Pandora architecture overhaul details
-  - Tracks alignment with type refactoring efforts
-
-- **`docs/TYPE_REFACTORING_PLAN.md`** - Type safety improvement plan
-  - Consolidated document with future work at top, completed work at bottom
-  - Achieved: 0 TypeScript errors/warnings, comprehensive error types, SOAP response types
-  - Remaining: Strict compiler options, runtime validation, consistent type usage
-
-- **`docs/LIBRARY_INDEX_PLAN.md`** - Music library search optimization plan
-  - NEW: Addresses 57-second search times for large libraries (49k+ tracks)
-  - Proposes in-memory indexing to reduce to <100ms
-  - Maintains zero-dependency philosophy
-  - Targeted for v1.7.0
-
-### Test Documentation
-- **`docs/TEST_PLAN.md`** - Comprehensive test strategy
-  - 96% coverage achieved
-  - Details integration test approach
-  - Environment variable configuration
-
-### Historical Context
-When working on architectural changes or type improvements, always check these planning documents first. They contain important context about what's been done, what worked, what didn't, and what's planned for the future.
+## Planning Documents
+Check `docs/` for architectural plans, test strategy, and refactoring history before starting related work.
 
 ## Legacy System Reference
 - The legacy node-sonos-http-api code is located at: ~/projects/sonos-old/node-sonos-http-api

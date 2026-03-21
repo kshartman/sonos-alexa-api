@@ -1,11 +1,11 @@
-# CLAUDE.md - Development Memory File
+# CLAUDE.md
 
-This file helps maintain context across Claude sessions for the Sonos Alexa API project.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 - Modern TypeScript rewrite of jishi's node-sonos-http-api
 - Designed for Alexa skill compatibility with minimal dependencies (winston, pino, fast-xml-parser)
-- Uses native Node.js APIs (requires Node 18+)
+- Uses native Node.js APIs (requires Node 20+)
 - No HTTP framework - just built-in `http` module
 - **S2 Systems Only** - S1 systems are not supported (no /status/accounts or Status:ListAccounts)
 
@@ -56,13 +56,17 @@ function processData(input: any) {
 
 ## Important Commands
 - Build: `npm run build`
+- Lint: `npm run lint` (ESLint)
 - Start: `npm start > logs/server.log 2>&1 &` (loads .env file via dotenv)
-- Start with debug: `npm run dev > logs/server.log 2>&1 &` (forces LOG_LEVEL=debug, DEBUG_CATEGORIES=all)
-- Kill server: Multiple options depending on how it was started:
-  - `pkill -f "node.*dist/server.js"` (for npm start)
-  - `pkill -f "tsx.*src/server.ts"` (for npm run dev)
-  - `pkill -f "tsx watch"` (kill any tsx watch processes)
+- Start with debug: `npm run dev > logs/server.log 2>&1 &` (forces LOG_LEVEL=debug, DEBUG_CATEGORIES=usual)
+- Kill server: `npm run killall` (kills all server processes and frees port 5005)
   - Check what's running: `ps aux | grep -E "(tsx|node.*server)" | grep -v grep`
+- Test all: `npm test` (builds first, runs all tests)
+- Test unit only: `npm run test:unit`
+- Test integration only: `npm run test:integration`
+- Test with verbose logs: `npm run test:log`
+- List tests: `npm run test:list` or `npm run test:list:detailed`
+- Check coverage: `npm run test:coverage`
 - Test endpoints: Use curl commands, not server restarts
 - **Note**: All npm scripts include `NODE_OPTIONS='--openssl-legacy-provider'` ONLY for Pandora API's Blowfish encryption. This is not needed if Pandora is not used.
 
@@ -107,6 +111,7 @@ CREATE_DEFAULT_PRESETS=true DEBUG_CATEGORIES=presets npm start
 - **presets**: Preset loading and conversion (can be very verbose)
 - **upnp**: Raw UPnP event details
 - **sse**: Server-Sent Events for webhooks
+- **usual**: Shorthand for api, discovery, favorites, presets (used by `npm run dev`)
 - **all**: Enable all categories
 
 ### Logger System
@@ -252,7 +257,7 @@ Replace `presets-talon` with `presets-worf` on the worf instance.
 
 ### "Port already in use"
 ```bash
-pkill -f "node dist/server.js" && sleep 2 && npm start > logs/server.log 2>&1 &
+npm run killall && sleep 2 && npm start > logs/server.log 2>&1 &
 ```
 
 ### Empty accounts XML
@@ -325,81 +330,6 @@ test/
 ├── unit/                - Unit tests
 └── debug/               - Debug scripts
 ```
-
-## Recent Changes
-- Added music search with Apple Music support
-- Implemented default music service configuration
-- Added room-less music endpoints (/song/, /album/, /station/)
-- Fixed announcement playback restoration
-- Added credits to jishi in README
-- Converted anesidora library to TypeScript and integrated Pandora API support
-- Note: SiriusXM endpoints exist but are NOT IMPLEMENTED (return 501) due to lack of service access
-- Pandora integration:
-  - Play stations works with real API when credentials configured in settings.json
-  - Falls back to browse/favorites method when no credentials
-  - Thumbs up/down partially working - skip functionality works but API feedback returns error code 0
-  - Requires NODE_OPTIONS='--openssl-legacy-provider' for Blowfish encryption (only needed for Pandora)
-  - Station switching implemented with proper 500ms delays for session management
-- Music Library features:
-  - Auto-indexing at startup with cache persistence
-  - Search by song, artist, album
-  - Periodic reindex via library.reindexInterval setting
-  - Progress tracking during indexing
-  - API endpoints: /library/index, /library/refresh, /library/summary, /library/detailed
-- Documentation updates:
-  - Modular OpenAPI spec in apidoc/ folder
-  - Updated README with complete API endpoints
-  - Updated ALEXA_COMPATIBILITY.md and IMPLEMENTATION_SUMMARY.md
-- Test improvements:
-  - Split content tests by service type
-  - Added group member names to warnings
-  - Fixed volume mock response format
-- Preset enhancements:
-  - Room validation with invalid room filtering
-  - Colored output for preset status
-- TTS endpoints now support volume parameter
-- Added library.reindexInterval setting (e.g., "1 week", "2 days", "24 hours")
-- Line-in playback functionality implemented
-- Comprehensive TTS test coverage with volume support
-- Test coverage increased to 96% (from 94%)
-- Test runner improved to handle path formats correctly
-- Added setup-local.sh to .dockerignore (user-specific setup script)
-- Removed obsolete test-local.sh file
-- Implemented trusted networks authentication bypass:
-  - Added trustedNetworks array to auth configuration
-  - IPs in trusted networks skip authentication (includes localhost by default)
-  - Supports CIDR notation (e.g., 192.168.1.0/24)
-  - Extracts client IP from proxy headers (X-Forwarded-For, X-Real-IP)
-  - Fixes Docker health check authentication issues
-- Fixed x-rincon-cpcontainer URI support:
-  - Implemented proper handling for music service containers (e.g., Hearts of Space, This Weeks Show)
-  - These URIs now use queue-based playback (clear queue, add container, play from queue)
-  - Fixes SOAP 500 errors when playing certain music service favorites
-- Fixed x-rincon-playlist URI support:
-  - Music library playlists now properly browse and add all tracks to queue
-  - Handles playlist URIs by extracting playlist ID and browsing contents
-- Improved content analysis script:
-  - Added case-insensitive favorite matching
-  - Better detection of favorites referenced by presets
-- Logger improvements:
-  - NODE_ENV defaults to development when not set (enables colorized output)
-  - Respects LOG_LEVEL and DEBUG_CATEGORIES from environment/dotenv
-- Music Services API:
-  - Added /services endpoint to get all available music services
-  - Added /services/refresh endpoint to manually refresh services cache
-  - Automatic 24-hour cache refresh with retry on failure
-  - Proper identification of personalized services (e.g., user-specific TuneIn accounts)
-  - Service name resolution from presentation strings
-  - Content analysis now uses services API for accurate service identification
-- **Major Pandora Improvements** (July 9, 2025):
-  - Complete architecture overhaul with PandoraStationManager
-  - Pre-loaded memory cache eliminates API calls during playback
-  - Fixed "bad state" where Pandora plays but state shows STOPPED
-  - Fixed station switching SOAP 500 errors with proper delays and metadata
-  - Added music search support with fuzzy matching
-  - Automatic background refresh (favorites: 5min, API: 24hr)
-  - Merged station list tracks source as 'api', 'favorite', or 'both'
-  - Test suite refactored into 4 comprehensive suites with retry mechanism
 
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
@@ -480,23 +410,6 @@ See `.github-exclude` for the full list. Includes:
 - `test/debug/` - Debug test scripts
 - `private/` - Environment configs
 
-## Release Information
-- **v1.0.0**: Initial public release pushed to GitHub
-  - Tag: v1.0.0 (commit 79ca690)
-  - Maintenance branch: release_1.0.0
-  - GitHub repository: https://github.com/kshartman/sonos-alexa-api
-  - Release date: June 26, 2025
-
-## Recent Script Changes (June 27, 2025)
-- Removed `test:full` script (was non-functional, `npm test` already runs all tests)
-- Removed `test:id` script (was non-functional with trailing --)
-- Renamed `save-version` to `version:save` for consistency
-- Added `test:list:detailed` to show all test cases
-- Updated `test:coverage` to run check-coverage.ts instead of run-tests.ts
-- Added `--detailed` flag to check-coverage.ts
-- Updated `clean` script to also remove logs directory
-- Tests now run with LOG_LEVEL=error by default (use --debug flag for verbose output)
-
 ## Docker Release Process
 When ready to publish a new Docker image:
 
@@ -533,27 +446,14 @@ When ready to publish a new Docker image:
    - Copy contents from `DOCKERHUB_README.md` (NOT the main README.md)
    - This file is intentionally version-agnostic and doesn't need updating for releases
 
-## Notes for Next Session
-- Unit tests would be valuable for reliability
+## Design Decisions & Gotchas
+- **HTTPS/TLS not supported** - Design decision to use reverse proxy (nginx) for SSL termination
 - Docker health check endpoint exists at /health
-- SiriusXM could be implemented if needed (channel list exists in legacy repo)
-- Spotify phase 1 complete (v1.5.0) - Direct playback and SpotifyUrl presets work. Search requires OAuth2
-- **Spotify Requirements**:
-  - Premium account required (free accounts can't be controlled via API)
-  - Account must be linked in Sonos app
-  - Must add Spotify favorites (track, album, playlist) for account extraction
-- Amazon Music search is impossible without reverse engineering (no public API)
-- Deezer not implemented (would need API access)
-- Consider adding more path files to complete the OpenAPI documentation
-- Could add rate limiting to music library refresh endpoint
-- Preset validation could be extended to validate favorites exist
-- **HTTPS/TLS not supported** - Unlike legacy system, no securePort or certificate handling. Design decision to use reverse proxy (nginx) for SSL termination instead
 - **Saved Queue (Sonos Playlist) Handling**:
   - Saved queues use `file:///jffs/settings/savedqueues.rsq#ID` format
-  - They can be played directly with `setAVTransportURI` using proper metadata
-  - The saved queue ID must exist - can enumerate via `/status/playlists` or by browsing `SQ:` container
-  - Not all Sonos APIs (like node-sonos-http-api) support these URIs out of the box
-  - TODO: Consider adding validation for saved queue IDs in preset/favorite validation
+  - Playable directly with `setAVTransportURI` using proper metadata
+  - Enumerate via `/status/playlists` or by browsing `SQ:` container
+- **Spotify Requirements**: Premium account, linked in Sonos app, must add Spotify favorites for account extraction
 
 ## Environment Variables
 All configuration can now be set via environment variables. `npm start` loads .env files via dotenv:
@@ -607,153 +507,11 @@ All configuration can now be set via environment variables. `npm start` loads .e
 - **TEST_ALBUM_QUERIES**: JSON array of album queries for test content discovery
 - **TEST_VOLUME_DEFAULT**: Initial volume level (0-100) to set for all rooms during test setup
 
-## Architecture Critique & Enhancement Plan
-
-### Architecture Strengths
-- Clean separation of concerns with well-defined modules
-- Minimal dependencies (only winston + pino + fast-xml-parser)
-- Good TypeScript usage with strong typing in most areas
-- Event-driven architecture using native Node.js patterns
-- Excellent test coverage (96%)
-- Well-structured API router without framework overhead
-
-### Architecture Weaknesses
-- ~~87 TypeScript `any` warnings indicate type safety gaps~~ ✅ Fixed - all warnings resolved
-- Some error handling is inconsistent (mix of try/catch and unhandled promises)
-- Hardcoded values that should be configurable
-- Limited authentication options (only basic auth)
-- No rate limiting or request validation middleware
-- Missing some features from legacy system
-
-### Prioritized Enhancement List
-
-#### High Priority (Core Improvements)
-1. **Type Safety Improvements** - ~~Replace all `any` types with proper interfaces~~ ✅ Completed, add strict TypeScript compiler options, define SOAP response types
-2. **Error Handling Standardization** - Implement consistent error classes, global error handler middleware, improve SOAP fault handling, retry logic
-3. **Configuration Management** - Move hardcoded values to settings.json, add environment variable support, implement settings validation, hot-reload
-4. **API Rate Limiting** - Implement per-IP rate limiting, add burst protection, configurable limits per endpoint
-
-#### Medium Priority (Feature Completeness)
-5. **Spotify Integration** - Implement OAuth2 flow, add search/playback capabilities, handle token refresh
-6. **SiriusXM Implementation** - Complete the stubbed endpoints, add channel list from legacy system, implement authentication
-7. **Enhanced Security** - Add API key authentication option, implement JWT tokens, add request signing, CORS configuration
-8. **WebSocket Support** - Real-time state updates, push notifications, reduce polling overhead
-9. **Metrics & Monitoring** - Add Prometheus metrics, performance tracking, request/response logging, health check improvements
-
-#### Low Priority (Nice to Have)
-10. **Caching Layer** - Redis support for state caching, reduce SOAP calls, configurable TTLs
-11. **Queue Management** - Better queue manipulation, save/restore queue state, queue templates
-12. **Advanced TTS** - Amazon Polly support, ElevenLabs integration, SSML support
-13. **Playlist Management** - Create/edit playlists, import/export capabilities, cross-service playlist sync
-14. **Database Support** - SQLite for presets/favorites, historical playback data, user preferences
-15. **API Documentation** - Complete OpenAPI spec, interactive API explorer, code examples
-16. **Performance Optimizations** - Connection pooling, batch SOAP requests, parallel device updates
-17. **Docker Improvements** - Multi-stage builds, Alpine-based image, Kubernetes manifests
-18. **CLI Tools** - Device discovery tool, preset manager, diagnostic utilities
-19. **Plugin System** - Custom action plugins, music service plugins, TTS provider plugins
-20. **Home Assistant Integration** - Native integration, auto-discovery, media player entities
-21. **Remove Global Discovery Variable** - Refactor SonosDevice to accept discovery instance via constructor or method parameter instead of using global variable
-## Recent Updates (July 14, 2025)
-- **Enhanced Authentication Status Monitoring**:
-  - Added `/pandora/status` endpoint with detailed auth state, station counts, and cache age
-  - Added `/spotify/status` endpoint with token expiry and authentication tracking
-  - PandoraStationManager now tracks auth attempts with timestamps and error messages
-  - SpotifyAuthService provides detailed token status including expiry calculations
-  - Both services distinguish between having credentials, being authenticated, and auth failures
-- **Deferred Preset Validation**:
-  - Fixed issue where presets removed valid rooms (SpaSpeakers) not yet discovered at startup
-  - Presets now parse immediately but validate only on first use OR when all rooms are discovered
-  - Added async getPreset/getAllPresets methods that trigger validation
-  - Raw presets accessible via getRawPresets() without validation
-- **Spotify Token Management**:
-  - Added proactive token refresh on startup when refresh token is configured
-  - Fixed token showing as expired from 1969 when initialized from refresh token
-  - Token automatically refreshes on-demand when needed (5 minutes before expiry)
-- **Server Summary Enhancements**:
-  - Added `--json` flag to server-summary.sh for structured monitoring output
-  - JSON mode uses proper ISO 8601 timestamps
-  - Shows color-coded authentication states in text mode
-  - Comprehensive status including entities, readiness, and auth states
-- **Library Search Fix**:
-  - Fixed issue where library search would resume previous content (e.g., Pandora) instead of playing searched tracks
-  - Library search now properly sets transport URI to queue before playing
-  - Apple and Spotify search were already handling this correctly
-- **Documentation Consolidation**:
-  - Merged TYPE_REFACTOR_PLAN.md into TYPE_REFACTORING_PLAN.md
-  - Created LIBRARY_INDEX_PLAN.md for search optimization
-  - Updated REFACTORING_PLAN.md to align with type refactoring work
-
-## Previous Updates (June 29-30, 2025)
-- Fixed detailed endpoints regression where they returned arrays instead of objects
-- Added defensive checks to content analyzer for malformed favorites
-- Infrastructure analyzer now shows stereo/surround role designations (L, R, C, SW, SL, SR, HL, HR)
-- Discovered that some devices (particularly Connect and Amp) may show as "Unknown" until properly discovered via SSDP
-- Force discovery can be triggered by querying device state or waiting for SSDP announcement cycle
-- Moved force-discovery.ts to debug directory
-
-## Recent API Changes (June 30, 2025)
-
-### Debug Endpoints Enhanced
-- Added application version to Config as readonly field
-- Enhanced /debug/startup to include version and full config
-- Added /debug/startup/config endpoint that returns just the configuration
-- Version is now easily accessible via debug endpoints for troubleshooting
-
-### Music Library Endpoints
-- Added music library cache endpoints:
-  - GET /library/index - Shows indexing status and metadata
-  - GET /library/refresh - Triggers library re-index
-  - GET /library/summary - Overview with top artists/albums
-  - GET /library/detailed - Full track/artist/album data
-- Added methods to MusicLibraryCache class:
-  - getSummary() - Returns statistics and top content
-  - getDetailedData() - Returns full tracks, artists, albums data
-- Integrated music library analysis into analyze-home-content.ts
-- analyze-content.sh now generates four outputs in homes/{home}/ directory:
-  - content-analysis.md - Favorites and presets breakdown
-  - preset-validation-results.md - Preset validation status
-  - music-library-analysis.md - Library statistics and top content
-  - music-library.json - Optimized JSON export of all tracks (with jq pretty-printing if available)
-- JSON export strips unnecessary fields (titleLower, artistLower, albumLower, albumArtURI) for ~50% size reduction
-- Created delete-favorite.ts script to remove ghost favorites (moved to debug directory)
-- Implemented DestroyObject SOAP call for removing favorites that don't appear in Sonos app
-
-## Phase 1 Refactoring (July 2, 2025)
-Major architectural refactoring to consolidate SOAP operations:
-- **Centralized SOAP Operations**: All SOAP calls now go through SonosDevice class
-- **New SOAP Methods Added**:
-  - ContentDirectory: `browseRaw()`, `searchContentDirectory()`, `createObject()`, `destroyObject()`
-  - AVTransport: `addMultipleURIsToQueue()`, `removeTrackRangeFromQueue()`, `reorderTracksInQueue()`, `saveQueue()`
-  - RenderingControl: `getBass()`, `setBass()`, `getTreble()`, `setTreble()`, `getLoudness()`, `setLoudness()`
-  - MusicServices: `listAvailableServices()`
-- **Type Safety**: Fixed all TypeScript `any` warnings (0 errors, 0 warnings)
-- **Updated Consumers**: FavoritesManager and PandoraBrowser now use centralized methods
-- **Maintained Compatibility**: Added `browseRaw()` alongside existing `browse()` to preserve API
-
-## v1.3.0 Release (June 30, 2025)
-Major release with comprehensive device information API, music library endpoints, and services discovery:
-- **Device Information API**: /devices endpoints with model, IP, and stereo/surround configuration
-- **Infrastructure Analysis Tools**: analyze-infrastructure.sh generates detailed system reports
-- **Music Library API**: Complete library access with summary and detailed endpoints
-- **Music Services API**: Cached service discovery with proper TuneIn identification
-- **Bug Fixes**: Fixed detailed endpoints regression, content analyzer improvements, EventEmitter max listeners warning
-- **Content Analysis**: Enhanced URI type recognition and service identification
-- See releases/RELEASE_NOTES_1.3.0.md for complete details
-
-## Phase 2 Refactoring (July 2, 2025)
-Enhanced TypeScript type safety and error handling:
-- **Error Handling Architecture**: Created comprehensive error class hierarchy
-  - Base `SonosError` class with specific subtypes for different error scenarios
-  - Proper HTTP status code mapping for all error types
-  - Better error messages and debugging information
-- **SOAP Response Types**: Defined TypeScript interfaces for all SOAP responses
-  - `TransportInfo`, `PositionInfo`, `MediaInfo`, `VolumeResponse`, etc.
-  - Eliminated most `any` types in favor of proper interfaces
-- **Retry Logic**: Implemented configurable retry system with exponential backoff
-  - Smart retry decisions based on error types (network vs client errors)
-  - Configurable retry policies for different operations
-- **Bug Fixes**: 
-  - Fixed MediaInfo vs TransportInfo property confusion
-  - Corrected Pandora service TrackURI property access
-  - Enhanced type safety throughout the codebase
-- All tests passing, ready for v1.5.0 release
+## Service Implementation Status
+- **Apple Music**: Full search via iTunes API (no auth needed). Default account SID: 52231
+- **Spotify**: Direct playback and SpotifyUrl presets work (v1.5.0). Search requires OAuth2. Premium account required
+- **Pandora**: Full integration with PandoraStationManager. Requires `--openssl-legacy-provider` for Blowfish encryption
+- **Music Library**: Auto-indexing at startup with search by song/artist/album
+- **SiriusXM**: Endpoints exist but return 501 (not implemented)
+- **Amazon Music**: No public API available
+- **Deezer**: Not implemented

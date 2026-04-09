@@ -291,6 +291,11 @@ npm run killall && sleep 2 && npm start > logs/server.log 2>&1 &
 - **OpenAPI docs**: `apidoc/` directory with modular spec
 - **Tests**: `test/unit/` and `test/integration/` (numbered for execution order)
 
+## Task Management
+- Use TaskCreate/TaskUpdate tools to track progress
+- Mark items complete immediately after finishing
+- Only one task should be in_progress at a time
+
 ## UPnP Event Subscriptions
 - Devices subscribe to UPnP services discovered from device description XML
 - Subscriptions auto-renew 30 seconds before expiry (default timeout: 300s)
@@ -365,13 +370,13 @@ When ready to publish a new Docker image:
    ```
 7. **Push to Docker Hub**:
    ```bash
-   docker push kshartman/sonos-alexa-api:v1.2.0
+   docker push kshartman/sonos-alexa-api:v1.x.x
    docker push kshartman/sonos-alexa-api:latest
    ```
 8. **Tag the git commit**:
    ```bash
-   git tag v1.2.0
-   git push origin v1.2.0
+   git tag v1.x.x
+   git push origin v1.x.x
    ```
 9. **Update Docker Hub Overview**:
    - Go to https://hub.docker.com/repository/docker/kshartman/sonos-alexa-api/general

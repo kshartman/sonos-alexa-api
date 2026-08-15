@@ -23,9 +23,10 @@ pids
 *.sqlite
 
 # Configuration files with sensitive data
-settings.json
-config.json
-settings-*.json
+# Anchored to the repo root so these do not also match .claude/settings.json
+/settings.json
+/config.json
+/settings-*.json
 !settings.default.json
 !settings.example.json
 

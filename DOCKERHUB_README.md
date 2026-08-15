@@ -69,9 +69,10 @@ services:
 ## Notes
 
 - Host networking (`--network host`) is required for SSDP discovery
-- The container runs as non-root user (uid 1001)
+- The container runs as a non-root user, uid/gid `2128:2128` (uid 1001 in releases before v1.8.0). If you mount `/app/data`, chown it to match, or override with `user: "1001:1001"` in compose
+- Everything the container writes goes under `/app/data` — mount it to persist defaults, tokens, TTS cache, and the library index
 - Health check endpoint available at `/health`
-- Supports amd64, arm64, and arm/v7 architectures
+- `linux/amd64` only, by choice — arm64 (Apple Silicon, Raspberry Pi 4/5) builds fine from source, it just isn't published. The `node:22-alpine` base is multi-arch, so a native build works unchanged
 
 ## License
 

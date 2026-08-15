@@ -1,6 +1,6 @@
 # Docker Image Usage
 
-The Sonos Alexa API is available as a public Docker image with multi-architecture support (amd64, arm64, arm/v7).
+The Sonos Alexa API is available as a public Docker image for `linux/amd64`.
 
 **Docker Hub**: [`kshartman/sonos-alexa-api`](https://hub.docker.com/r/kshartman/sonos-alexa-api)
 
@@ -28,7 +28,7 @@ docker run -d \
 ## Available Tags
 
 - `latest` - Latest stable release
-- `v1.6.0`, `v1.5.0`, etc. - Specific version releases
+- `v1.8.0`, `v1.7.1`, etc. - Specific version releases
 
 Docker Hub: `kshartman/sonos-alexa-api`
 
@@ -75,9 +75,34 @@ All configuration can be done via environment variables:
 
 ### Optional Volumes
 - `/app/presets` - Preset JSON files (read-only)
-- `/app/data` - Persistent defaults (only if you want to save default room/service across restarts)
+- `/app/data` - Persistent state: default room/service, Spotify tokens, TTS cache, music library index
 
-All caches (TTS, music library) are stored inside the container and recreated as needed. Logs go to stdout/stderr for Docker log management.
+Everything the container writes goes under `/app/data`. Mount it if you want that state to survive container replacement; otherwise it is recreated as needed. Logs go to stdout/stderr for Docker log management.
+
+## Container User
+
+The container runs as a non-root user. As of v1.8.0 the published image uses **uid/gid 2128:2128** (earlier images used 1001, with the group incorrectly set to 65533/`nogroup`).
+
+If you mount `/app/data`, the host directory must be writable by that user:
+
+```bash
+sudo chown -R 2128:2128 /path/to/your/data
+```
+
+Or override the runtime user instead, which needs no rebuild and works with any host ownership:
+
+```yaml
+services:
+  sonos-api:
+    image: kshartman/sonos-alexa-api:latest
+    user: "1001:1001"
+```
+
+To check what an image uses:
+
+```bash
+docker inspect --format '{{.Config.User}}' kshartman/sonos-alexa-api:latest
+```
 
 ## Docker Compose Example
 
@@ -181,14 +206,44 @@ docker build -t my-sonos-api .
 docker run -d --name sonos-api --network host my-sonos-api
 ```
 
-## Multi-Architecture Support
+### Build Arguments
 
-Images are built for multiple architectures:
-- `linux/amd64` - Standard x86_64 systems
-- `linux/arm64` - 64-bit ARM (Raspberry Pi 4, Apple Silicon)
-- `linux/arm/v7` - 32-bit ARM (Raspberry Pi 3)
+When building from source, the runtime user is configurable:
 
-Docker will automatically pull the correct architecture for your system.
+| Build arg | Default | Purpose |
+|---|---|---|
+| `APP_UID` | `1000` | uid the container process runs as |
+| `APP_GID` | `1000` | gid the container process runs as |
+| `PORT` | `5005` | Port exposed by the image |
+| `VERSION` | `latest` | Value for the OCI version label |
+
+```bash
+docker build --build-arg APP_UID=1001 --build-arg APP_GID=1001 -t my-sonos-api .
+```
+
+If the requested ids already exist in the base image, the build reuses that account rather than failing — uid 1000 is `node` in `node:22-alpine`, so the default produces an image running as `node`. The project's own build scripts (`docker-build.sh`, `docker-build-local.sh`) default to `2128:2128` and honor `APP_UID`/`APP_GID` from the environment:
+
+```bash
+APP_UID=1000 APP_GID=1000 ./docker-build.sh
+```
+
+## Architecture
+
+The published image is **`linux/amd64` only**, by choice. There is no manifest list,
+so Docker cannot select a matching architecture — pulling on ARM hardware (Raspberry
+Pi, Apple Silicon) will either fail to find a manifest or produce an exec format error.
+
+Nothing in the project prevents an arm64 build; it simply isn't published. Build from
+source on the target machine:
+
+```bash
+git clone https://github.com/kshartman/sonos-alexa-api.git
+cd sonos-alexa-api
+docker build -t sonos-alexa-api:local .
+```
+
+The base image (`node:22-alpine`) is multi-architecture, so a native build works
+without changes.
 
 ## Troubleshooting
 
@@ -199,10 +254,12 @@ If devices aren't discovered:
 3. Verify Sonos devices are on the same network
 
 ### Permission Issues
-The container runs as non-root user (UID 1001). Ensure mounted volumes have appropriate permissions:
+The container runs as a non-root user (uid/gid 2128:2128 as of v1.8.0, 1001 before that). Ensure mounted volumes are writable by it:
 ```bash
-sudo chown -R 1001:1001 ./data ./logs ./presets
+sudo chown -R 2128:2128 ./data ./logs ./presets
 ```
+
+If you cannot change host ownership, override the runtime user instead — see [Container User](#container-user).
 
 ### Debug Mode
 Enable debug logging to troubleshoot:

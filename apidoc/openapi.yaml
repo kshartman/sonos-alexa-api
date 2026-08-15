@@ -1235,7 +1235,7 @@ paths:
                 properties:
                   version:
                     type: string
-                    example: "1.6.0"
+                    example: "1.8.0"
                   timestamp:
                     type: string
                     format: date-time

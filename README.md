@@ -4,7 +4,7 @@ A modern, high-performance HTTP API for controlling Sonos speakers, designed for
 
 This is a complete TypeScript rewrite of the original [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api), focused on speed, reliability, and minimal dependencies.
 
-**Version 1.6.0** adds enhanced authentication monitoring, deferred preset validation, and improved server status reporting.
+**Version 1.8.0** makes the container's runtime user configurable and adds a preset validation script. See [Container User](DOCKER.md#container-user) — the published image's uid/gid changed in this release.
 
 ## Key Features
 
@@ -45,14 +45,19 @@ Typical response times:
 - Music search: <200ms
 - Group operations: <150ms
 
-## What's New in v1.6.0
+## What's New in v1.8.0
 
-- **Enhanced Authentication Status** - New `/pandora/status` and `/spotify/status` endpoints show detailed auth state
-- **Proactive Token Refresh** - Spotify tokens now refresh automatically on startup when configured
-- **Server Summary JSON** - The `server-summary.sh` script now supports `--json` flag for structured output
-- **Deferred Preset Validation** - Presets validate only when used, preventing issues with devices discovered later
-- **sonosdebug.sh Utility** - New script for managing debug settings remotely with network-aware defaults
-- **Bug Fixes** - Library search playback, Pandora cache loading, preset favorite resolution
+- **⚠️ Container user changed** - The published image now runs as uid/gid `2128:2128` (was uid 1001, with the group incorrectly left as `nogroup`). If you bind-mount `/app/data`, chown it to match or override with `user:` in compose — see [Container User](DOCKER.md#container-user)
+- **Configurable container user** - New `APP_UID`/`APP_GID` build args let you build an image that matches whatever uid your host uses
+- **Preset validation script** - `scripts/validate-presets.sh` checks symlinks, favorite references, and sync between the Docker mount and your preset repo
+- **`CACHE_DIR` removed** - It was parsed and never used by anything; remove it from your `.env` if set
+
+### Since v1.6.0
+
+- **Apple Music artist search** - Now queues multiple tracks instead of one (v1.7.1)
+- **`push-to-github.sh`** - Dry run is now genuinely the default
+
+Full details in [releases/](releases/).
 
 ## Quick Start
 
@@ -64,7 +69,7 @@ docker run -d \
   --name sonos-alexa-api \
   --network host \
   -e DEFAULT_ROOM="Living Room" \
-  kshartman/sonos-alexa-api:v1.6.0
+  kshartman/sonos-alexa-api:v1.8.0
 
 # Or using Docker Compose (recommended)
 curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml
@@ -473,7 +478,7 @@ Monitor the overall server status with the included summary script:
   "server": {
     "host": "localhost",
     "port": 5005,
-    "version": "1.6.0",
+    "version": "1.8.0",
     "environment": "development",
     "started": "2025-07-14T18:25:22.630Z",
     "uptimeSeconds": 3600

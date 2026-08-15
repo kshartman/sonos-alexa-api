@@ -3,9 +3,15 @@
 
 services:
   sonos-api:
-    image: kshartman/sonos-alexa-api:v1.6.0
+    image: kshartman/sonos-alexa-api:v1.8.0
     container_name: sonos-alexa-api
     network_mode: host
+
+    # The image runs as uid/gid 2128:2128. If the directory you mount at
+    # /app/data is owned by a different user, either chown it to match or
+    # uncomment the line below to run as that user instead.
+    # user: "1001:1001"
+
     environment:
       # Required: Set your default room
       - DEFAULT_ROOM=Living Room

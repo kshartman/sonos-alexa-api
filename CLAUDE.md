@@ -311,7 +311,7 @@ npm run killall && sleep 2 && npm start > logs/server.log 2>&1 &
 - System automatically selects best available device for topology subscription
 
 ## Planning Documents
-Check `docs/` for architectural plans, test strategy, and refactoring history before starting related work.
+Check `docs/` for architectural plans and test strategy before starting related work. `docs/WISHLIST.md` holds unscheduled ideas. `archive/` holds completed or abandoned plans, old release checklists, and one-off scripts — historical record only, not current guidance, and excluded from the public GitHub repo.
 
 ## Legacy System Reference
 - The legacy node-sonos-http-api code is located at: ~/projects/sonos-old/node-sonos-http-api
@@ -357,6 +357,14 @@ When ready to publish a new Docker image:
    ```bash
    ./docker-build.sh
    ```
+   The script defaults the container's runtime user to `2128:2128` (uid/gid of the
+   `sonos` account on the deploy hosts). Override per-build if needed:
+   ```bash
+   APP_UID=1000 APP_GID=1000 ./docker-build.sh
+   ```
+   The Dockerfile's own defaults are `1000:1000`, which reuses the `node` account
+   already present in `node:22-alpine`. Whatever is baked in, consumers can still
+   override at runtime with `user:` in compose.
 5. **Test the image locally**:
    ```bash
    docker run -d --name sonos-test --network host sonos-alexa-api:latest

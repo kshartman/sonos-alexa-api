@@ -53,6 +53,25 @@ need attacker-controlled input to matter.
 - [ ] `npm audit fix` on the dev tree, then confirm `npm run lint` and `npm test` still pass
 - [ ] Do not ship a runtime change to chase these
 
+## Preset Validation Reporting
+
+Not a playback bug — presets resolve fine at runtime — but the logs and `/debug/startup`
+misreport it as failure. Investigated 2026-08-15 against the running 1.8.0 container.
+
+Evidence: of the 68 presets reported as "Failed favorite resolution", **all 68** reference
+favorites that exist live (62 exact, 6 after normalisation, 0 missing). The label means
+"URI still starts with `favorite:`", which `preset-loader.ts:406-407` deliberately leaves
+for runtime, and `sonos-device.ts:638-658` resolves in `playUri()`.
+
+- [ ] Rename the log line and the `failedResolution` stat — "deferred to runtime" is what
+      it means. `preset-loader.ts:246-249`.
+- [ ] Stop re-validating on every discovery event. 504 full passes over 139 presets in an
+      8-second window at startup, with the valid count oscillating 57↔82.
+- [ ] Recompute or invalidate the stats after the favorites cache settles. `presetsValidated`
+      (`preset-loader.ts:259`) latches on the first completed pass, so `/debug/startup`
+      reports that snapshot permanently — this instance froze at 71 valid, 0.35s after a
+      pass that had reached 82.
+
 ## Release Process
 
 - [ ] Decide the fate of the post-release `-dev` version bump. `RELEASE_CHECKLIST_v1.6.0.md`

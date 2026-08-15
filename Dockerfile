@@ -33,12 +33,17 @@ ARG BUILD_SOURCE_DATE
 ARG VCS_REF
 ARG VERSION=latest
 ARG PORT=5005
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 # Install dumb-init for proper signal handling and curl for TTS
 RUN apk add --no-cache dumb-init curl
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+# Create non-root user (reuses the base image account when the ids already exist)
+RUN if ! getent group ${APP_GID} > /dev/null; then addgroup -g ${APP_GID} -S sonos; fi && \
+    if ! getent passwd ${APP_UID} > /dev/null; then \
+        adduser -S -u ${APP_UID} -G "$(getent group ${APP_GID} | cut -d: -f1)" sonos; \
+    fi
 
 WORKDIR /app
 
@@ -53,26 +58,26 @@ COPY package*.json ./
 RUN npm ci --only=production --no-optional && npm cache clean --force
 
 # Copy built application from builder
-COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/dist ./dist
 
 # Copy version file
-COPY --from=builder --chown=nodejs:nodejs /app/src/version.ts ./src/
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/src/version.ts ./src/
 
 # Copy default settings (renamed during copy)
-COPY --chown=nodejs:nodejs settings.default.json ./settings.json
+COPY --chown=${APP_UID}:${APP_GID} settings.default.json ./settings.json
 
 # Create presets directory
 RUN mkdir -p presets
 
 # Copy preset files if they exist (directory might be empty or contain only symlinks)
 # Using a more robust approach to handle missing files
-COPY --chown=nodejs:nodejs presets ./presets-tmp
+COPY --chown=${APP_UID}:${APP_GID} presets ./presets-tmp
 RUN find ./presets-tmp -name "*.json" -type f -exec cp {} ./presets/ \; 2>/dev/null || true && \
     rm -rf ./presets-tmp
 
 # Create runtime directories with proper permissions
-RUN mkdir -p /app/data /app/logs /app/tts-cache /app/music-library-cache && \
-    chown -R nodejs:nodejs /app/data /app/logs /app/tts-cache /app/music-library-cache
+RUN mkdir -p /app/data /app/logs && \
+    chown -R ${APP_UID}:${APP_GID} /app/data /app/logs
 
 # Add OCI labels for better image metadata
 LABEL org.opencontainers.image.created=$BUILD_DATE
@@ -88,7 +93,7 @@ LABEL org.opencontainers.image.description="Modern TypeScript Sonos HTTP API for
 LABEL org.opencontainers.image.authors="Shane Hartman, Claude (Anthropic)"
 
 # Switch to non-root user
-USER nodejs
+USER ${APP_UID}:${APP_GID}
 
 # Expose port
 EXPOSE ${PORT}

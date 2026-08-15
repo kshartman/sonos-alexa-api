@@ -218,9 +218,6 @@ export function loadConfiguration(): ConfigLoadResult {
   if (process.env.HTTP_TIMEOUT) {
     config.httpTimeout = parseInt(process.env.HTTP_TIMEOUT, 10);
   }
-  if (process.env.CACHE_DIR) {
-    config.cacheDir = process.env.CACHE_DIR;
-  }
   if (process.env.CREATE_DEFAULT_PRESETS !== undefined) {
     config.createDefaultPresets = parseBooleanEnv(process.env.CREATE_DEFAULT_PRESETS);
   }
@@ -294,7 +291,7 @@ function getEnvironmentOverrides(): string[] {
     'PANDORA_USERNAME', 'PANDORA_PASSWORD',
     'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN', 'SPOTIFY_REDIRECT_URI', 'SPOTIFY_SCOPES',
     'WEBHOOKS_VOLUME_URL', 'WEBHOOKS_TRANSPORT_URL', 'WEBHOOKS_TOPOLOGY_URL',
-    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT', 'CACHE_DIR',
+    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT',
     'CREATE_DEFAULT_PRESETS'
   ];
   

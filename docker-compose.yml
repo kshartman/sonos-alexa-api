@@ -92,6 +92,8 @@ services:
         VERSION: ${VERSION:-dev}
         BUILD_DATE: ${BUILD_DATE:-}
         VCS_REF: ${VCS_REF:-}
+        APP_UID: ${APP_UID:-2128}
+        APP_GID: ${APP_GID:-2128}
     image: sonos-alexa-api:dev
     container_name: sonos-alexa-api-dev
     network_mode: host

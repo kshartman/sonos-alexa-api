@@ -138,7 +138,6 @@ export interface Config {
   disableDiscovery?: boolean;
   discoveryTimeout?: number;
   httpTimeout?: number;
-  cacheDir?: string;
   createDefaultPresets?: boolean;
 }
 

@@ -29,9 +29,17 @@ git pull
 BUILD_SOURCE_DATE=$(npm run --silent build:date)
 echo -e "\n${YELLOW}Source Date: ${BUILD_SOURCE_DATE}${NC}"
 
+# Runtime user for deployed images (override with APP_UID/APP_GID in the environment)
+APP_UID="${APP_UID:-2128}"
+APP_GID="${APP_GID:-2128}"
+echo -e "${YELLOW}Runtime user: ${APP_UID}:${APP_GID}${NC}"
+
 # Build the image
 echo -e "\n${YELLOW}Building Docker image...${NC}"
-docker build --build-arg BUILD_SOURCE_DATE="${BUILD_SOURCE_DATE}" -t sonos-alexa-api:local .
+docker build --build-arg BUILD_SOURCE_DATE="${BUILD_SOURCE_DATE}" \
+    --build-arg APP_UID="${APP_UID}" \
+    --build-arg APP_GID="${APP_GID}" \
+    -t sonos-alexa-api:local .
 
 if [ $? -eq 0 ]; then
     echo -e "\n${GREEN}✅ Docker image built successfully!${NC}"

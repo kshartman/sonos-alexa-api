@@ -41,7 +41,7 @@ export class MusicLibraryCache {
   private onStatsUpdate?: ((stats: any) => void) | undefined; // ANY IS CORRECT: stats object contains dynamic properties
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  constructor(deviceIP: string, cacheDir: string = './cache', onStatsUpdate?: (stats: any) => void) { // ANY IS CORRECT: stats object contains dynamic properties
+  constructor(deviceIP: string, cacheDir: string, onStatsUpdate?: (stats: any) => void) { // ANY IS CORRECT: stats object contains dynamic properties
     this.libraryService = new MusicLibraryService(deviceIP);
     this.cacheFile = path.join(cacheDir, 'music-library.json');
     this.onStatsUpdate = onStatsUpdate;

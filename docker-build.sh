@@ -19,16 +19,23 @@ VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 IMAGE_NAME="sonos-alexa-api"
 DOCKER_USERNAME="kshartman"
 
+# Runtime user for deployed images (override with APP_UID/APP_GID in the environment)
+APP_UID="${APP_UID:-2128}"
+APP_GID="${APP_GID:-2128}"
+
 echo -e "${GREEN}Building Sonos Alexa API Docker image...${NC}"
 echo -e "Version: ${YELLOW}${VERSION}${NC}"
 echo -e "Source Date: ${YELLOW}${BUILD_SOURCE_DATE}${NC}"
 echo -e "Git Ref: ${YELLOW}${VCS_REF}${NC}"
+echo -e "Runtime user: ${YELLOW}${APP_UID}:${APP_GID}${NC}"
 echo ""
 
 # Build arguments
 BUILD_ARGS="--build-arg VERSION=${VERSION}"
 BUILD_ARGS="${BUILD_ARGS} --build-arg BUILD_SOURCE_DATE=${BUILD_SOURCE_DATE}"
 BUILD_ARGS="${BUILD_ARGS} --build-arg VCS_REF=${VCS_REF}"
+BUILD_ARGS="${BUILD_ARGS} --build-arg APP_UID=${APP_UID}"
+BUILD_ARGS="${BUILD_ARGS} --build-arg APP_GID=${APP_GID}"
 
 # Tags for local and Docker Hub
 TAGS="-t ${IMAGE_NAME}:latest"

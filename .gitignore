@@ -177,10 +177,14 @@ config.local.json
 # Homes directory (environment-specific data)
 # Keep the directory and README but ignore all analysis reports
 homes/*/
-!homes/README.md# Draft release notes
+!homes/README.md
+
+# Draft release notes
 releases/draft-*
 
-# Archive directory
-/archive/
+# Archive directory: tracked in git, kept out of the public mirror via
+# .github-exclude. Do not ignore it here — an ignore rule silently skips
+# anything added later while leaving the existing files tracked.
+
 # safe-pipeline trust signature — per-clone/local, never commit
 .claude/safe-pipeline.manifest*

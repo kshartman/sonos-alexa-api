@@ -182,3 +182,5 @@ releases/draft-*
 
 # Archive directory
 /archive/
+# safe-pipeline trust signature — per-clone/local, never commit
+.claude/safe-pipeline.manifest*

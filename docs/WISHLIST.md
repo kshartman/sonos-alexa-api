@@ -1,12 +1,52 @@
 # Wishlist / Deferred
 
-**Status**: Unscheduled. Nothing here is implemented, committed to, or assigned a release.
+**Status**: Unscheduled. Nothing here is implemented, committed to, or assigned a release
+— **except the Outstanding Security Work section below**, which is real work, not a wish.
 
 These items were originally drafted as release notes for v1.7.0, which made
 unbuilt features look like shipped ones. The content was moved here in v1.8.0
 and reframed as a wishlist. For what actually shipped, see `releases/`.
 
 Items with a dedicated design document link to it rather than restating the detail.
+
+## Outstanding Security Work
+
+Not optional and not speculative. From GitHub Dependabot as of 2026-08-15: 15 open
+alerts, 1 critical. Triaged by whether the package ships at runtime.
+
+### Runtime — do first
+
+`fast-xml-parser` is one of the project's three production dependencies.
+`package.json` pins `^4.3.2`, currently resolving to **4.5.3**. Six open alerts:
+
+| severity | patched in | issue |
+|---|---|---|
+| **critical** | 4.5.4 | entity encoding bypass via regex injection in DOCTYPE entity names |
+| high | 4.5.4 | DoS through entity expansion in DOCTYPE (no expansion limit) |
+| high | 4.5.5 | numeric entity expansion bypasses all expansion limits |
+| medium | 4.5.5 | entity expansion limits bypassed when set to zero (falsy check) |
+| medium | 5.7.0 | XMLBuilder: XML comment and CDATA injection via unescaped delimiters |
+| low | 4.5.4 | XMLBuilder stack overflow with `preserveOrder` |
+
+- [ ] Bump to **4.5.7** (the `legacy` dist-tag). Inside the existing `^4` range, so
+      `npm update fast-xml-parser` suffices — no code change expected. Clears five of six.
+- [ ] Decide on the sixth (XMLBuilder comment/CDATA injection, needs 5.7.0+). `latest`
+      is 5.10.1, a major bump. **XMLBuilder is in use** — `src/utils/soap.ts:1,7`
+      constructs every outgoing SOAP body — so this is not a dead code path. Assess
+      whether caller-controlled strings (room names, search queries, URIs) reach the
+      builder unescaped before deciding how urgent the major bump is.
+- [ ] Re-run the SOAP and topology integration tests after either change; this library
+      parses every device response.
+
+### Dev-only — lower priority
+
+`brace-expansion`, `js-yaml`, `picomatch`, `minimatch`, `flatted` are all absent from
+the production tree (`npm ls <pkg> --omit=dev` finds nothing) and reach the repo only
+through lint and test tooling. All are DoS/ReDoS or prototype-pollution classes that
+need attacker-controlled input to matter.
+
+- [ ] `npm audit fix` on the dev tree, then confirm `npm run lint` and `npm test` still pass
+- [ ] Do not ship a runtime change to chase these
 
 ## Music Library
 

@@ -27,5 +27,5 @@ The last four were moved here in v1.8.0.
 
 - `docs/TEST_PLAN.md` — describes the current test suite
 - `docs/LASTFM_PLAN.md`, `docs/LIBRARY_INDEX_PLAN.md`, `docs/EVENT_SYSTEM_ENHANCEMENT_PLAN.md` — designs for work not yet built
-- `docs/WISHLIST.md` — unscheduled items
+- `docs/TODO.md` — open work: Active (real) and Deferred (unscheduled ideas)
 - `releases/` — release notes for shipped versions

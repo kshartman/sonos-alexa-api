@@ -20,7 +20,7 @@ Not published to GitHub (`.github-exclude` matches `*CHECKLIST*.md`).
 - [x] Lead with the breaking change (container uid/gid) and give the user two remedies
 - [x] Record documentation corrections, with the release that first made the wrong claim
 - No draft file. The v1.7.0 "draft" was a wishlist of unbuilt features in release-notes
-  format; it became `docs/WISHLIST.md`. Do not start a `-draft.md` for the next release.
+  format; it became `docs/TODO.md`. Do not start a `-draft.md` for the next release.
 
 ## 3. Documentation
 - [x] `README.md` — version banner, What's New, install pin, status JSON sample
@@ -65,7 +65,7 @@ Not published to GitHub (`.github-exclude` matches `*CHECKLIST*.md`).
 ## 7. GitHub Release
 - [x] `./push-to-github.sh` (dry run) — inspect the filtered tree first
   - Confirm `archive/`, `private/`, `.claude/`, `CLAUDE.md` are stripped
-  - Confirm any *new* doc is meant to be public — `docs/WISHLIST.md` is
+  - Confirm any *new* doc is meant to be public — `docs/TODO.md` is
 - [x] `./push-to-github.sh --action:execute` — force-pushes the filtered mirror and tags
 - [x] `gh release create v1.8.0 --repo kshartman/sonos-alexa-api --title "..." --notes-file releases/RELEASE_NOTES_1.8.0.md`
   - The web UI steps in the v1.6.0 checklist are unnecessary; `gh` is authenticated
@@ -76,10 +76,14 @@ Not published to GitHub (`.github-exclude` matches `*CHECKLIST*.md`).
 - [x] `docker push kshartman/sonos-alexa-api:latest`
 - [x] Verify the published digest matches the local image:
       `docker manifest inspect …:1.8.0` config digest == `docker image inspect …:1.8.0` Id
-- [ ] **PENDING** — paste `DOCKERHUB_README.md` into the Hub overview at
+- [x] Paste `DOCKERHUB_README.md` into the Hub overview at
       https://hub.docker.com/repository/docker/kshartman/sonos-alexa-api/general
+  - Verified live by fetching `/v2/repositories/kshartman/sonos-alexa-api/` and checking
+    `full_description` for the uid and architecture lines
   - Do this *before* moving `:latest` next time. The overview is the only place a puller
     sees the uid change, and it was stale while the new image was already live.
+  - Manual step: `docker push` cannot set it and `gh` is the wrong service. Automating it
+    needs a Docker Hub PAT and a `PATCH /v2/repositories/{ns}/{repo}/` call.
 
 ## 9. Control Plane (new this release)
 - [x] Re-sign the repo after any change to `.claude/settings.json` or `.git/config`:

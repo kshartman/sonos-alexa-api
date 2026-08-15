@@ -311,7 +311,7 @@ npm run killall && sleep 2 && npm start > logs/server.log 2>&1 &
 - System automatically selects best available device for topology subscription
 
 ## Planning Documents
-Check `docs/` for architectural plans and test strategy before starting related work. `docs/WISHLIST.md` holds unscheduled ideas. `archive/` holds completed or abandoned plans, old release checklists, and one-off scripts — historical record only, not current guidance, and excluded from the public GitHub repo.
+Check `docs/` for architectural plans and test strategy before starting related work. `docs/TODO.md` holds open work — an Active tier (real, schedulable) and a Deferred tier (ideas, no commitment). `archive/` holds completed or abandoned plans, old release checklists, and one-off scripts — historical record only, not current guidance, and excluded from the public GitHub repo.
 
 ## Legacy System Reference
 - The legacy node-sonos-http-api code is located at: ~/projects/sonos-old/node-sonos-http-api

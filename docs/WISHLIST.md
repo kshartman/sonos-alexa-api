@@ -64,14 +64,15 @@ Items with a dedicated design document link to it rather than restating the deta
 
 ## Deferred From Archived Plans
 
-Recorded in documents under [`../archive/`](../archive/), which is not published to
-the public repository. Those documents are unmaintained; status below has not been
+Recorded in documents under `archive/`, which is intentionally **not** part of the
+public repository — those paths exist only in the private GitLab origin, so they are
+deliberately unlinked here. The documents are unmaintained; status below has not been
 re-verified against the current codebase except where noted.
 
 ### SOAP Architecture
 
-Source: [`../archive/REFACTORING_PLAN.md`](../archive/REFACTORING_PLAN.md) — phases 1-2
-completed June-July 2025, the rest never started.
+Source: `archive/REFACTORING_PLAN.md` — phases 1-2 completed June-July 2025, the rest
+never started.
 
 - **Phase 3: Update API Router** (§ *Phase 3: Update API Router 📅 DEFERRED*, ~line 418)
   — dependency injection for the router
@@ -80,7 +81,7 @@ completed June-July 2025, the rest never started.
 
 ### Type Safety
 
-Source: [`../archive/TYPE_REFACTORING_PLAN.md`](../archive/TYPE_REFACTORING_PLAN.md),
+Source: `archive/TYPE_REFACTORING_PLAN.md`,
 § *Remaining Type Safety Tasks from Original Plan* (~line 290).
 
 - ~~**Strict compiler options**~~ — **already done**: `tsconfig.json` sets `strict: true`,

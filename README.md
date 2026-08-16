@@ -4,7 +4,7 @@ A modern, high-performance HTTP API for controlling Sonos speakers, designed for
 
 This is a complete TypeScript rewrite of the original [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api), focused on speed, reliability, and minimal dependencies.
 
-**Version 1.8.0** makes the container's runtime user configurable and adds a preset validation script. See [Container User](DOCKER.md#container-user) — the published image's uid/gid changed in this release.
+**Version 1.8.1** is a security patch: `fast-xml-parser` updated to clear a critical advisory. Note that v1.8.0 changed the published image's runtime uid/gid — see [Container User](DOCKER.md#container-user) if you bind-mount a data directory.
 
 ## Key Features
 
@@ -45,7 +45,12 @@ Typical response times:
 - Music search: <200ms
 - Group operations: <150ms
 
-## What's New in v1.8.0
+## What's New in v1.8.1
+
+- **Security** - `fast-xml-parser` updated to 4.5.7, clearing a critical advisory and four others. No major version change, no API change; pull the image and you're done
+- **Clearer preset logging** - `Failed favorite resolution: N` now reads `Deferred to runtime: N`. It never meant those presets were broken — their favorites resolve on first use
+
+### v1.8.0
 
 - **⚠️ Container user changed** - The published image now runs as uid/gid `2128:2128` (was uid 1001, with the group incorrectly left as `nogroup`). If you bind-mount `/app/data`, chown it to match or override with `user:` in compose — see [Container User](DOCKER.md#container-user)
 - **Configurable container user** - New `APP_UID`/`APP_GID` build args let you build an image that matches whatever uid your host uses
@@ -69,7 +74,7 @@ docker run -d \
   --name sonos-alexa-api \
   --network host \
   -e DEFAULT_ROOM="Living Room" \
-  kshartman/sonos-alexa-api:v1.8.0
+  kshartman/sonos-alexa-api:v1.8.1
 
 # Or using Docker Compose (recommended)
 curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml
@@ -478,7 +483,7 @@ Monitor the overall server status with the included summary script:
   "server": {
     "host": "localhost",
     "port": 5005,
-    "version": "1.8.0",
+    "version": "1.8.1",
     "environment": "development",
     "started": "2025-07-14T18:25:22.630Z",
     "uptimeSeconds": 3600

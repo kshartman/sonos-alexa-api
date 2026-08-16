@@ -267,10 +267,14 @@ export class PresetLoader {
       allPresets: validatedPresets
     };
     
-    // Log validation results
+    // Log validation results.
+    // A preset counted in failedResolution is NOT broken: its favorite could not be
+    // resolved at load time (usually because no capable device was available yet), so
+    // the favorite: URI is kept and resolved on first use by SonosDevice.playUri().
+    // The stat name is retained for compatibility with scripts/analyze-home-content.ts.
     logger.info('Preset validation complete:');
-    logger.info(`  Valid presets: ${stats.validPresets}`);
-    logger.info(`  Failed favorite resolution: ${stats.failedResolution}`);
+    logger.info(`  Resolved at load time: ${stats.validPresets}`);
+    logger.info(`  Deferred to runtime: ${stats.failedResolution} (favorite resolved on first use)`);
     logger.info(`  Invalid rooms: ${stats.invalidRooms}`);
     
     // Report updated stats

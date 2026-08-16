@@ -29,7 +29,10 @@ export async function startServer(): Promise<void> {
       env: {
         ...process.env,
         PORT: '5005',
-        LOG_LEVEL: 'error' // Reduce noise during tests
+        // Must stay at info or above: the readiness line this function waits for
+        // ("System ready for Alexa requests", server.ts) is logged at info level.
+        // Setting this to 'error' suppressed it and the promise never settled.
+        LOG_LEVEL: process.env.TEST_SERVER_LOG_LEVEL || 'info'
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -37,22 +40,30 @@ export async function startServer(): Promise<void> {
     let startupTimeout: NodeJS.Timeout;
     let isResolved = false;
 
-    const cleanup = () => {
-      if (startupTimeout) clearTimeout(startupTimeout);
+    /**
+     * Settle the promise exactly once.
+     *
+     * The previous implementation called a cleanup() that set isResolved = true
+     * and then checked `if (!isResolved)` before resolving, so neither resolve()
+     * nor reject() could ever run and startup hung indefinitely with no error.
+     */
+    const settle = (action: () => void): void => {
+      if (isResolved) return;
       isResolved = true;
+      if (startupTimeout) clearTimeout(startupTimeout);
+      action();
     };
 
     // Handle server output
     serverProcess.stdout?.on('data', (data) => {
       const output = data.toString();
       // Look for server ready message
-      if (output.includes('System ready for Alexa requests') || 
+      if (output.includes('System ready for Alexa requests') ||
           output.includes('Server running on port')) {
-        cleanup();
-        if (!isResolved) {
+        settle(() => {
           testLog.info('✅ Server started successfully');
           resolve();
-        }
+        });
       }
     });
 
@@ -61,24 +72,17 @@ export async function startServer(): Promise<void> {
     });
 
     serverProcess.on('error', (error) => {
-      cleanup();
-      reject(new Error(`Failed to start server: ${error.message}`));
+      settle(() => reject(new Error(`Failed to start server: ${error.message}`)));
     });
 
     serverProcess.on('exit', (code) => {
-      cleanup();
       serverProcess = null;
-      if (!isResolved) {
-        reject(new Error(`Server exited with code ${code}`));
-      }
+      settle(() => reject(new Error(`Server exited with code ${code}`)));
     });
 
     // Timeout if server doesn't start
     startupTimeout = setTimeout(() => {
-      cleanup();
-      if (!isResolved) {
-        reject(new Error('Server startup timeout'));
-      }
+      settle(() => reject(new Error('Server startup timeout')));
     }, 15000);
   });
 }

@@ -83,6 +83,37 @@ for runtime, and `sonos-device.ts:638-658` resolves in `playUri()`.
       0.35s after a pass that had reached 82 resolved. Deferred with the item above; the
       two share a cause.
 
+## Library Search Matches Garbage Queries
+
+`music-library-cache.ts:340-357` (fuzzy fallback) tests each field bidirectionally:
+
+```js
+if (titleQuery.startsWith(item.titleLower) || item.titleLower.startsWith(titleQuery))
+```
+
+The second direction is correct — query "yesterday" should match "Yesterday (Remastered)".
+The **first** direction is inverted: it fires whenever the *query* starts with the
+*library item*, so any short entry claims any query sharing its opening characters,
+with no minimum-length or proportionality guard.
+
+Concretely: searching `xyzzy12345nonexistent` returns "X" by Ja Rule, because
+`"xyzzy12345nonexistent".startsWith("x")` is true. A track titled "A" matches nearly
+every query beginning with "a". The same test is applied to `artistLower` and
+`albumLower`, so three fields are affected.
+
+Pre-existing — reproduced on the 1.7.1 image, so not a 1.8.1 regression. It is why
+these two integration tests fail, and they cannot pass while any one-character title
+exists in the library:
+
+- `04-content-defaults-tests.ts:221` — "should handle no results gracefully" (expects 404, gets 200)
+- `04-content-library-tests.ts:320` — "should handle library search with no results"
+
+- [ ] Drop the `query.startsWith(item)` direction, or gate it on a minimum item length
+      and/or a proportion of the query length
+- [ ] Decide what a genuine no-match should return — the tests accept either 404 or
+      200-with-`status: error`, so either contract is fine as long as one holds
+- [ ] Re-run both suites; they should pass without modification once matching is fixed
+
 ## Release Process
 
 - [ ] Decide the fate of the post-release `-dev` version bump. `RELEASE_CHECKLIST_v1.6.0.md`

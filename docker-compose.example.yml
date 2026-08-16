@@ -3,7 +3,7 @@
 
 services:
   sonos-api:
-    image: kshartman/sonos-alexa-api:v1.8.1
+    image: kshartman/sonos-alexa-api:v1.8.2
     container_name: sonos-alexa-api
     network_mode: host
 

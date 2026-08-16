@@ -1,6 +1,6 @@
 {
   "name": "sonos-alexa-api",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Modern, fast HTTP API for Sonos speakers with Alexa skill compatibility",
   "author": "Shane Hartman <shartman@nx.bogometer.com> and Claude (Anthropic)",
   "license": "MIT",

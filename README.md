@@ -4,7 +4,7 @@ A modern, high-performance HTTP API for controlling Sonos speakers, designed for
 
 This is a complete TypeScript rewrite of the original [node-sonos-http-api](https://github.com/jishi/node-sonos-http-api), focused on speed, reliability, and minimal dependencies.
 
-**Version 1.8.1** is a security patch: `fast-xml-parser` updated to clear a critical advisory. Note that v1.8.0 changed the published image's runtime uid/gid — see [Container User](DOCKER.md#container-user) if you bind-mount a data directory.
+**Version 1.8.2** fixes a regression the 1.8.1 security update introduced: the music services cache failed to parse and came back empty, breaking Spotify account resolution. Note that v1.8.0 changed the published image's runtime uid/gid — see [Container User](DOCKER.md#container-user) if you bind-mount a data directory.
 
 ## Key Features
 
@@ -45,7 +45,12 @@ Typical response times:
 - Music search: <200ms
 - Group operations: <150ms
 
-## What's New in v1.8.1
+## What's New in v1.8.2
+
+- **Services cache fixed** - 1.8.1's entity-expansion limits missed one XML parser, so the music services list failed to parse on every device and the cache came back empty. Spotify account resolution was the visible casualty. All parsers are now built through a single factory that makes the limits impossible to omit
+- **Honest failure logging** - a services refresh that gets nothing from any device now logs an error with per-device causes instead of a bare warning followed by a success message
+
+### v1.8.1
 
 - **Security** - `fast-xml-parser` updated to 4.5.7, clearing a critical advisory and four others. No major version change, no API change; pull the image and you're done
 - **Clearer preset logging** - `Failed favorite resolution: N` now reads `Deferred to runtime: N`. It never meant those presets were broken — their favorites resolve on first use
@@ -74,7 +79,7 @@ docker run -d \
   --name sonos-alexa-api \
   --network host \
   -e DEFAULT_ROOM="Living Room" \
-  kshartman/sonos-alexa-api:v1.8.1
+  kshartman/sonos-alexa-api:v1.8.2
 
 # Or using Docker Compose (recommended)
 curl -O https://raw.githubusercontent.com/kshartman/sonos-alexa-api/main/docker-compose.example.yml
@@ -483,7 +488,7 @@ Monitor the overall server status with the included summary script:
   "server": {
     "host": "localhost",
     "port": 5005,
-    "version": "1.8.1",
+    "version": "1.8.2",
     "environment": "development",
     "started": "2025-07-14T18:25:22.630Z",
     "uptimeSeconds": 3600

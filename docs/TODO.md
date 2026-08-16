@@ -133,7 +133,14 @@ Pre-existing either way — reproduced on the 1.7.1 image, so nothing to do with
 
 ## Housekeeping
 
-- [ ] Delete the merged `ai/container-uid-config` branch.
+- [x] Delete the merged `ai/container-uid-config` branch. Done, along with a wider
+      cleanup: the repo is now single-branch. `ai/release-1.8.1` was removed locally,
+      and five stale branches were deleted from origin — `feature/docker-publish`,
+      `feature/spotify-public-api`, `refactor_phase_1`, `release_1.6.0` (all ancestors
+      of `main`) and `release_1.0` (not merged, but its single commit is pinned by tag
+      `v1.0.1`). Nothing was lost; every tip is reachable from `main` or a tag.
+      This matches what `push-to-github.sh` already assumes — it publishes the current
+      branch plus tags, so releases are pinned by tags rather than by branches.
 
 ---
 

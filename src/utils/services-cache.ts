@@ -1,6 +1,6 @@
 import logger from './logger.js';
 import { scheduler } from './scheduler.js';
-import { XMLParser } from 'fast-xml-parser';
+import { createXmlParser } from './xml-entity-limits.js';
 import type { SonosDiscovery } from '../discovery.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -105,7 +105,13 @@ export class ServicesCache {
       this.lastRefresh = new Date();
       
       const serviceCount = Object.keys(this.cache).length;
-      logger.info(`Services cache refreshed successfully with ${serviceCount} services (including ${Object.keys(discoveredServices).length} discovered)`);
+      if (serviceCount === 0) {
+        // Never claim success here. Reaching this point with an empty cache means every
+        // device failed, which fetchServicesFromDevices has already logged with causes.
+        logger.warn('Services cache refreshed with 0 services (see preceding error for cause)');
+      } else {
+        logger.info(`Services cache refreshed successfully with ${serviceCount} services (including ${Object.keys(discoveredServices).length} discovered)`);
+      }
       
       // Log some interesting services for debugging
       const tuneInServices = Object.values(this.cache).filter(s => s.isTuneIn);
@@ -176,25 +182,36 @@ export class ServicesCache {
       return 0;
     });
 
-    // Try each device until we get a successful response
+    // Try each device until we get a successful response. A single device failing is
+    // normal -- that is what the fallback loop is for -- so per-device failures stay at
+    // debug. Exhausting every device is not normal, so the collected causes are raised
+    // to error below rather than discarded.
+    const failures: string[] = [];
+
     for (const device of sortedDevices) {
       try {
         const isCoordinator = coordinatorIds.has(device.id);
         logger.debug(`Trying to get services from ${device.roomName} (${device.ip}) - Model: ${device.modelName}, Coordinator: ${isCoordinator}`);
-        
+
         const services = await this.fetchServicesFromDevice(device.ip);
         const serviceCount = Object.keys(services).length;
-        
+
         if (serviceCount > 0) {
           logger.info(`Found ${serviceCount} services from ${device.roomName} (${device.modelName})`);
           return services;
         }
+
+        failures.push(`${device.roomName}: returned no services`);
       } catch (error) {
         logger.debug(`Error getting services from ${device.roomName}:`, error);
+        failures.push(`${device.roomName}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    logger.warn('No services found from any device');
+    logger.error(
+      `No services found from any device (${sortedDevices.length} tried). Music service lookups will fall back to default account ids.`,
+      { failures }
+    );
     return {};
   }
 
@@ -225,7 +242,7 @@ export class ServicesCache {
   }
 
   private async parseSoapServicesResponse(soapXml: string): Promise<Record<string, ServiceInfo>> {
-    const xmlParser = new XMLParser({
+    const xmlParser = createXmlParser({
       ignoreAttributes: false,
       parseAttributeValue: false,
       trimValues: true,

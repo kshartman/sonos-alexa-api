@@ -277,13 +277,11 @@ export class AccountService {
           // Need to parse the metadata DIDL-Lite to extract r:resMD
           if (item.metadata) {
             try {
-              const { XMLParser } = await import('fast-xml-parser');
-              const { processEntities } = await import('../utils/xml-entity-limits.js');
-              const parser = new XMLParser({
+              const { createXmlParser } = await import('../utils/xml-entity-limits.js');
+              const parser = createXmlParser({
                 ignoreAttributes: false,
                 parseAttributeValue: false,
-                trimValues: true,
-                processEntities
+                trimValues: true
               });
               
               const parsed = parser.parse(item.metadata);

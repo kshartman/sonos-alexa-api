@@ -2,8 +2,8 @@ import dgram from 'dgram';
 import { EventEmitter } from 'events';
 import http from 'http';
 import os from 'os';
-import { XMLParser } from 'fast-xml-parser';
-import { processEntities } from './utils/xml-entity-limits.js';
+import type { XMLParser } from 'fast-xml-parser';
+import { createXmlParser } from './utils/xml-entity-limits.js';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
 import { scheduler } from './utils/scheduler.js';
@@ -42,11 +42,10 @@ export class SonosDiscovery extends EventEmitter {
 
   constructor() {
     super();
-    this.xmlParser = new XMLParser({
+    this.xmlParser = createXmlParser({
       ignoreAttributes: false,
       parseAttributeValue: false,
-      trimValues: true,
-      processEntities
+      trimValues: true
     });
     
     this.topologyManager = new TopologyManager();

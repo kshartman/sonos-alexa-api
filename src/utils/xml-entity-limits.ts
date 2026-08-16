@@ -13,6 +13,8 @@
  * also surfaced through the config loader so it appears in /debug/startup.
  */
 
+import { XMLParser, type X2jOptions } from 'fast-xml-parser';
+
 /**
  * Default ceiling on total entity expansions per parsed document.
  *
@@ -62,8 +64,11 @@ export const maxEntityExpansions = readConfiguredLimit();
  * silently become 10000 instead of 10, and maxTotalExpansions would become
  * Infinity -- so inheriting them would weaken protections we intend to keep.
  * Only the total-expansion ceiling is raised.
+ *
+ * Deliberately not exported: every parser must be built through createXmlParser
+ * below, so the limits cannot be forgotten at a construction site.
  */
-export const processEntities = {
+const processEntities = {
   enabled: true,
   maxEntitySize: 10000,
   maxExpansionDepth: 10,
@@ -71,3 +76,16 @@ export const processEntities = {
   maxExpandedLength: 100000,
   maxEntityCount: 1000
 };
+
+/**
+ * The only sanctioned way to construct an XMLParser in this codebase.
+ *
+ * Exists because the limits above were once wired by hand at eleven construction
+ * sites, and the one site that missed them shipped a silent production failure
+ * (services cache: "Entity expansion limit exceeded: 3256 > 1000", swallowed at
+ * debug level). The factory injects processEntities unconditionally, and the
+ * option type omits it so a caller cannot override or forget it.
+ */
+export function createXmlParser(options: Omit<X2jOptions, 'processEntities'> = {}): XMLParser {
+  return new XMLParser({ ...options, processEntities });
+}

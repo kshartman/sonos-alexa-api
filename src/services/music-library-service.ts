@@ -1,5 +1,4 @@
-import { XMLParser } from 'fast-xml-parser';
-import { processEntities } from '../utils/xml-entity-limits.js';
+import { createXmlParser } from '../utils/xml-entity-limits.js';
 import logger from '../utils/logger.js';
 
 interface BrowseResult {
@@ -29,12 +28,11 @@ export interface MusicSearchResult {
   albumArtURI?: string;
 }
 
-const xmlParser = new XMLParser({
+const xmlParser = createXmlParser({
   ignoreAttributes: false,
   parseAttributeValue: false,
   parseTagValue: false,
-  trimValues: true,
-  processEntities
+  trimValues: true
 });
 
 export class MusicLibraryService {

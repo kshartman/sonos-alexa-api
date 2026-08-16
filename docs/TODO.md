@@ -15,13 +15,15 @@ point at it rather than restating the detail.
 
 ## Security
 
-From GitHub Dependabot as of 2026-08-15: 15 open alerts, 1 critical. Triaged by whether
-the package ships at runtime.
+Status as of 2026-08-15, after 1.8.1 and the dev-tree sweep: `npm audit` reports
+**1 moderate, 0 high, 0 critical** across the whole tree, and the production tree
+(`npm audit --omit=dev`) carries that same single moderate. It is the deliberately
+deferred `fast-xml-parser` major, below.
 
 ### Runtime — do first
 
 `fast-xml-parser` is one of the project's three production dependencies.
-`package.json` pins `^4.3.2`, currently resolving to **4.5.3**. Six open alerts:
+`package.json` pinned `^4.3.2`, resolving to **4.5.3**. Six open alerts:
 
 | severity | patched in | issue |
 |---|---|---|
@@ -32,26 +34,77 @@ the package ships at runtime.
 | medium | 5.7.0 | XMLBuilder: XML comment and CDATA injection via unescaped delimiters |
 | low | 4.5.4 | XMLBuilder stack overflow with `preserveOrder` |
 
-- [ ] Bump to **4.5.7** (the `legacy` dist-tag). Inside the existing `^4` range, so
-      `npm update fast-xml-parser` suffices — no code change expected. Clears five of six.
+- [x] Bump to **4.5.7** (the `legacy` dist-tag). Shipped in 1.8.1; `package.json` now
+      requires `^4.5.7` so a fresh resolve cannot land on a vulnerable version. Cleared
+      five of six. The bump also capped entity expansions at 1000/document, which
+      required the `XML_MAX_ENTITY_EXPANSIONS` work — and caused one regression that
+      escaped the release, see *Services Cache* below.
 - [ ] Decide on the sixth (XMLBuilder comment/CDATA injection, needs 5.7.0+). `latest`
-      is 5.10.1, a major bump. **XMLBuilder is in use** — `src/utils/soap.ts:1,7`
+      is 5.10.1, a major bump. **XMLBuilder is in use** — `src/utils/soap.ts:8`
       constructs every outgoing SOAP body — so this is not a dead code path. Assess
       whether caller-controlled strings (room names, search queries, URIs) reach the
-      builder unescaped before deciding how urgent the major bump is.
-- [ ] Re-run the SOAP and topology integration tests after either change; this library
-      parses every device response.
-- [ ] Ship as v1.8.1.
+      builder unescaped before deciding how urgent the major bump is. Still the only
+      advisory open against the production tree.
+- [x] Re-run the SOAP and topology integration tests after either change. Done for 1.8.1
+      (212 assertions); the two failures were the library-search contract disagreement
+      below, not SOAP or topology.
+- [x] Ship as v1.8.1. Released 2026-08-15, published to Docker Hub, deployed.
 
 ### Dev-only — lower priority
 
-`brace-expansion`, `js-yaml`, `picomatch`, `minimatch`, `flatted` are all absent from
-the production tree (`npm ls <pkg> --omit=dev` finds nothing) and reach the repo only
-through lint and test tooling. All are DoS/ReDoS or prototype-pollution classes that
-need attacker-controlled input to matter.
+All absent from the production tree (`npm audit --omit=dev` finds nothing) and reaching
+the repo only through lint and test tooling. All are DoS/ReDoS or prototype-pollution
+classes that need attacker-controlled input to matter.
 
-- [ ] `npm audit fix` on the dev tree, then confirm `npm run lint` and `npm test` still pass
-- [ ] Do not ship a runtime change to chase these
+- [x] `npm audit fix` on the dev tree, then confirm `npm run lint` and `npm test` still
+      pass. Done 2026-08-15: cleared seven advisories — `brace-expansion`, `js-yaml`,
+      `picomatch`, `minimatch`, `flatted` (all high) plus `ajv` (moderate) and
+      `@eslint/plugin-kit` (low), the last two having appeared after this list was first
+      written. All semver-minor, no breaking changes, `package-lock.json` only.
+      Verified: build exit 0, lint exit 0, 67 unit tests passing.
+- [x] Do not ship a runtime change to chase these. Honoured — `fast-xml-parser` stayed
+      at 4.5.7 and no production dependency moved.
+
+## Services Cache: Entity-Limit Regression (fixed, awaiting release)
+
+Introduced by 1.8.1 and found in production on 2026-08-15. `src/utils/services-cache.ts`
+was the **only** one of eleven `new XMLParser(...)` sites that did not import the shared
+`processEntities` limits, so it inherited fast-xml-parser 4.5.7's default ceiling of 1000
+expansions. The service descriptor list needs 3256.
+
+Every device failed identically (`Entity expansion limit exceeded: 3256 > 1000`), the
+per-device catch logged at `debug`, and the only visible line was a bare
+`No services found from any device` warning — so a total failure read as the documented
+S2 empty-accounts behaviour. `/services` returned `{}` and `data/services-cache.json`
+dropped from 58 KB to 0 services.
+
+- [x] Add the shared limits to the services-cache parser. Verified against a live device:
+      old config throws, new config parses 108 services.
+- [x] Raise the exhausted-all-devices case from `warn` to `error` with per-device causes
+      attached, and stop `refresh()` logging "refreshed successfully" when the cache is
+      empty. Both verified.
+- [ ] Ship as v1.8.2. Not yet released — the running container still has the bug.
+- [ ] Confirm Spotify works after the release. `account-service.ts:89-91` throws
+      `Spotify service not found in Sonos system. Please add Spotify in the Sonos app.`
+      when the cache is empty, which is a misleading message for a parse failure. Apple
+      (hardcoded SID 52231), Pandora (own manager) and the music library are unaffected.
+
+## Debt: Parser Configuration Is Duplicated Across Eleven Sites
+
+The regression above was possible because `processEntities` had to be remembered by hand
+at every `new XMLParser(...)`. Eleven sites, ten correct, one missed — and the miss was
+silent at runtime.
+
+- [x] Resolved with option (c), 2026-08-15: `createXmlParser()` in `xml-entity-limits.ts`
+      is now the only way to construct a parser. `processEntities` is no longer exported,
+      and the factory's option type is `Omit<X2jOptions, 'processEntities'>`, so a caller
+      cannot pass, override, or forget the limits — the compiler rejects it. All eleven
+      sites migrated with their site-specific options preserved. Verified: zero
+      `new XMLParser(` outside the factory, build + lint clean, 67/67 unit tests, and a
+      live-device parse through the factory (108 services from the same response the
+      1.8.1 code fails on).
+- [ ] Optional belt-and-braces: a CI grep or lint rule failing any `new XMLParser(`
+      outside `xml-entity-limits.ts`, closing the door on a future direct construction.
 
 ## Preset Validation Reporting
 

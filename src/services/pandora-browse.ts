@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import { XMLParser } from 'fast-xml-parser';
+import { processEntities } from '../utils/xml-entity-limits.js';
 import type { SonosDevice } from '../sonos-device.js';
 import type { PandoraStation } from '../types/sonos.js';
 
@@ -8,7 +9,8 @@ export class PandoraBrowser {
     ignoreAttributes: false,
     parseAttributeValue: false,
     parseTagValue: false,
-    trimValues: true
+    trimValues: true,
+    processEntities
   });
 
   /**

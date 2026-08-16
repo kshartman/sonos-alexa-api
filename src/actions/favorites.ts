@@ -77,10 +77,12 @@ export class FavoritesManager {
       }
 
       const { XMLParser } = await import('fast-xml-parser');
+      const { processEntities } = await import('../utils/xml-entity-limits.js');
       const parser = new XMLParser({
         ignoreAttributes: false,
         parseAttributeValue: false,
-        trimValues: true
+        trimValues: true,
+        processEntities
       });
 
       const parsed = parser.parse(response.Result);

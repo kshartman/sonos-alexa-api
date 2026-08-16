@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import logger, { loggerType } from './logger.js';
 import { applicationVersion } from '../version.js';
 import type { Config, WebhookConfig } from '../types/sonos.js';
+import { maxEntityExpansions } from './xml-entity-limits.js';
 
 /**
  * Usual debug categories for balanced debugging output
@@ -218,6 +219,11 @@ export function loadConfiguration(): ConfigLoadResult {
   if (process.env.HTTP_TIMEOUT) {
     config.httpTimeout = parseInt(process.env.HTTP_TIMEOUT, 10);
   }
+  // Surfaced for /debug/startup and the env-override banner. The XMLParser
+  // instances read this env var directly via utils/xml-entity-limits, because most
+  // are constructed at module load, before this loader runs.
+  config.xmlMaxEntityExpansions = maxEntityExpansions;
+
   if (process.env.CREATE_DEFAULT_PRESETS !== undefined) {
     config.createDefaultPresets = parseBooleanEnv(process.env.CREATE_DEFAULT_PRESETS);
   }
@@ -291,7 +297,7 @@ function getEnvironmentOverrides(): string[] {
     'PANDORA_USERNAME', 'PANDORA_PASSWORD',
     'SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REFRESH_TOKEN', 'SPOTIFY_REDIRECT_URI', 'SPOTIFY_SCOPES',
     'WEBHOOKS_VOLUME_URL', 'WEBHOOKS_TRANSPORT_URL', 'WEBHOOKS_TOPOLOGY_URL',
-    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT',
+    'DISABLE_DISCOVERY', 'DISCOVERY_TIMEOUT', 'HTTP_TIMEOUT', 'XML_MAX_ENTITY_EXPANSIONS',
     'CREATE_DEFAULT_PRESETS'
   ];
   

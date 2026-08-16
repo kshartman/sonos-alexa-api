@@ -1,4 +1,5 @@
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
+import { processEntities } from './xml-entity-limits.js';
 import logger from './logger.js';
 import { debugManager } from './debug-manager.js';
 import { SOAPError, UPnPError } from '../errors/sonos-errors.js';
@@ -14,7 +15,8 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   parseAttributeValue: false,
   parseTagValue: false,
-  trimValues: true
+  trimValues: true,
+  processEntities
 });
 
 interface SoapEnvelope {

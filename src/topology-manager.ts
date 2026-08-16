@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { XMLParser } from 'fast-xml-parser';
+import { processEntities } from './utils/xml-entity-limits.js';
 import { debugManager } from './utils/debug-manager.js';
 import type { SonosDevice } from './sonos-device.js';
 
@@ -39,7 +40,8 @@ export class TopologyManager extends EventEmitter {
     this.xmlParser = new XMLParser({
       ignoreAttributes: false,
       parseAttributeValue: false,
-      trimValues: true
+      trimValues: true,
+      processEntities
     });
   }
 

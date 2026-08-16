@@ -138,6 +138,12 @@ export interface Config {
   disableDiscovery?: boolean;
   discoveryTimeout?: number;
   httpTimeout?: number;
+  /**
+   * Ceiling on total XML entity expansions per parse. Reported here for
+   * visibility; the parsers read XML_MAX_ENTITY_EXPANSIONS directly because they
+   * are constructed before configuration is loaded. See utils/xml-entity-limits.
+   */
+  xmlMaxEntityExpansions?: number;
   createDefaultPresets?: boolean;
 }
 

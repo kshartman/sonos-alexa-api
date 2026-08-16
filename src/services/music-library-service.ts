@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { processEntities } from '../utils/xml-entity-limits.js';
 import logger from '../utils/logger.js';
 
 interface BrowseResult {
@@ -32,7 +33,8 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   parseAttributeValue: false,
   parseTagValue: false,
-  trimValues: true
+  trimValues: true,
+  processEntities
 });
 
 export class MusicLibraryService {

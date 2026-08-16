@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import http from 'http';
 import os from 'os';
 import { XMLParser } from 'fast-xml-parser';
+import { processEntities } from './utils/xml-entity-limits.js';
 import logger from './utils/logger.js';
 import { debugManager } from './utils/debug-manager.js';
 import { scheduler } from './utils/scheduler.js';
@@ -44,7 +45,8 @@ export class SonosDiscovery extends EventEmitter {
     this.xmlParser = new XMLParser({
       ignoreAttributes: false,
       parseAttributeValue: false,
-      trimValues: true
+      trimValues: true,
+      processEntities
     });
     
     this.topologyManager = new TopologyManager();

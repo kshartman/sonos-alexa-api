@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { XMLParser } from 'fast-xml-parser';
+import { processEntities } from './utils/xml-entity-limits.js';
 import logger from './utils/logger.js';
 import { soapRequest } from './utils/soap.js';
 import { EventManager } from './utils/event-manager.js';
@@ -102,7 +103,8 @@ export class SonosDevice extends EventEmitter {
     this.xmlParser = new XMLParser({
       ignoreAttributes: false,
       parseAttributeValue: false,
-      trimValues: true
+      trimValues: true,
+      processEntities
     });
   }
 
@@ -1122,7 +1124,8 @@ export class SonosDevice extends EventEmitter {
       const parser = new XMLParser({
         ignoreAttributes: false,
         parseAttributeValue: false,
-        trimValues: true
+        trimValues: true,
+        processEntities
       });
 
       const parsed = parser.parse(result.Result);

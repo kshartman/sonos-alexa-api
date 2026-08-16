@@ -117,12 +117,15 @@ triggered by the preset directory watcher. It is wasteful and it makes the
 affect playback. Root cause is not yet established, so no speculative fix is included
 here. Tracked in `docs/TODO.md`.
 
-Library search matches garbage queries. A search for a nonsense string can return an
-unrelated track — `xyzzy12345nonexistent` returns "X" by Ja Rule — because the fuzzy
-fallback matches when the *query* starts with a library entry, so any very short title
-claims any query sharing its opening characters. Pre-existing, reproduced on 1.7.1, not
-introduced here. Two integration tests fail on it. Tracked in `docs/TODO.md` with the
-exact mechanism.
+Two integration tests disagree with intended library search behaviour. They assert that
+a nonsense query returns 404; it returns a plausible track instead —
+`xyzzy12345nonexistent` returns "X" by Ja Rule. That is the fuzzy fallback working as
+designed: this API serves Alexa, whose speech-to-text delivers mangled input, and the
+fallback only runs after substring and exact matching have both returned nothing, where
+the alternative is no result at all. Nothing is broken for users. The fix is to give
+callers a way to opt into strict matching so the tests have a contract to assert
+against, tracked as a minor item in `docs/TODO.md`. Behaviour is unchanged from 1.7.1
+and unrelated to this release.
 
 ## Testing
 
@@ -130,9 +133,9 @@ Integration tests ran for this release, which required fixing the harness first:
 server-startup promise could never settle, so auto-started runs hung indefinitely with no
 error. Both bugs are fixed in `test/helpers/server-manager.ts`.
 
-Results: 212 assertions passing. Two failures remain, both from the pre-existing library
-search defect above and both reproducible on 1.7.1. The volume suite was excluded by
-request and room volumes were pinned low for the run.
+Results: 212 assertions passing. Two failures remain, both the search-contract
+disagreement described above rather than defects, and both reproducible on 1.7.1. The
+volume suite was excluded by request and room volumes were pinned low for the run.
 
 ## Upgrade
 

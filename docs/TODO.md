@@ -83,36 +83,45 @@ for runtime, and `sonos-device.ts:638-658` resolves in `playUri()`.
       0.35s after a pass that had reached 82 resolved. Deferred with the item above; the
       two share a cause.
 
-## Library Search Matches Garbage Queries
+## Library Search: Add an Exact / No-Fuzzy Option
 
-`music-library-cache.ts:340-357` (fuzzy fallback) tests each field bidirectionally:
+**Priority: minor.** Nothing is broken for users — the behaviour it describes is the
+intended Alexa-facing design. This exists so two integration tests have a contract to
+assert against. Pick it up when convenient, not before anything else in Active.
 
-```js
-if (titleQuery.startsWith(item.titleLower) || item.titleLower.startsWith(titleQuery))
-```
+Two integration tests assert that a nonsense query returns 404 or an error status. It
+does not — `xyzzy12345nonexistent` returns "X" by Ja Rule:
 
-The second direction is correct — query "yesterday" should match "Yesterday (Remastered)".
-The **first** direction is inverted: it fires whenever the *query* starts with the
-*library item*, so any short entry claims any query sharing its opening characters,
-with no minimum-length or proportionality guard.
-
-Concretely: searching `xyzzy12345nonexistent` returns "X" by Ja Rule, because
-`"xyzzy12345nonexistent".startsWith("x")` is true. A track titled "A" matches nearly
-every query beginning with "a". The same test is applied to `artistLower` and
-`albumLower`, so three fields are affected.
-
-Pre-existing — reproduced on the 1.7.1 image, so not a 1.8.1 regression. It is why
-these two integration tests fail, and they cannot pass while any one-character title
-exists in the library:
-
-- `04-content-defaults-tests.ts:221` — "should handle no results gracefully" (expects 404, gets 200)
+- `04-content-defaults-tests.ts:221` — "should handle no results gracefully"
 - `04-content-library-tests.ts:320` — "should handle library search with no results"
 
-- [ ] Drop the `query.startsWith(item)` direction, or gate it on a minimum item length
-      and/or a proportion of the query length
-- [ ] Decide what a genuine no-match should return — the tests accept either 404 or
-      200-with-`status: error`, so either contract is fine as long as one holds
-- [ ] Re-run both suites; they should pass without modification once matching is fixed
+**This is a test/design disagreement, not a code defect.** The fuzzy fallback is
+deliberate: this API serves Alexa, whose speech-to-text routinely delivers mangled
+input, and returning a plausible track beats returning nothing. Matching runs in tiers
+(`music-library-cache.ts`), and the prefix pass only fires as a last resort:
+
+1. substring match (`includes`) — if anything hits, fuzzy never runs
+2. only on zero results → fuzzy, which tries exact equality (`===`) first
+3. only on zero results again → bidirectional prefix match at :340-357
+
+The `titleQuery.startsWith(item.titleLower)` direction is what lets "yesterday
+remastered version please" find "Yesterday". It also lets a one-character title match
+almost anything, which is how "X" answers a 21-character query — degenerate, but the
+alternative at that tier is returning nothing.
+
+Resolution: keep the fallback for real traffic, give callers a way to opt into strict
+matching so a deterministic contract exists to test against.
+
+- [ ] Add an exact / no-fuzzy parameter to the music search endpoint, so the tiered
+      fallback can be skipped per request
+- [ ] Point both tests at it; they then assert a real contract instead of contradicting
+      the intended Alexa behaviour
+- [ ] Decide the no-match response for the strict path — the tests accept either 404 or
+      200 with `status: error`, so either is fine as long as one is chosen
+- [ ] Optional, separate question: whether the fallback should require a minimum item
+      length before a one-character title can claim a long query
+
+Pre-existing either way — reproduced on the 1.7.1 image, so nothing to do with 1.8.1.
 
 ## Release Process
 

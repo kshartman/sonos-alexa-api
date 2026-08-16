@@ -5,10 +5,12 @@
 ## Overview
 
 A security patch. Updates `fast-xml-parser` to clear a critical advisory and four others,
-and corrects a log message that reported healthy presets as failures. No API changes, no
-configuration changes, and no change to the container's runtime user.
+raises the XML entity-expansion ceiling that update introduced (and makes it configurable),
+and corrects a log message that reported healthy presets as failures. No API changes and no
+change to the container's runtime user.
 
-Upgrading from v1.8.0 requires nothing beyond pulling the image.
+Upgrading from v1.8.0 requires nothing beyond pulling the image. One new environment
+variable, `XML_MAX_ENTITY_EXPANSIONS`, is available but should not need setting.
 
 ## Security
 
@@ -31,6 +33,40 @@ on a vulnerable version.
 
 Because the patches change entity handling, the updated build was run against a live
 system before release: 12 devices discovered, 3 zones, topology parsed, health green.
+Doing so caught a regression the update introduced — see below.
+
+### XML entity-expansion ceiling (regression fixed before release)
+
+The 4.5.4+ patches cap entity expansions at **1000 per parsed document**. That is far too
+low for real Sonos data and it broke music library indexing outright:
+
+```
+Music library indexing failed: Entity expansion limit exceeded: 4002 > 1000
+```
+
+The failure was silent in the worst way — the server stayed healthy and reported ready,
+but `musicLibrary.isComplete` was `false` and library search returned nothing.
+
+Sonos returns DIDL-Lite entity-encoded inside the SOAP `<Result>` element, so an entire
+nested XML document arrives as `&lt;...&gt;&quot;` text. Library browse requests 1000
+tracks per call, which works out to roughly 8-10 expansions per track — several thousand
+per response before any track with unusual punctuation.
+
+The ceiling is now **160000** by default and configurable:
+
+| variable | default | purpose |
+|---|---|---|
+| `XML_MAX_ENTITY_EXPANSIONS` | `160000` | maximum XML entity expansions per parsed document |
+
+Only that ceiling moved. Entity size, expansion depth, expanded length and entity count
+keep their hardened values — those are the controls that stop a billion-laughs attack, and
+the limits are now stated explicitly at every parser rather than inherited, because passing
+`processEntities` as an object makes fast-xml-parser silently drop the defaults it applies
+to the boolean form (expansion depth would have gone from 10 to 10000).
+
+Raise `XML_MAX_ENTITY_EXPANSIONS` if you have a very large library and see
+"Entity expansion limit exceeded" with an incomplete index. Verified end to end: a
+48,140-track library indexes completely in 19-21 seconds at the default.
 
 ### Still open
 
@@ -80,6 +116,23 @@ triggered by the preset directory watcher. It is wasteful and it makes the
 `/debug/startup` preset counts a snapshot of whichever pass ran last, but it does not
 affect playback. Root cause is not yet established, so no speculative fix is included
 here. Tracked in `docs/TODO.md`.
+
+Library search matches garbage queries. A search for a nonsense string can return an
+unrelated track — `xyzzy12345nonexistent` returns "X" by Ja Rule — because the fuzzy
+fallback matches when the *query* starts with a library entry, so any very short title
+claims any query sharing its opening characters. Pre-existing, reproduced on 1.7.1, not
+introduced here. Two integration tests fail on it. Tracked in `docs/TODO.md` with the
+exact mechanism.
+
+## Testing
+
+Integration tests ran for this release, which required fixing the harness first: its
+server-startup promise could never settle, so auto-started runs hung indefinitely with no
+error. Both bugs are fixed in `test/helpers/server-manager.ts`.
+
+Results: 212 assertions passing. Two failures remain, both from the pre-existing library
+search defect above and both reproducible on 1.7.1. The volume suite was excluded by
+request and room volumes were pinned low for the run.
 
 ## Upgrade
 

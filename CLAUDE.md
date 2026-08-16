@@ -438,6 +438,7 @@ All configuration can now be set via environment variables. `npm start` loads .e
 
 ### Advanced
 - **LIBRARY_REINDEX_INTERVAL**: How often to reindex music library (e.g., "1 week")
+- **XML_MAX_ENTITY_EXPANSIONS**: Max XML entity expansions per parsed document (default: 160000). Read at module load by `src/utils/xml-entity-limits.ts`, not from the config object, because the XMLParser instances are constructed before `loadConfiguration()` runs — the same early-init exception the logger uses. Symptom of it being too low: "Entity expansion limit exceeded" plus `musicLibrary.isComplete: false`
 - **HOST_PRESET_PATH**: External preset directory to mount as volume (Docker)
 
 ### Test Environment Variables

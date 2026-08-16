@@ -67,6 +67,9 @@ All configuration can be done via environment variables:
 ### Music Library
 - `LIBRARY_REINDEX_INTERVAL` - Auto-reindex interval (e.g., "1 week", "2 days", "24 hours")
 
+### Advanced
+- `XML_MAX_ENTITY_EXPANSIONS` - Maximum XML entity expansions per parsed document (default: 160000). Sonos returns DIDL-Lite entity-encoded inside SOAP responses, so a single library browse can need several thousand. Raise this only if you see "Entity expansion limit exceeded" in the logs together with an incomplete music library index
+
 ### Pandora Integration
 - `PANDORA_USERNAME` - Pandora account username
 - `PANDORA_PASSWORD` - Pandora account password
